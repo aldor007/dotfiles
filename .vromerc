@@ -3,7 +3,8 @@
 
 
 unmap <C-f>
-
+unmap <C-a>
+unmap S
 " Change key mapping in insert mode
 imap <M-h> <M-w>
 
