@@ -6,6 +6,8 @@
                 runtime! autoload/pathogen.vim
                 silent! call pathogen#runtime_append_all_bundles()
                 silent! call pathogen#helptags()
+                set autochdir
+
 
 " General 
         set background=dark         " Assume a dark background
@@ -101,6 +103,8 @@
         "set matchpairs+=<:>                    " match, to be used with % 
         set pastetoggle=<F12>           " pastetoggle (sane indentation on pastes)
         set comments=sl:/*,mb:*,elx:*/  " auto format comment blocks
+        au BufRead,BufNewFile /etc/nginx/*,/usr/local/nginx/conf/* if &ft == '' | setfiletype nginx | endif 
+
         " Remove trailing whitespaces and ^M chars - not work
         "autocmd FileType c,cpp,java,php,js,python,twig,xml,yml autocmd BufWritePre <buffer> :call setline(1,map(getline(1,"$"),'substitute(v:val,"\\s\\+$","","")'))
         " autocmd FileType python compiler pylint  
