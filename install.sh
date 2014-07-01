@@ -19,6 +19,8 @@ function install_tmux {
     sudo apt-get install tmux -y
     cp -r .tmux ~/
     cp .tmux.conf ~/
+    cp -r .config/powerline ~/.config/
+    cd ~/.tmux/powerline2; sudo python setup.py install
 }
 
 function install_programing {
