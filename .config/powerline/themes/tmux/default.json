@@ -1,0 +1,64 @@
+{
+	"default_module": "powerline.segments.common",
+	"segment_data": {
+		"uptime": {
+			"before": "⇑  "
+		},
+		"date": {
+			"before": "⌚ "
+		}
+	},
+	"segments": {
+        "left": [
+        
+			{
+				"name": "hostname",
+                "after":"⮁"
+			},
+            {
+                "name": "internal_ip",
+                "module": "user",
+                "args": {
+                    "ifname": "eth0"
+                },
+                "after":"⮁"
+            },
+            {
+                "name": "external_ip",
+				"priority": 50,
+                "after":"⮁"
+            },
+            {
+            "name":"branch",
+			    "before": "⌚ ",
+                "after": " ⭠"
+            }
+        ],
+		"right": [
+            {
+                "name": "now_playing",
+                "module": "powerline.segments.common",
+                "args": { "player": "spotify"},
+                "priority": 80,
+                "draw_soft_divider": false,
+                "widht": 10
+
+            },
+			{
+				"name": "uptime",
+				"priority": 30
+			},
+			{
+				"name": "system_load",
+				"priority": 30
+			},
+			{
+				"name": "date",
+				"args": {
+					"format": "%H:%M %d-%m-%Y",
+					"istime": true
+				}
+			}
+		]
+	}
+}

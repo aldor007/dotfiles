@@ -73,3 +73,4 @@ export TERM=xterm-256color
 source ~/.bin/tmuxinator.zsh
 export EDITOR='vim'
 
+source ~/.fzf.zsh

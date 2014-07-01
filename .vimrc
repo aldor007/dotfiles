@@ -4,6 +4,8 @@
                 filetype off
                 execute pathogen#infect()
                 runtime! autoload/pathogen.vim
+                set runtimepath^=~/.vim/bundle/ctrlp.vim
+
                 silent! call pathogen#runtime_append_all_bundles()
                 silent! call pathogen#helptags()
                 set autochdir
@@ -331,12 +333,14 @@
         " Richard's plugins {
                 " Fuzzy Finder {
                         """ Fuzzy Find file, tree, buffer, line
-                        nmap <leader>ff :FufFile **/<CR>
-                        nmap <leader>ft :FufFile<CR>
-                        nmap <leader>fb :FufBuffer<CR>
-                        nmap <leader>fl :FufLine<CR>
-                        nmap <leader>fr :FufRenewCache<CR>
+                        " nmap <leader>ff :FufFile **/<CR>
+                        " nmap <leader>ft :FufFile<CR>
+                        " nmap <leader>fb :FufBuffer<CR>
+                        " nmap <leader>fl :FufLine<CR>
+                        " nmap <leader>fr :FufRenewCache<CR>
                 " }
+                        map <C-b> :CtrlPBuffer<CR>
+                        let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
 
                 " Session List {
                         set sessionoptions=blank,buffers,curdir,folds,tabpages,winsize
