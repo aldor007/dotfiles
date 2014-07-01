@@ -28,6 +28,7 @@ function install_programing {
 }
 function install_vim {
     sudo apt-get install fontforge --yes
+    sudo apt-get install vim-nox --yes
     sudo apt-get install ctags --yes
     sudo pip install jedi -i http://pypi.python.org/simple/
     sudo pip install pylint -i http://pypi.python.org/simple/
