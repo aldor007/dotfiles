@@ -33,6 +33,7 @@ function install_vim {
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
     cp -r .vim ~/
+    cp .pylintrc ~/
     cp .vimrc ~/
 }
 function install_fzf {
@@ -44,6 +45,13 @@ function install_fzf {
     git clone https://github.com/junegunn/fzf.git ~/.fzf
     ~/.fzf/install
 } 
+
+function install_repo_file {
+    cp .gitconfig ~/
+
+}
+
+
 
 install_common
 install_zsh
