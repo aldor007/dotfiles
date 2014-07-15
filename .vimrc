@@ -1,15 +1,25 @@
                 set nocompatible        " must be first line
                 set background=dark     " Assume a dark background
-                "Pathogen autoload
+                "Vundle  autoload
                 filetype off
-                execute pathogen#infect()
-                runtime! autoload/pathogen.vim
+                set runtimepath+=~/.vim/bundle/vundle
+                call vundle#rc()
+                Bundle 'gmarik/vundle'
                 set runtimepath^=~/.vim/bundle/ctrlp.vim
 
-                silent! call pathogen#runtime_append_all_bundles()
-                silent! call pathogen#helptags()
                 set autochdir
-
+                
+        Bundle 'Raimondi/delimitMate'
+        Bundle 'sjl/gundo.vim'
+        Bundle 'sjl/splice.vim'
+        Bundle 'godlygeek/tabular'
+        Bundle 'tomtom/tcomment_vim'
+        Bundle 'vim-scripts/tlib'
+        Bundle 'SirVer/ultisnips'
+        Bundle 'mhinz/vim-startify'
+        Bundle 'Lokaltog/vim-distinguished'
+        Bundle 'bling/vim-airline'
+        Bundle 'scrooloose/syntastic'
 
 " General 
         set background=dark         " Assume a dark background
@@ -47,6 +57,23 @@
         au BufWinEnter * silent! loadview "make vim load view (state) (folds, cursor, etc)
         " }
 " }
+ " Syntastic
+ let g:syntastic_enable_signs=1
+ let g:syntastic_auto_jump=1
+"  let g:syntastic_stl_format = '[%E{Err: %fe #%e}%B{, }%W{Warn: #%w}]'
+ 
+ set statusline+=%#warningmsg#
+ set statusline+=%{SyntasticStatuslineFlag()}
+ set statusline+=%*
+ 
+ 
+ " Needed for airline to work
+ set laststatus=2
+ 
+ " Show && Remove trailing tespaces in commons sourcees on save
+autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWritePre <buffer> :%s/\s\+$//e
+
+
 
 " Vim UI {
         colorscheme distinguished " deser load a colorscheme
@@ -56,25 +83,25 @@
         hi cursorline guibg=#333333     " highlight bg color of current line
         hi CursorColumn guibg=#333333   " highlight cursor
 
-        if has('cmdline_info')
-                set ruler                       " show the ruler
-                set rulerformat=%30(%=\:b%n%y%m%r%w\ %l,%c%V\ %P%) " a ruler on steroids
-                set showcmd                     " show partial commands in status line and
-                                                                        " selected characters/lines in visual mode
-        endif
+        " if has('cmdline_info')
+        "         set ruler                       " show the ruler
+        "         set rulerformat=%30(%=\:b%n%y%m%r%w\ %l,%c%V\ %P%) " a ruler on steroids
+        "         set showcmd                     " show partial commands in status line and
+        "                                                                 " selected characters/lines in visual mode
+        " endif
 
-        if has('statusline')
-        set laststatus=2
+        " if has('statusline')
+        " set laststatus=2
 
-                " Broken down into easily includeable segments
-                set statusline=%<%f\    " Filename
-                set statusline+=%w%h%m%r " Options
-                set statusline+=%{fugitive#statusline()} "  Git Hotness
-                set statusline+=\ [%{&ff}/%Y]            " filetype
-                set statusline+=\ [%{getcwd()}]          " current dir
-                "set statusline+=\ [A=\%03.3b/H=\%02.2B] " ASCII / Hexadecimal value of char
-                set statusline+=%=%-14.(%l,%c%V%)\ %p%%  " Right aligned file nav info
-        endif
+        "         " Broken down into easily includeable segments
+        "         set statusline=%<%f\    " Filename
+        "         set statusline+=%w%h%m%r " Options
+        "         set statusline+=%{fugitive#statusline()} "  Git Hotness
+        "         set statusline+=\ [%{&ff}/%Y]            " filetype
+        "         set statusline+=\ [%{getcwd()}]          " current dir
+        "         "set statusline+=\ [A=\%03.3b/H=\%02.2B] " ASCII / Hexadecimal value of char
+        "         set statusline+=%=%-14.(%l,%c%V%)\ %p%%  " Right aligned file nav info
+        " endif
         set backspace=indent,eol,start  " backspace for dummys
         set linespace=0                                 " No extra spaces between rows
         set nu                                                  " Line numbers on
