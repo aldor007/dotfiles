@@ -38,6 +38,7 @@ function install_vim {
     cp -r .vim ~/
     cp .pylintrc ~/
     cp .vimrc ~/
+    vim -c 'BundleInstall'
 }
 function install_fzf {
     sudo apt-get install ruby -y
