@@ -56,7 +56,8 @@ function install_repo_file {
 }
 
 
-
+git clone --recursive https://github.com/Aldor007/dotfiles
+cd dotfiles
 install_common
 install_zsh
 install_tmux
