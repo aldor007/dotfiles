@@ -15,7 +15,7 @@
         Bundle 'godlygeek/tabular'
         Bundle 'tomtom/tcomment_vim'
         Bundle 'vim-scripts/tlib'
-        Bundle 'SirVer/ultisnips'
+       " Bundle 'SirVer/ultisnips'
         Bundle 'mhinz/vim-startify'
         Bundle 'Lokaltog/vim-distinguished'
         Bundle 'bling/vim-airline'
@@ -498,4 +498,6 @@ endfunction
         source ~/.vimrc.local
     endif
 " }
+   let g:UltiSnipsUsePythonVersion = 2
+
 set term=screen-256color
