@@ -35,6 +35,8 @@ function install_vim {
     sudo pip install jedi -i http://pypi.python.org/simple/
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
+    sudo npm install -g jshint
+    cp .jshintrc ~/.jshintrc
     cp -r .vim ~/
     cp .pylintrc ~/
     cp .vimrc ~/
