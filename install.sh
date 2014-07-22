@@ -70,9 +70,9 @@ function install_repo_file {
 
 
 git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
-# install_common
-# install_zsh
-# install_tmux
-# install_programing
+install_common
+install_zsh
+install_tmux
+install_programing
 install_vim
-# install_fzf
+install_fzf
