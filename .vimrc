@@ -28,7 +28,9 @@
         Bundle 'airblade/vim-gitgutter'
 
         " Dla putty
-        let g:NERDTreeDirArrows=0
+        " let g:NERDTreeDirArrows=0
+        set encoding=utf-8
+
         
 
 " General 
