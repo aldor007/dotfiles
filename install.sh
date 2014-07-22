@@ -1,4 +1,6 @@
 #!/bin/bash
+base_dir=/tmp/dotfiles/
+
 function install_common {
     sudo apt-get install git -y
     sudo apt-get install zip -y
@@ -10,22 +12,22 @@ function install_zsh {
 
     sudo apt-get install zsh -y
     sudo chsh -s /bin/zsh  $USER
-    cp -r .oh-my-zsh/ ~
-    cp .zshrc ~
+    cp -r ${base_dir}.oh-my-zsh/ ~
+    cp ${base_dir}.zshrc ~
 
 }
 
 function install_tmux {
     sudo apt-get install tmux -y
-    cp -r .tmux ~/
-    cp .tmux.conf ~/
-    cp -r .config/ ~/.config/
+    cp -r ${base_dir}.tmux ~/
+    cp -r ${base_dir}.config/ ~/.config/
     cd ~/.tmux/powerline2; sudo python setup.py install
+    ln -s ~/.tmux/tmux.conf ~/.tmux.conf
 }
 
 function install_programing {
-    sudo apt-get install nodejs -y
-    sudo apt-get install python -y
+    sudo apt-get install nodejs 
+    sudo apt-get install python 
     sudo apt-get install python-pip -y
 }
 function install_vim {
@@ -36,10 +38,10 @@ function install_vim {
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
     sudo npm install -g jshint
-    cp .jshintrc ~/.jshintrc
-    cp -r .vim ~/
-    cp .pylintrc ~/
-    cp .vimrc ~/
+    cp ${base_dir}.jshintrc ~/.jshintrc
+    cp -r ${base_dir} .vim ~/
+    cp ${base_dir}.pylintrc ~/
+    cp ${base_dir}.vimrc ~/
     vim -c 'BundleInstall'
 }
 function install_fzf {
@@ -53,7 +55,7 @@ function install_fzf {
 } 
 
 function install_repo_file {
-    cp .gitconfig ~/
+    cp ${base_dir}.gitconfig ~/
 
 }
 

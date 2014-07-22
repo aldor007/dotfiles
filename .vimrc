@@ -15,11 +15,21 @@
         Bundle 'godlygeek/tabular'
         Bundle 'tomtom/tcomment_vim'
         Bundle 'vim-scripts/tlib'
-       " Bundle 'SirVer/ultisnips'
+        Bundle 'SirVer/ultisnips'
         Bundle 'mhinz/vim-startify'
         Bundle 'Lokaltog/vim-distinguished'
         Bundle 'bling/vim-airline'
         Bundle 'scrooloose/syntastic'
+        Bundle 'scrooloose/nerdtree'
+        Bundle 'rodjek/vim-puppet'
+        Bundle 'kien/ctrlp.vim'
+
+        "testowo
+        Bundle 'airblade/vim-gitgutter'
+
+        " Dla putty
+        let g:NERDTreeDirArrows=0
+        
 
 " General 
         set background=dark         " Assume a dark background
