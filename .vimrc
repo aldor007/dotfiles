@@ -23,6 +23,7 @@
         Bundle 'scrooloose/nerdtree'
         Bundle 'rodjek/vim-puppet'
         Bundle 'kien/ctrlp.vim'
+        Bundle 'evanmiller/nginx-vim-syntax'
 
         "testowo
         Bundle 'airblade/vim-gitgutter'
