@@ -14,6 +14,12 @@ function install_zsh {
     sudo chsh -s /bin/zsh  $USER
     cp -r ${base_dir}.oh-my-zsh/ ~
     cp ${base_dir}.zshrc ~
+    if [[ -f ~/.sdk_cde  ]]; then
+        compaudit | sudo xargs chmod g-w
+        compaudit | sudo xargs chown root
+        rm ~/.zcompdump*
+        compinit
+    fi
 
 }
 

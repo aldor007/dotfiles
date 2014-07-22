@@ -70,7 +70,13 @@ export PATH=$HOME/bin:/usr/local/bin:$PATH
 export TERM=xterm-256color
 [ -n "$TMUX" ] && export TERM=screen-256color
 
-source ~/.bin/tmuxinator.zsh
 export EDITOR='vim'
-
-source ~/.fzf.zsh
+if [ -f ~/.bin/tmuxinator.zsh ]; then
+    source ~/.bin/tmuxinator.zsh
+fi
+if [[ -f ~/.fzf ]]; then
+    source ~/.fzf.zsh
+fi
+if [[ -f ~/.sdk_cde ]]; then
+    source ~/.sdk_cde
+fi
