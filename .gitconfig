@@ -1,6 +1,6 @@
 [user]
-	name = Aldor007
-    eamail = aldor007@gmail.com
+	name = "Aldor007"
+    email = "aldor007@gmail.com"
 [diff]
     tool = vimdiff
 [merge]

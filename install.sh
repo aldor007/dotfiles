@@ -39,7 +39,7 @@ function install_vim {
     sudo npm install -g jslint
     sudo npm install -g jshint
     cp ${base_dir}.jshintrc ~/.jshintrc
-    cp -r ${base_dir} .vim ~/
+    cp -r ${base_dir}.vim ~/
     cp ${base_dir}.pylintrc ~/
     cp ${base_dir}.vimrc ~/
     vim -c 'BundleInstall'
@@ -66,4 +66,4 @@ install_zsh
 install_tmux
 install_programing
 install_vim
-install_fzf
+#install_fzf

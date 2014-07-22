@@ -2,7 +2,7 @@
                 set background=dark     " Assume a dark background
                 "Vundle  autoload
                 filetype off
-                set runtimepath+=~/.vim/bundle/vundle
+                set runtimepath+=~/.vim/bundle/Vundle.vim
                 call vundle#rc()
                 Bundle 'gmarik/vundle'
                 set runtimepath^=~/.vim/bundle/ctrlp.vim

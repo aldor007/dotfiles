@@ -19,8 +19,7 @@ if [ $(whoami) = 'root' ]; then
     echo "OK"
     user_color=red
 fi
-PROMPT='
-(%{$terminfo[bold]$fg[$user_color]%}%n$reset_color%}$FG[153]@$FG[158]%m$reset_color) %{$fg_bold[green]%}${PWD/#$HOME/~}%{$reset_color%}$(git_prompt_info) ⌚ %{$fg_bold[red]%}%*%{$reset_color%}
+PROMPT='(%{$terminfo[bold]$fg[$user_color]%}%n$reset_color%}$FG[153]@$FG[158]%m$reset_color) %{$fg_bold[green]%}${PWD/#$HOME/~}%{$reset_color%}$(git_prompt_info) ⌚ %{$fg_bold[red]%}%*%{$reset_color%}
 %{$fg[$user_color]%}$prompt_char%{$reset_color%} '
 RPS1="${return_code}"
 
