@@ -42,7 +42,7 @@ function install_vim {
     cp -r ${base_dir}.vim ~/
     cp ${base_dir}.pylintrc ~/
     cp ${base_dir}.vimrc ~/
-    vim -c 'BundleInstall'
+    vim -c 'BundleInstall | q' -c qa
 }
 function install_fzf {
     sudo apt-get install ruby -y
@@ -66,4 +66,4 @@ install_zsh
 install_tmux
 install_programing
 install_vim
-#install_fzf
+install_fzf

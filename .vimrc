@@ -10,12 +10,14 @@
                 set autochdir
                 
         Bundle 'Raimondi/delimitMate'
+        Bundle 'tpope/vim-fugitive'
         Bundle 'sjl/gundo.vim'
         Bundle 'sjl/splice.vim'
         Bundle 'godlygeek/tabular'
         Bundle 'tomtom/tcomment_vim'
         Bundle 'vim-scripts/tlib'
         Bundle 'SirVer/ultisnips'
+        Bundle 'honza/vim-snippets'
         Bundle 'mhinz/vim-startify'
         Bundle 'Lokaltog/vim-distinguished'
         Bundle 'bling/vim-airline'
@@ -338,6 +340,10 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
 
         " UltiSnipMate {
         let g:UltiSnipsEditSplit='horizontal'
+        " let g:UltiSnipsExpandTrigger="<tab>"
+        " let g:UltiSnipsJumpForwardTrigger="<tab>"
+        " let g:UltiSnipsJumpBackwardTrigger="<s-tab>"
+        " let g:UltiSnipsListSnippets="<c-tab>"
         " }
 
         " NerdTree {
