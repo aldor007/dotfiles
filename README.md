@@ -54,6 +54,7 @@ curl  https://raw.githubusercontent.com/Aldor007/dotfiles/master/install.sh | ba
 * conkyrc
 
 # TODO
-clone poweline 
+* clone powerline 
+* better installer
 
 
