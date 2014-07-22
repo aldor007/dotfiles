@@ -12,7 +12,8 @@ function install_zsh {
 
     sudo apt-get install zsh -y
     sudo chsh -s /bin/zsh  $USER
-    cp -r ${base_dir}.oh-my-zsh/ ~
+    # cp -r ${base_dir}.oh-my-zsh/ ~g
+    git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
     cp ${base_dir}.zshrc ~
     if [[ -f ~/.sdk_cde  ]]; then
         compaudit | sudo xargs chmod g-w
@@ -20,6 +21,7 @@ function install_zsh {
         rm ~/.zcompdump*
         compinit
     fi
+    cp ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
 
 }
 
@@ -46,9 +48,10 @@ function install_vim {
     sudo npm install -g jshint
     cp ${base_dir}.jshintrc ~/.jshintrc
     cp -r ${base_dir}.vim ~/
+    git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
     cp ${base_dir}.pylintrc ~/
     cp ${base_dir}.vimrc ~/
-    vim -c 'BundleInstall | q' -c qa
+    vim -c 'BundleInstall' -c qa
 }
 function install_fzf {
     sudo apt-get install ruby -y
@@ -67,9 +70,9 @@ function install_repo_file {
 
 
 git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
-install_common
-install_zsh
-install_tmux
-install_programing
+# install_common
+# install_zsh
+# install_tmux
+# install_programing
 install_vim
-install_fzf
+# install_fzf

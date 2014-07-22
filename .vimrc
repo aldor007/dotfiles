@@ -4,7 +4,7 @@
                 filetype off
                 set runtimepath+=~/.vim/bundle/Vundle.vim
                 call vundle#rc()
-                Bundle 'gmarik/vundle'
+                Bundle 'gmarik/Vundle.vim'
                 set runtimepath^=~/.vim/bundle/ctrlp.vim
 
                 set autochdir
