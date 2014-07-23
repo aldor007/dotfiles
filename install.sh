@@ -81,7 +81,7 @@ function clean_install {
 
 
 
-local install_typ='all'
+install_typ='all'
 while [[ $# > 1 ]]
 do
     key="$1"
@@ -104,8 +104,8 @@ do
             ;;
         esac
 done
-git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 install_common
+git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 case $install_typ in
     zsh)
         install_zsh
