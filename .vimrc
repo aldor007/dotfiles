@@ -8,7 +8,9 @@
                 set runtimepath^=~/.vim/bundle/ctrlp.vim
 
                 set autochdir
-                
+                " auto read file change
+                set autoread
+
         Bundle 'Raimondi/delimitMate'
         Bundle 'tpope/vim-fugitive'
         Bundle 'sjl/gundo.vim'
@@ -26,17 +28,14 @@
         Bundle 'rodjek/vim-puppet'
         Bundle 'kien/ctrlp.vim'
         Bundle 'evanmiller/nginx-vim-syntax'
-
-        "testowo
         Bundle 'airblade/vim-gitgutter'
+        Bundle 'majutsushi/tagbar'
+        Bundle 'godlygeek/tabular'
 
         " Dla putty
         " let g:NERDTreeDirArrows=0
         set encoding=utf-8
-
-        
-
-" General 
+" General
         set background=dark         " Assume a dark background
         filetype plugin indent on       " Automatically detect file types.
         syntax on                                       " syntax highlighting
@@ -54,7 +53,7 @@
         set virtualedit=onemore                 " allow for cursor beyond last character
         set history=1000                                " Store a ton of history (default is 20)
         set nospell                                     " spell checking off
-        set backup                                              " backups are nice 
+        set backup                                              " backups are nice
         set noswapfile
         set undofile                                    " so is persistent undo ...
         set undolevels=1000 "maximum number of changes that can be undone
@@ -63,7 +62,7 @@
         "set backupdir=$HOME/.vimbackup//  " but not when they clog .
         "set directory=$HOME/.vimswap//         " Same for swap files
         "set viewdir=$HOME/.vimviews//  " same for view files
-        
+
         "" Creating directories if they don't exist
         "silent execute '!mkdir -p $HVOME/.vimbackup'
         "silent execute '!mkdir -p $HOME/.vimswap'
@@ -73,23 +72,16 @@
         " }
 " }
  " Syntastic
- let g:syntastic_enable_signs=1
- let g:syntastic_auto_jump=1
-"  let g:syntastic_stl_format = '[%E{Err: %fe #%e}%B{, }%W{Warn: #%w}]'
- 
- set statusline+=%#warningmsg#
- set statusline+=%{SyntasticStatuslineFlag()}
- set statusline+=%*
- 
- 
- " Needed for airline to work
- set laststatus=2
- 
- " Show && Remove trailing tespaces in commons sourcees on save
-autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWritePre <buffer> :%s/\s\+$//e
+     let g:syntastic_enable_signs=1
+    "  let g:syntastic_auto_jump=1
+     let g:syntastic_stl_format = '[%E{Err: %fe #%e}%B{, }%W{Warn: #%w}]'
 
-
-
+     set statusline+=%#warningmsg#
+     set statusline+=%{SyntasticStatuslineFlag()}
+     set statusline+=%*
+     let g:syntastic_cpp_compiler_options = ' -std=c++11'
+     " Needed for airline to work
+     set laststatus=2
 " Vim UI {
         colorscheme distinguished " deser load a colorscheme
         set tabpagemax=15                               " only show 15 tabs
@@ -123,7 +115,7 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
         set showmatch                                   " show matching brackets/parenthesis
         set incsearch                                   " find as you type search
         set hlsearch                                    " highlight search terms
-        set winminheight=0                              " windows can be 0 line high 
+        set winminheight=0                              " windows can be 0 line high
         set ignorecase                                  " case insensitive search
         set smartcase                                   " case sensitive when uc present
         set wildmenu                                    " show list instead of just completing
@@ -144,16 +136,24 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
         set tabstop=4                                   " an indentation every four columns
         set softtabstop=4                               " let backspace delete indent
         set smarttab
-        "set matchpairs+=<:>                    " match, to be used with % 
+        "set matchpairs+=<:>                    " match, to be used with %
         set pastetoggle=<F12>           " pastetoggle (sane indentation on pastes)
         set comments=sl:/*,mb:*,elx:*/  " auto format comment blocks
-        au BufRead,BufNewFile /etc/nginx/*,/usr/local/nginx/conf/* if &ft == '' | setfiletype nginx | endif 
+        au BufRead,BufNewFile /etc/nginx/*,/usr/local/nginx/conf/* if &ft == '' | setfiletype nginx | endif
 
         " Remove trailing whitespaces and ^M chars - not work
-        "autocmd FileType c,cpp,java,php,js,python,twig,xml,yml autocmd BufWritePre <buffer> :call setline(1,map(getline(1,"$"),'substitute(v:val,"\\s\\+$","","")'))
-        " autocmd FileType python compiler pylint  
+        " autocmd FileType c,cpp,java,php,js,python,twig,xml,yml autocmd BufWritePre <buffer> :call setline(1,map(getline(1,"$"),'substitute(v:val,"\\s\\+$","","")'))
+        " autocmd FileType python compiler pylint
 " }
 
+"  Show && Remove trailing whitespaces in commons source files on save
+         autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls,puppet  autocmd BufWritePre <buffer> :%s/\s\+$//e
+         highlight ExtraWhitespace ctermbg=red guibg=red
+         match ExtraWhitespace /\s\+$/
+         autocmd BufWinEnter * match ExtraWhitespace /\s\+$/
+         autocmd InsertEnter * match ExtraWhitespace /\s\+\%#\@<!$/
+         autocmd InsertLeave * match ExtraWhitespace /\s\+$/
+         autocmd BufWinLeave * call clearmatches()
 " Key (re)Mappings {
 
         "The default leader is '\', but many people prefer ',' as it's in a standard
@@ -162,7 +162,7 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
 
     " Making it so ; works like : for commands. Saves typing and eliminates :W style typos due to lazy holding shift.
         nnoremap ; :
-        
+
 
 
         " Easier moving in tabs and windows
@@ -170,7 +170,7 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
         map <C-K> <C-W>k<C-W>_
         map <C-L> <C-W>l<C-W>_
         map <C-H> <C-W>h<C-W>_
-        
+
     " Wrapped lines goes down/up to next row, rather than next line in file.
     nnoremap j gj
     nnoremap k gk
@@ -178,10 +178,10 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
         " The following two lines conflict with moving to top and bottom of the
         " screen
         " If you prefer that functionality, comment them out.
-        map <S-H> gT          
+        map <S-H> gT
         map <S-L> gt
         " Stupid shift key fixes
-        cmap W w                                                
+        cmap W w
         cmap WQ wq
         cmap wQ wq
         cmap Q q
@@ -213,7 +213,7 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
 
         " visual shifting (does not exit Visual mode)
         vnoremap < <gv
-        vnoremap > >gv 
+        vnoremap > >gv
         " For when you forget to sudo.. Really Write the file.
         cmap w!! w !sudo tee % >/dev/null
         augroup line_return
@@ -227,21 +227,9 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
 
 " Plugins {
 
-        " VCSCommand {
-"               let b:VCSCommandMapPrefix=',v'
-"               let b:VCSCommandVCSType='git'
-        " } 
-        
-        " PIV {
-                "let cfu=phpcomplete#CompletePHP
-        " }
-        
-        " Supertab {
-                let g:SuperTabDefaultCompletionType = "context"
-                let g:SuperTabContextDefaultCompletionType = "<c-x><c-o>"
-        " }
 
-        " Misc { 
+
+        " Misc {
                 :map <C-F10> <Esc>:vsp<CR>:VTree<CR>
                 " map Control + F10 to Vtree
 
@@ -249,7 +237,7 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
                 let g:NERDShutUp=1
                 let b:match_ignorecase = 1
         " }
-        
+
         " ShowMarks {
                 let showmarks_include = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
                 " Don't leave on by default, use :ShowMarksOn to enable
@@ -263,68 +251,21 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
                 " For multiple marks on the same line.
                 highlight ShowMarksHLm gui=bold guibg=LightGreen guifg=DarkGreen
         " }
-        
-        " Command-t {
-         let g:CommandTSearchPath = $HOME 
-          let g:CommandTAcceptSelectionMap = '<C-t>'
-          let g:CommandTAcceptSelectionTabMap = '<CR>'
-        " }
+
 
         "Gundo
         map <leader>u :GundoToggle<CR>
         "}
-    
 
-        " OmniComplete {
-                "if has("autocmd") && exists("+omnifunc")
-                        "autocmd Filetype *
-                                "\if &omnifunc == "" |
-                                "\setlocal omnifunc=syntaxcomplete#Complete |
-                                "\endif
-                "endif
 
-                " Popup menu hightLight Group
-                "highlight Pmenu        ctermbg=13      guibg=DarkBlue
-        "highlight PmenuSel     ctermbg=7       guibg=DarkBlue          guifg=LightBlue
-                "highlight PmenuSbar ctermbg=7  guibg=DarkGray
-                "highlight PmenuThumb                   guibg=Black
 
-                hi Pmenu  guifg=#000000 guibg=#F8F8F8 ctermfg=black ctermbg=Lightgray
-                hi PmenuSbar  guifg=#8A95A7 guibg=#F8F8F8 gui=NONE ctermfg=darkcyan ctermbg=lightgray cterm=NONE
-                hi PmenuThumb  guifg=#F8F8F8 guibg=#8A95A7 gui=NONE ctermfg=lightgray ctermbg=darkcyan cterm=NONE
-
-                " some convenient mappings 
-                " inoremap <expr> <Esc>      pumvisible() ? "\<C-e>" : "\<Esc>"
-                " inoremap <expr> <CR>       pumvisible() ? "\<C-y>" : "\<CR>"
-                " inoremap <expr> <Down>     pumvisible() ? "\<C-n>" : "\<Down>"
-                " inoremap <expr> <Up>       pumvisible() ? "\<C-p>" : "\<Up>"
-                " inoremap <expr> <C-d>      pumvisible() ? "\<PageDown>\<C-p>\<C-n>" : "\<C-d>"
-                " inoremap <expr> <C-u>      pumvisible() ? "\<PageUp>\<C-p>\<C-n>" : "\<C-u>"
-
-        " and make sure that it doesn't break supertab
-        let g:SuperTabCrMapping = 0
-        
-                " automatically open and close the popup menu / preview window
-                au CursorMovedI,InsertLeave * if pumvisible() == 0|silent! pclose|endif
-                set completeopt=menu,preview,longest
-        " }
-        
         " Ctags {
-    " This will look in the current directory for 'tags', and work up the tree towards root until one is found. 
+    " This will look in the current directory for 'tags', and work up the tree towards root until one is found.
                 set tags=./tags;/,$HOME/vimtags
         map <C-\> :tab split<CR>:exec("tag ".expand("<cword>"))<CR> " C-\ - Open the definition in a new tab
         map <A-]> :vsp <CR>:exec("tag ".expand("<cword>"))<CR>      " A-] - Open the definition in a vertical split
         " }
 
-        " EasyTags {
-       " Disabling for now. It doesn't work well on large tag files 
-        let g:loaded_easytags = 1  " Disable until it's working better
-                let g:easytags_cmd = 'ctags'
-        let g:easytags_dynamic_files = 1
-                if !has('win32') && !has('win64')
-            let g:easytags_resolve_links = 1
-        endif
-        " }
 
         " Delimitmate {
                 au FileType * let b:delimitMate_autoclose = 1
@@ -332,11 +273,7 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
                 " If using html auto complete (complete closing tag)
         au FileType xml,html,xhtml let b:delimitMate_matchpairs = "(:),[:],{:}"
         " }
-        
-        " AutoCloseTag {
-                " Make it so AutoCloseTag works for xml and xhtml files as well
-                au FileType xhtml,xml ru ftplugin/html/autoclosetag.vim
-        " }
+
 
         " UltiSnipMate {
         let g:UltiSnipsEditSplit='horizontal'
@@ -360,22 +297,22 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
                " autocmd VimEnter * NERDTree
                 "autocmd VimEnter * wincmd p
         " }
-    
+
     " Tabularize {
-        " if exists(":Tabularize")
-        "   nmap <Leader>f= :Tabularize /=<CR>
-        "   vmap <Leader>f= :Tabularize /=<CR>
-        "   nmap <Leader>f: :Tabularize /:<CR>
-        "   vmap <Leader>f: :Tabularize /:<CR>
-        "   nmap <Leader>f:: :Tabularize /:\zs<CR>
-        "   vmap <Leader>f:: :Tabularize /:\zs<CR>
-        "   nmap <Leader>f, :Tabularize /,<CR>
-        "   vmap <Leader>f, :Tabularize /,<CR>
-        "   nmap <Leader>f<Bar> :Tabularize /<Bar><CR>
-        "   vmap <Leader>f<Bar> :Tabularize /<Bar><CR>
-        " endif
+        if exists(":Tabularize")
+          nmap <Leader>f= :Tabularize /=<CR>
+          vmap <Leader>f= :Tabularize /=<CR>
+          nmap <Leader>f: :Tabularize /:<CR>
+          vmap <Leader>f: :Tabularize /:<CR>
+          nmap <Leader>f:: :Tabularize /:\zs<CR>
+          vmap <Leader>f:: :Tabularize /:\zs<CR>
+          nmap <Leader>f, :Tabularize /,<CR>
+          vmap <Leader>f, :Tabularize /,<CR>
+          nmap <Leader>f<Bar> :Tabularize /<Bar><CR>
+          vmap <Leader>f<Bar> :Tabularize /<Bar><CR>
+        endif
      " }
-  
+
         " Richard's plugins {
                 " Fuzzy Finder {
                         """ Fuzzy Find file, tree, buffer, line
@@ -385,6 +322,8 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
                         " nmap <leader>fl :FufLine<CR>
                         " nmap <leader>fr :FufRenewCache<CR>
                 " }
+
+                " Ctrp {
                         map <C-b> :CtrlPBuffer<CR>
                         let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
 
@@ -392,34 +331,14 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
                         set sessionoptions=blank,buffers,curdir,folds,tabpages,winsize
                         nmap <leader>sv :ViewSession<CR>
                         nmap <leader>ss :SessionSave<CR>
-                        let g:session_autosave = 'no'         
-                
-                
-                " VCS commands {
-                        nmap <leader>vs :VCSStatus<CR>
-                        nmap <leader>vc :VCSCommit<CR>
-                        nmap <leader>vb :VCSBlame<CR>
-                        nmap <leader>va :VCSAdd<CR>
-                        nmap <leader>vd :VCSVimDiff<CR>
-                        nmap <leader>vl :VCSLog<CR>
-                        nmap <leader>vu :VCSUpdate<CR>
-                " }
+                        let g:session_autosave = 'no'
+
+
                 " php-doc commands {
                         nmap <leader>pd :call PhpDocSingle()<CR>
                         vmap <leader>pd :call PhpDocRange()<CR>
                 " }
-                
-                " Debugging with VimDebugger {
-                        map <F11> :DbgStepInto<CR>
-                        map <F10> :DbgStepOver<CR>
-                        map <S-F11> :DbgStepOut<CR>
-                        map <F5> :DbgRun<CR>
-                        map <F6> :DbgDetach<CR>
-                        map <F8> :DbgToggleBreakpoint<CR>
-                        map <S-F8> :DbgFlushBreakpoints<CR>
-                        map <F9> :DbgRefreshWatch<CR>
-                        map <S-F9> :DbgAddWatch<CR>
-                " }
+
 
                 " Taglist Variables {
                         let Tlist_Auto_Highlight_Tag = 1
@@ -453,12 +372,12 @@ autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls autocmd    BufWr
 
 function! InitializeDirectories()
   let separator = "."
-  let parent = $HOME 
+  let parent = $HOME
   let prefix = '.vim'
-  let dir_list = { 
-                          \ 'backup': 'backupdir', 
-                          \ 'views': 'viewdir', 
-                          \ 'swap': 'directory', 
+  let dir_list = {
+                          \ 'backup': 'backupdir',
+                          \ 'views': 'viewdir',
+                          \ 'swap': 'directory',
                           \ 'undo': 'undodir' }
 
   for [dirname, settingname] in items(dir_list)
@@ -471,13 +390,13 @@ function! InitializeDirectories()
           if !isdirectory(directory)
                   echo "Warning: Unable to create backup directory: " . directory
                   echo "Try: mkdir -p " . directory
-          else  
+          else
           let directory = substitute(directory, " ", "\\\\ ", "")
           exec "set " . settingname . "=" . directory
           endif
   endfor
 endfunction
-call InitializeDirectories() 
+call InitializeDirectories()
 
 function! NERDTreeInitAsNeeded()
     redir => bufoutput
@@ -518,5 +437,6 @@ endfunction
     endif
 " }
    let g:UltiSnipsUsePythonVersion = 2
+        
 
 set term=screen-256color

@@ -74,7 +74,7 @@ export EDITOR='vim'
 if [ -f ~/.bin/tmuxinator.zsh ]; then
     source ~/.bin/tmuxinator.zsh
 fi
-if [[ -f ~/.fzf ]]; then
+if [[ -f ~/.fzf.zsh ]]; then
     source ~/.fzf.zsh
 fi
 if [[ -f ~/.sdk_cde ]]; then

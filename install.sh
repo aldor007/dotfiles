@@ -34,8 +34,8 @@ function install_tmux {
 }
 
 function install_programing {
-    sudo apt-get install nodejs 
-    sudo apt-get install python 
+    sudo apt-get install nodejs
+    sudo apt-get install python
     sudo apt-get install python-pip -y
 }
 function install_vim {
@@ -61,18 +61,76 @@ function install_fzf {
     sudo apt-get install libncurses5-dev -y
     git clone https://github.com/junegunn/fzf.git ~/.fzf
     ~/.fzf/install
-} 
+}
 
 function install_repo_file {
     cp ${base_dir}.gitconfig ~/
 
 }
+function clean_install {
+    rm -rf ${base_dir}
+    rm -rf ~/.vim
+    rm -rf ~/.oh-my-zsh
+    rm -rf ~/.zshrc
+    rm -rf ~/.vimrc
+    rm -rf ~/.tmux
+    rm -rf ~/.tmux.conf
+
+}
 
 
+
+
+local install_typ='all'
+while [[ $# > 1 ]]
+do
+    key="$1"
+    shift
+
+    case $key in
+        -c|--clean)
+            clean_install
+            shift
+        ;;
+        -i|--install)
+            install_typ="$1"
+            shift
+        ;;
+        *)
+            echo "usage:
+                    -c|--clean  - remove dotfiles before install
+                    -i|--install [type] copy dotfiles
+            "
+            ;;
+        esac
+done
 git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 install_common
-install_zsh
-install_tmux
-install_programing
-install_vim
-install_fzf
+case $install_typ in
+    zsh)
+        install_zsh
+    ;;
+    vim)
+        install_vim
+    ;;
+    tmux)
+        install_tmux
+    ;;
+    fzf)
+        install_fzf
+    ;;
+    repo)
+        install_repo
+    ;;
+    all)
+        install_zsh
+        install_tmux
+        install_fzf
+        install_vim
+    ;;
+    *)
+        echo "Unknow"
+
+    esac
+
+
