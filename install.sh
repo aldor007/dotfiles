@@ -52,6 +52,7 @@ function install_vim {
     cp ${base_dir}.pylintrc ~/
     cp ${base_dir}.vimrc ~/
     vim -c 'BundleInstall' -c qa
+    cd ~/vim/bundle/vimproc.vim/; make -f make_unix.mak
 }
 function install_fzf {
     sudo apt-get install ruby -y

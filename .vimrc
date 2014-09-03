@@ -7,7 +7,7 @@
                 Bundle 'gmarik/Vundle.vim'
                 set runtimepath^=~/.vim/bundle/ctrlp.vim
 
-                set autochdir
+                " set autochdir
                 " auto read file change
                 set autoread
 
@@ -33,7 +33,13 @@
         Bundle 'xaizek/vim-inccomplete'
         Bundle 'wellle/tmux-complete.vim'
         Bundle 'Shougo/neocomplete.vim'
+        Bundle 'Shougo/unite.vim'
+        Bundle 'Shougo/vinarise.vim'
+        Bundle 'Shougo/vimfiler.vim'
 
+
+        Bundle 'Shougo/vimshell.vim'
+        Bundle 'Shougo/vimproc.vim'
                     
 
         " Dla putty
@@ -238,6 +244,7 @@
             " .gvimrc(_gvimrc)!
             " Disable AutoComplPop.
             let g:acp_enableAtStartup = 0
+
             " Use neocomplete.
             let g:neocomplete#enable_at_startup = 1
             " Use smartcase.
@@ -300,8 +307,8 @@
                " let g:neocomplete#enable_auto_select = 1
                
                " Shell like behavior(not recommended).
-               " set completeopt+=longest
-               " let g:neocomplete#enable_auto_select = 1
+               set completeopt+=longest
+               let g:neocomplete#enable_auto_select = 1
                " let g:neocomplete#disable_auto_complete = 1
                " inoremap <expr><TAB>  pumvisible() ? "\<Down>" : \<C-x>\<C-u>"
                
@@ -386,11 +393,11 @@
                 let NERDTreeShowBookmarks=1
                 let NERDTreeIgnore=['\.pyc', '\~$', '\.swo$', '\.swp$', '\.git', '\.hg', '\.svn', '\.bzr']
                 let NERDTreeChDirMode=0
-                let NERDTreeQuitOnOpen=1
+                let NERDTreeQuitOnOpen=0
                 let NERDTreeShowHidden=1
-                let NERDTreeKeepTreeInNewTab=1
-               " autocmd VimEnter * NERDTree
-                "autocmd VimEnter * wincmd p
+                " let NERDTreeKeepTreeInNewTab=1
+               " " autocmd VimEnter * NERDTree
+                " autocmd VimEnter * wincmd p
         " }
 
     " Tabularize {
@@ -419,8 +426,25 @@
                 " }
 
                 " Ctrp {
-                        map <C-b> :CtrlPBuffer<CR>
-                        let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
+                        " map <C-b> :CtrlPBuffer<CR>
+                        " let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
+                let g:unite_source_history_yank_enable = 1
+                " call unite#filters#matcher_default#use(['matcher_fuzzy'])
+                let g:unite_source_grep_default_opts = "-iRHn"
+                            \ . " --exclude='*.svn*'"
+                            \ . " --exclude='*.svn*'"
+                            \ . " --exclude='*.log*'"
+                            \ . " --exclude='*tmp*'"
+                            \ . " --exclude-dir='**/tmp'"
+                            \ . " --exclude-dir='CVS'"
+                            \ . " --exclude-dir='.svn'"
+                            \ . " --exclude-dir='.git'"
+                            \ . " --exclude-dir='node_modules'"
+                " let g:unite_source_rec_async_command = 'ack -f --nofilter'
+                nnoremap <space>/ :Unite -no-quit -buffer-name=search grep:.<cr>
+                nnoremap <C-p> :Unite file_rec/async<cr>
+                nnoremap <Space>y :Unite -buffer-name=yank  history/yank<cr>
+                nnoremap <C-b> :Unite -quick-match  buffer<cr>
 
                 " Session List {
                         set sessionoptions=blank,buffers,curdir,folds,tabpages,winsize
@@ -452,6 +476,20 @@
                 " JSON {
                         nmap <leader>jt <Esc>:%!python -m json.tool<CR><Esc>:set filetype=json<CR>
                  " }
+
+                 let g:vimfiler_as_default_explorer = 1
+                 let g:vimfiler_enable_clipboard = 0
+                 let g:vimfiler_safe_mode_by_default = 0
+                 " let g:vimfiler_edit_action = 'tabopen'
+
+                 nmap <Leader>f [vfiler]
+                 nnoremap [vfiler] <nop>
+                 nnoremap <silent>   [vfiler]f   :VimFiler<CR>
+                 nnoremap <silent>   [vfiler]t   :VimFilerTab<CR>
+                 nnoremap <silent>   [vfiler]e   :VimFilerExplorer<CR>
+                 nnoremap<silent> <F3> :<C-u>VimFilerExplorer<CR>
+                 nnoremap [vfiler]b :VimFilerBufferDir<CR>
+
         " }
 " }
 
