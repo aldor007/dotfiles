@@ -7,7 +7,24 @@ function install_common {
     sudo apt-get install unzip -y
     sudo apt-get install subversion -y
     sudo apt-get install mercurial -y
+    sudo apt-get install build-essentials -y
+    sudo apt-get install python-pip -y
+    sudo apt-get install python-fontforge -y
 }
+
+function install_fonts {
+  wget https://github.com/Lokaltog/powerline/raw/develop/font/PowerlineSymbols.otf
+  wget https://github.com/Lokaltog/powerline/raw/develop/font/10-powerline-symbols.conf
+  mkdir -p ~/.fonts
+  mv PowerlineSymbols.otf ~/.fonts/
+  mkdir -p ~/.config/fontconfig/conf.d
+  mv 10-powerline-symbols.conf ~/.config/fontconfig/conf.d/
+  fc-cache -vf ~/.fonts/
+
+}
+
+
+
 function install_zsh {
 
     sudo apt-get install zsh -y
@@ -52,7 +69,7 @@ function install_vim {
     cp ${base_dir}.pylintrc ~/
     cp ${base_dir}.vimrc ~/
     vim -c 'BundleInstall' -c qa
-    cd ~/vim/bundle/vimproc.vim/; make -f make_unix.mak
+    cd ~/.vim/bundle/vimproc.vim/; make -f make_unix.mak
 }
 function install_fzf {
     sudo apt-get install ruby -y
@@ -124,10 +141,13 @@ case $install_typ in
         install_repo
     ;;
     all)
+        install_tmux
         install_zsh
         install_tmux
         install_fzf
         install_vim
+        install_fonts
+        install_programing
     ;;
     *)
         echo "Unknow"
