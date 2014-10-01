@@ -10,6 +10,8 @@ function install_common {
     sudo apt-get install build-essentials -y
     sudo apt-get install python-pip -y
     sudo apt-get install python-fontforge -y
+    sudo apt-get install screen -y 
+    cp ${base_dir}.screenrc ~/.screenrc
 }
 
 function install_fonts {
@@ -45,7 +47,8 @@ function install_zsh {
 function install_tmux {
     sudo apt-get install tmux -y
     cp -r ${base_dir}.tmux ~/
-    cp -r ${base_dir}.config/ ~/.config/
+    cp -r ${base_dir}.config/ ~/
+    git clone https://github.com/Lokaltog/powerline   ~/.tmux/powerline2
     cd ~/.tmux/powerline2; sudo python setup.py install
     ln -s ~/.tmux/tmux.conf ~/.tmux.conf
 }

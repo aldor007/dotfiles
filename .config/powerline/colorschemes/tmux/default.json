@@ -15,8 +15,8 @@
 		"weather_condition_snowy": { "fg": "skyblue1", "bg": "gray0" },
 		"weather_condition_rainy": { "fg": "skyblue1", "bg": "gray0" },
 		"uptime": { "fg": "gray8", "bg": "gray0" },
-		"external_ip": { "fg": "black", "bg": "darkblue" },
-		"internal_ip": { "fg": "black", "bg": "darkblue" },
+		"external_ip": { "fg": "gray8", "bg": "gray0" },
+		"internal_ip": { "fg": "gray8", "bg": "gray0" },
 		"network_load": { "fg": "gray8", "bg": "gray0" },
 		"network_load_gradient": { "fg": "green_yellow_orange_red", "bg": "gray0" },
 		"system_load": { "fg": "gray8", "bg": "gray0" },
@@ -27,8 +27,8 @@
 		"battery": { "fg": "gray8", "bg": "gray0" },
 		"battery_gradient": { "fg": "white_red", "bg": "gray0" },
 		"now_playing": { "fg": "gray10", "bg": "black" },
-		"branch": { "fg": "gray10", "bg": "royalblue5" },
-		"branch_clean": { "fg": "gray10", "bg": "royalblue5" },
+		"branch": { "fg": "gray10", "bg": "darkestblue" },
+		"branch_clean": { "fg": "gray10", "bg": "darkestblue" },
 		"branch_dirty": { "fg": "blac", "bg": "red" }
 	}
 }
