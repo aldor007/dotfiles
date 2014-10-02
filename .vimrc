@@ -30,6 +30,8 @@
         Bundle 'evanmiller/nginx-vim-syntax'
         Bundle 'airblade/vim-gitgutter'
         Bundle 'majutsushi/tagbar'
+        Bundle 'mileszs/ack.vim'
+
 
         " Dla putty
         " let g:NERDTreeDirArrows=0

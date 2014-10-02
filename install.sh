@@ -7,6 +7,7 @@ function install_common {
     sudo apt-get install unzip -y
     sudo apt-get install subversion -y
     sudo apt-get install mercurial -y
+    cp ${base_dir}.screenrc ~/
 }
 function install_zsh {
 
