@@ -1,6 +1,7 @@
 # Instalation
 ```bash 
 curl  https://raw.githubusercontent.com/Aldor007/dotfiles/master/install.sh | bash
+
 ```
 # Screenshots
 
@@ -56,5 +57,6 @@ curl  https://raw.githubusercontent.com/Aldor007/dotfiles/master/install.sh | ba
 # TODO
 * clone powerline 
 * better installer
+- Vundle to NeoBundle
 
 

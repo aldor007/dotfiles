@@ -7,8 +7,25 @@ function install_common {
     sudo apt-get install unzip -y
     sudo apt-get install subversion -y
     sudo apt-get install mercurial -y
-    cp ${base_dir}.screenrc ~/
+    sudo apt-get install build-essentials -y
+    sudo apt-get install python-pip -y
+    sudo apt-get install python-fontforge -y
+    sudo apt-get install screen -y 
+    cp ${base_dir}.screenrc ~/.screenrc
 }
+
+function install_fonts {
+  wget https://github.com/Lokaltog/powerline/raw/develop/font/PowerlineSymbols.otf
+  wget https://github.com/Lokaltog/powerline/raw/develop/font/10-powerline-symbols.conf
+  mkdir -p ~/.fonts
+  mv PowerlineSymbols.otf ~/.fonts/
+  mkdir -p ~/.config/fontconfig/conf.d
+  mv 10-powerline-symbols.conf ~/.config/fontconfig/conf.d/
+  fc-cache -vf ~/.fonts/
+}
+
+
+
 function install_zsh {
 
     sudo apt-get install zsh -y
@@ -28,8 +45,10 @@ function install_zsh {
 
 function install_tmux {
     sudo apt-get install tmux -y
+    sudo apt-get install python-netifaces -y
     cp -r ${base_dir}.tmux ~/
-    cp -r ${base_dir}.config/ ~/.config/
+    cp -r ${base_dir}.config/ ~/
+    git clone https://github.com/Lokaltog/powerline   ~/.tmux/powerline2
     cd ~/.tmux/powerline2; sudo python setup.py install
     ln -s ~/.tmux/tmux.conf ~/.tmux.conf
 }
@@ -53,6 +72,7 @@ function install_vim {
     cp ${base_dir}.pylintrc ~/
     cp ${base_dir}.vimrc ~/
     vim -c 'BundleInstall' -c qa
+    cd ~/.vim/bundle/vimproc.vim/; make -f make_unix.mak
 }
 function install_fzf {
     sudo apt-get install ruby -y
@@ -64,8 +84,12 @@ function install_fzf {
     ~/.fzf/install
 }
 
-function install_repo_file {
+function install_gitconf {
     cp ${base_dir}.gitconfig ~/
+    git clone https://github.com/jonas/tig /tmp/tig
+    cd /tmp/tig; sudo make prefix=/usr/local
+    cd /tmp/tig; sudo make install prefix=/usr/local
+
 
 }
 function clean_install {
@@ -121,13 +145,17 @@ case $install_typ in
         install_fzf
     ;;
     repo)
-        install_repo
+        install_gitconf
     ;;
     all)
+        install_tmux
         install_zsh
         install_tmux
         install_fzf
         install_vim
+        install_fonts
+        install_programing
+        install_gitconf
     ;;
     *)
         echo "Unknow"

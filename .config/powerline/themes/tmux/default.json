@@ -1,64 +1,59 @@
 {
-	"default_module": "powerline.segments.common",
-	"segment_data": {
-		"uptime": {
-			"before": "⇑  "
-		},
-		"date": {
-			"before": "⌚ "
-		}
-	},
 	"segments": {
         "left": [
-        
-			{
-				"name": "hostname",
-                "after":"⮁"
-			},
             {
-                "name": "internal_ip",
-                "module": "user",
-                "args": {
-                    "ifname": "eth0"
-                },
-                "after":"⮁"
+                "function": "powerline.segments.common.env.cwd"
             },
             {
-                "name": "external_ip",
-				"priority": 50,
-                "after":"⮁"
-            },
-            {
-            "name":"branch",
-			    "before": "⌚ ",
-                "after": " ⭠"
+                "function": "powerline.segments.common.vcs.branch",
+				"priority": 60
             }
         ],
 		"right": [
             {
-                "name": "now_playing",
-                "module": "powerline.segments.common",
-                "args": { "player": "spotify"},
-                "priority": 80,
-                "draw_soft_divider": false,
-                "widht": 10
-
+                "function": "powerline.segments.common.net.internal_ip",
+                "args": {
+                    "interface": "wlan0"
+                },
+				"priority": 70,
+                "align": "left"
             },
 			{
-				"name": "uptime",
-				"priority": 30
+				"function": "powerline.segments.common.net.external_ip",
+                "name": "external_ip",
+                "args": {
+                    "query_url": "http://icanhazip.com/"
+                },
+				"priority": 77,
+                "width": 100,
+                "align": "right"
 			},
 			{
-				"name": "system_load",
-				"priority": 30
+				"function": "powerline.segments.common.sys.system_load",
+				"priority": 50
 			},
 			{
-				"name": "date",
+				"function": "powerline.segments.common.time.date",
 				"args": {
 					"format": "%H:%M %d-%m-%Y",
 					"istime": true
-				}
-			}
+				},
+				"priority": 60
+			},
+			{
+				"function": "powerline.segments.common.net.hostname"
+			},
+            {
+                "function": "powerline.segments.common.players.now_playing",
+                "args": { "player": "spotify"},
+                "priority": 10,
+                "draw_soft_divider": false,
+                "width": 1
+
+            },
+            {
+                "function": "powerline.segments.common.bat.battery"
+            }
 		]
 	}
 }
