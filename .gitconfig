@@ -1,5 +1,5 @@
 [user]
-	name = "Aldor007"
+	name = "Marcin Kaciuba"
     email = "aldor007@gmail.com"
 [diff]
     tool = vimdiff
@@ -10,3 +10,5 @@
     cmd = "vim -f $BASE $LOCAL $REMOTE $MERGED -c 'SpliceInit'"
     trustExitCode = true
 
+[alias]
+	lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit

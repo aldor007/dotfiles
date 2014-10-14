@@ -2,15 +2,16 @@
 base_dir=/tmp/dotfiles/
 
 function install_common {
-    sudo apt-get install git -y
-    sudo apt-get install zip -y
-    sudo apt-get install unzip -y
-    sudo apt-get install subversion -y
-    sudo apt-get install mercurial -y
-    sudo apt-get install build-essentials -y
-    sudo apt-get install python-pip -y
-    sudo apt-get install python-fontforge -y
-    sudo apt-get install screen -y 
+    sudo apt-get install git -y -t wheezy
+    sudo apt-get install zip -y -t wheezy
+    sudo apt-get install unzip -y -t wheezy
+    sudo apt-get install subversion -y -t wheezy
+    sudo apt-get install mercurial -y -t wheezy
+    sudo apt-get install build-essential -y -
+    sudo apt-get install python-pip -y -t wheezy 
+    sudo apt-get install python-fontforge -y -t wheezy
+
+    sudo apt-get install screen -y  -t wheezy
     cp ${base_dir}.screenrc ~/.screenrc
 }
 
@@ -148,13 +149,13 @@ case $install_typ in
         install_gitconf
     ;;
     all)
-        install_tmux
-        install_zsh
-        install_tmux
-        install_fzf
-        install_vim
-        install_fonts
-        install_programing
+        # install_tmux
+        # install_zsh
+        # install_tmux
+        # install_fzf
+        # install_vim
+        # install_fonts
+        # install_programing
         install_gitconf
     ;;
     *)
