@@ -1,9 +1,13 @@
 [user]
-	name = "Aldor007"
+	name = "Marcin Kaciuba"
     email = "aldor007@gmail.com"
 [diff]
     tool = vimdiff
+[push]
+        default = current
 [merge]
+    commit = no
+    ff = no
     tool = splice
 
 [mergetool "splice"]
