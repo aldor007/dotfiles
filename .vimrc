@@ -5,7 +5,6 @@
                 set runtimepath+=~/.vim/bundle/Vundle.vim
                 call vundle#rc()
                 Bundle 'gmarik/Vundle.vim'
-                set runtimepath^=~/.vim/bundle/ctrlp.vim
 
                 " set autochdir
                 " auto read file change
@@ -37,6 +36,7 @@
         Bundle 'Shougo/unite.vim'
         Bundle 'Shougo/vinarise.vim'
         Bundle 'Shougo/vimfiler.vim'
+        Bundle 'evidens/vim-twig'
 
 
         Bundle 'Shougo/vimshell.vim'
@@ -68,15 +68,6 @@
         set undofile                                    " so is persistent undo ...
         set undolevels=1000 "maximum number of changes that can be undone
         set undoreload=10000 "maximum number lines to save for undo on a buffer reload
-" Moved to function at bottom of the file
-        "set backupdir=$HOME/.vimbackup//  " but not when they clog .
-        "set directory=$HOME/.vimswap//         " Same for swap files
-        "set viewdir=$HOME/.vimviews//  " same for view files
-
-        "" Creating directories if they don't exist
-        "silent execute '!mkdir -p $HVOME/.vimbackup'
-        "silent execute '!mkdir -p $HOME/.vimswap'
-        "silent execute '!mkdir -p $HOME/.vimviews'
         au BufWinLeave * silent! mkview  "make vim save view (state) (folds, cursor, etc)
         au BufWinEnter * silent! loadview "make vim load view (state) (folds, cursor, etc)
         " }
@@ -103,25 +94,6 @@
 
         set include=^\\s*#\\s*include\ \\(<boost/\\)\\@!
 
-        " if has('cmdline_info')
-        "         set ruler                       " show the ruler
-        "         set rulerformat=%30(%=\:b%n%y%m%r%w\ %l,%c%V\ %P%) " a ruler on steroids
-        "         set showcmd                     " show partial commands in status line and
-        "                                                                 " selected characters/lines in visual mode
-        " endif
-
-        " if has('statusline')
-        " set laststatus=2
-
-        "         " Broken down into easily includeable segments
-        "         set statusline=%<%f\    " Filename
-        "         set statusline+=%w%h%m%r " Options
-        "         set statusline+=%{fugitive#statusline()} "  Git Hotness
-        "         set statusline+=\ [%{&ff}/%Y]            " filetype
-        "         set statusline+=\ [%{getcwd()}]          " current dir
-        "         "set statusline+=\ [A=\%03.3b/H=\%02.2B] " ASCII / Hexadecimal value of char
-        "         set statusline+=%=%-14.(%l,%c%V%)\ %p%%  " Right aligned file nav info
-        " endif
         set backspace=indent,eol,start  " backspace for dummys
         set linespace=0                                 " No extra spaces between rows
         set nu                                                  " Line numbers on
@@ -313,11 +285,11 @@
                " inoremap <expr><TAB>  pumvisible() ? "\<Down>" : \<C-x>\<C-u>"
                
                " Enable omni completion.
-               autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
-               autocmd FileType html,markdown setlocal   omnifunc=htmlcomplete#CompleteTags
-               autocmd FileType javascript setlocal  omnifunc=javascriptcomplete#CompleteJS
-               autocmd FileType python setlocal      omnifunc=pythoncomplete#Complete
-               autocmd FileType xml setlocal     omnifunc=xmlcomplete#CompleteTags
+               " autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
+               " autocmd FileType html,markdown setlocal   omnifunc=htmlcomplete#CompleteTags
+               " autocmd FileType javascript setlocal  omnifunc=javascriptcomplete#CompleteJS
+               " autocmd FileType python setlocal      omnifunc=pythoncomplete#Complete
+               " autocmd FileType xml setlocal     omnifunc=xmlcomplete#CompleteTags
                
                " Enable heavy omni completion.
                if !exists('g:neocomplete#sources#omni#input_patterns')
@@ -352,20 +324,20 @@
         " }
 
 
-        "Gundo
-        map <leader>u :GundoToggle<CR>
-        "}
+            "Gundo
+            map <leader>u :GundoToggle<CR>
+            "}
 
 
 
         " Ctags {
     " This will look in the current directory for 'tags', and work up the tree towards root until one is found.
                 set tags=./tags;/,$HOME/.vim/tags
-        map <C-\> :tab split<CR>:exec("tag ".expand("<cword>"))<CR> " C-\ - Open the definition in a new tab
-        map <A-]> :vsp <CR>:exec("tag ".expand("<cword>"))<CR>      " A-] - Open the definition in a vertical split
-        set tags+=~/.vim/tags/boost
-        set tags+=~/.vim/tags/libc6
-        set tags+=~/.vim/tags/stdlibcpp
+                map <C-\> :tab split<CR>:exec("tag ".expand("<cword>"))<CR> " C-\ - Open the definition in a new tab
+                map <A-]> :vsp <CR>:exec("tag ".expand("<cword>"))<CR>      " A-] - Open the definition in a vertical split
+                set tags+=~/.vim/tags/boost
+                set tags+=~/.vim/tags/libc6
+                set tags+=~/.vim/tags/stdlibcpp
         " }
 
 
@@ -373,9 +345,8 @@
                 au FileType * let b:delimitMate_autoclose = 1
 
                 " If using html auto complete (complete closing tag)
-        au FileType xml,html,xhtml let b:delimitMate_matchpairs = "(:),[:],{:}"
+                au FileType xml,html,xhtml let b:delimitMate_matchpairs = "(:),[:],{:}"
         " }
-
 
         " UltiSnipMate {
         let g:UltiSnipsEditSplit='horizontal'
@@ -415,15 +386,6 @@
         endif
      " }
 
-        " Richard's plugins {
-                " Fuzzy Finder {
-                        """ Fuzzy Find file, tree, buffer, line
-                        " nmap <leader>ff :FufFile **/<CR>
-                        " nmap <leader>ft :FufFile<CR>
-                        " nmap <leader>fb :FufBuffer<CR>
-                        " nmap <leader>fl :FufLine<CR>
-                        " nmap <leader>fr :FufRenewCache<CR>
-                " }
 
                 " Unite {
                         " map <C-b> :CtrlPBuffer<CR>
@@ -442,21 +404,41 @@
                             \ . " --exclude-dir='node_modules'"
                 " let g:unite_source_rec_async_command = 'ack -f --nofilter'
                 nnoremap <space>/ :Unite -no-quit -buffer-name=search grep:.<cr>
-                nnoremap <C-p> :Unite file_rec/async<cr>
                 nnoremap <Space>y :Unite -buffer-name=yank  history/yank<cr>
-                nnoremap <C-b> :Unite -quick-match  buffer<cr>
+                nnoremap <C-b> :Unite -quick-match  buffer<C-Right>
 
-                " Session List {
-                        set sessionoptions=blank,buffers,curdir,folds,tabpages,winsize
-                        nmap <leader>sv :ViewSession<CR>
-                        nmap <leader>ss :SessionSave<CR>
-                        let g:session_autosave = 'no'
+                """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+                let g:unite_enable_start_insert = 1
+                let g:unite_split_rule = "botright"
+                let g:unite_force_overwrite_statusline = 0
+                let g:unite_winheight = 10
 
+                call unite#custom_source('file_rec,file_rec/async,file_mru,file,buffer,grep',
+                      \ 'ignore_pattern', join([
+                      \ '\.git/',
+                      \ 'node_modules/',
+                      \ 'vendor/',
+                      \ 'cache/',
+                      \ ], '\|'))
 
-                " php-doc commands {
-                        nmap <leader>pd :call PhpDocSingle()<CR>
-                        vmap <leader>pd :call PhpDocRange()<CR>
-                " }
+                call unite#filters#matcher_default#use(['matcher_fuzzy'])
+                call unite#filters#sorter_default#use(['sorter_rank'])
+
+                nnoremap <C-p> :<C-u>Unite  -buffer-name=files   -start-insert buffer file_rec/async:!<cr>
+
+                autocmd FileType unite call s:unite_settings()
+
+                function! s:unite_settings()
+                  let b:SuperTabDisabled=1
+                  imap <buffer> <C-j>   <Plug>(unite_select_next_line)
+                  imap <buffer> <C-k>   <Plug>(unite_select_previous_line)
+                  imap <silent><buffer><expr> <C-x> unite#do_action('split')
+                  imap <silent><buffer><expr> <C-v> unite#do_action('vsplit')
+                  imap <silent><buffer><expr> <C-t> unite#do_action('tabopen')
+
+                  nmap <buffer> <ESC> <Plug>(unite_exit)
+                endfunction
+
 
 
                 " Taglist Variables {

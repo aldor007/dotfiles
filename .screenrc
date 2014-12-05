@@ -145,8 +145,5 @@ bindkey -k F2 prev
 
 # Default Buffers
 screen -M -t Shell 0 
-screen    -t Shell 1 
-screen    -t Shell 2
-screen    -t Shell 3
 select 0
 
