@@ -15,6 +15,7 @@
         Bundle 'sjl/gundo.vim'
         Bundle 'sjl/splice.vim'
         Bundle 'godlygeek/tabular'
+
         Bundle 'tomtom/tcomment_vim'
         Bundle 'vim-scripts/tlib'
         Bundle 'SirVer/ultisnips'
@@ -29,14 +30,14 @@
         Bundle 'airblade/vim-gitgutter'
         Bundle 'majutsushi/tagbar'
         Bundle 'mileszs/ack.vim'
-
         Bundle 'xaizek/vim-inccomplete'
-        Bundle 'wellle/tmux-complete.vim'
         Bundle 'Shougo/neocomplete.vim'
+        Bundle 'wellle/tmux-complete.vim'
         Bundle 'Shougo/unite.vim'
         Bundle 'Shougo/vinarise.vim'
         Bundle 'Shougo/vimfiler.vim'
         Bundle 'evidens/vim-twig'
+        Plugin 'plasticboy/vim-markdown'
 
 
         Bundle 'Shougo/vimshell.vim'
@@ -62,7 +63,7 @@
         set viewoptions=folds,options,cursor,unix,slash " better unix / windows compatibility
         set virtualedit=onemore                 " allow for cursor beyond last character
         set history=1000                                " Store a ton of history (default is 20)
-        set nospell                                     " spell checking off
+        " set nospell                                     " spell checking off
         set backup                                              " backups are nice
         set noswapfile
         set undofile                                    " so is persistent undo ...
@@ -125,6 +126,8 @@
         set pastetoggle=<F12>           " pastetoggle (sane indentation on pastes)
         set comments=sl:/*,mb:*,elx:*/  " auto format comment blocks
         au BufRead,BufNewFile /etc/nginx/*,/usr/local/nginx/conf/* if &ft == '' | setfiletype nginx | endif
+        au BufRead,BufNewFile *.md,*.markdown setfiletype markdown
+        au BufRead,BufNewFile *.cu,*.ch  setfiletype cpp
 
         " Remove trailing whitespaces and ^M chars - not work
         " autocmd FileType c,cpp,java,php,js,python,twig,xml,yml autocmd BufWritePre <buffer> :call setline(1,map(getline(1,"$"),'substitute(v:val,"\\s\\+$","","")'))
@@ -133,6 +136,7 @@
 
 "  Show && Remove trailing whitespaces in commons source files on save
          autocmd FileType c,cpp,java,php,javascript,python,yaml,json,sls,puppet  autocmd BufWritePre <buffer> :%s/\s\+$//e
+
          highlight ExtraWhitespace ctermbg=red guibg=red
          match ExtraWhitespace /\s\+$/
          autocmd BufWinEnter * match ExtraWhitespace /\s\+$/
@@ -210,13 +214,13 @@
 
 " Plugins {
 
+            let g:tmuxcomplete#trigger = ''
         " NeoComplate
-            " let g:tmuxcomplete#trigger = 'omnifunc'
             " Note: This option must set it in .vimrc(_vimrc).  NOT IN
             " .gvimrc(_gvimrc)!
             " Disable AutoComplPop.
             let g:acp_enableAtStartup = 0
-
+            let g:neocomplete#force_overwrite_completefunc = 1
             " Use neocomplete.
             let g:neocomplete#enable_at_startup = 1
             " Use smartcase.
@@ -285,8 +289,8 @@
                " inoremap <expr><TAB>  pumvisible() ? "\<Down>" : \<C-x>\<C-u>"
                
                " Enable omni completion.
-               " autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
-               " autocmd FileType html,markdown setlocal   omnifunc=htmlcomplete#CompleteTags
+               autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
+               autocmd FileType html,markdown setlocal   omnifunc=htmlcomplete#CompleteTags
                " autocmd FileType javascript setlocal  omnifunc=javascriptcomplete#CompleteJS
                " autocmd FileType python setlocal      omnifunc=pythoncomplete#Complete
                " autocmd FileType xml setlocal     omnifunc=xmlcomplete#CompleteTags
