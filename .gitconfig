@@ -7,8 +7,8 @@
     default = current
 [pull]
 	default = current
+	ff = only
 [merge]
-    commit = no
     ff = no
     tool = splice
 
@@ -20,8 +20,7 @@
     lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
     st = status
     df = diff
-[color]
-    status = auto
+	up = "!git remote update -p; git merge --ff-only @{u}"
 [color "status"]
     added = green
     changed = yellow
