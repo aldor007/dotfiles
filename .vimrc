@@ -3,6 +3,8 @@
                 "Vundle  autoload
                 filetype off
                 set runtimepath+=~/.vim/bundle/Vundle.vim
+                set runtimepath^=~/.vim/bundle/ctrlp.vim
+
                 call vundle#rc()
                 Bundle 'gmarik/Vundle.vim'
 
@@ -15,6 +17,7 @@
         Bundle 'sjl/gundo.vim'
         Bundle 'sjl/splice.vim'
         Bundle 'godlygeek/tabular'
+        Bundle 'kien/ctrlp.vim'
 
         Bundle 'tomtom/tcomment_vim'
         Bundle 'vim-scripts/tlib'
@@ -37,7 +40,9 @@
         Bundle 'Shougo/vinarise.vim'
         Bundle 'Shougo/vimfiler.vim'
         Bundle 'evidens/vim-twig'
-        Plugin 'plasticboy/vim-markdown'
+        Bundle 'plasticboy/vim-markdown'
+        Bundle 'DavidEGx/ctrlp-smarttabs'
+
 
 
         Bundle 'Shougo/vimshell.vim'
@@ -392,43 +397,45 @@
 
 
                 " Unite {
-                        " map <C-b> :CtrlPBuffer<CR>
-                        " let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
-                let g:unite_source_history_yank_enable = 1
-                " call unite#filters#matcher_default#use(['matcher_fuzzy'])
-                let g:unite_source_grep_default_opts = "-iRHn"
-                            \ . " --exclude='*.svn*'"
-                            \ . " --exclude='*.svn*'"
-                            \ . " --exclude='*.log*'"
-                            \ . " --exclude='*tmp*'"
-                            \ . " --exclude-dir='**/tmp'"
-                            \ . " --exclude-dir='CVS'"
-                            \ . " --exclude-dir='.svn'"
-                            \ . " --exclude-dir='.git'"
-                            \ . " --exclude-dir='node_modules'"
-                " let g:unite_source_rec_async_command = 'ack -f --nofilter'
+                        map <C-b> :CtrlPBuffer<CR>
+                        let g:ctrlp_extensions = ['smarttabs']
+
+                        let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
                 nnoremap <space>/ :Unite -no-quit -buffer-name=search grep:.<cr>
                 nnoremap <Space>y :Unite -buffer-name=yank  history/yank<cr>
-                nnoremap <C-b> :Unite -quick-match  buffer<C-Right>
+                " let g:unite_source_history_yank_enable = 1
+                " " call unite#filters#matcher_default#use(['matcher_fuzzy'])
+                " let g:unite_source_grep_default_opts = "-iRHn"
+                "             \ . " --exclude='*.svn*'"
+                "             \ . " --exclude='*.svn*'"
+                "             \ . " --exclude='*.log*'"
+                "             \ . " --exclude='*tmp*'"
+                "             \ . " --exclude-dir='**/tmp'"
+                "             \ . " --exclude-dir='CVS'"
+                "             \ . " --exclude-dir='.svn'"
+                "             \ . " --exclude-dir='.git'"
+                "             \ . " --exclude-dir='node_modules'"
+                " " let g:unite_source_rec_async_command = 'ack -f --nofilter'
+                " nnoremap <C-b> :Unite -quick-match  buffer<C-Right>
+                "
+                " """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+                " let g:unite_enable_start_insert = 1
+                " let g:unite_split_rule = "botright"
+                " let g:unite_force_overwrite_statusline = 0
+                " let g:unite_winheight = 10
+                "
+                " call unite#custom_source('file_rec,file_rec/async,file_mru,file,buffer,grep',
+                "       \ 'ignore_pattern', join([
+                "       \ '\.git/',
+                "       \ 'node_modules/',
+                "       \ 'vendor/',
+                "       \ 'cache/',
+                "       \ ], '\|'))
+                "
+                " call unite#filters#matcher_default#use(['matcher_fuzzy'])
+                " call unite#filters#sorter_default#use(['sorter_rank'])
 
-                """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-                let g:unite_enable_start_insert = 1
-                let g:unite_split_rule = "botright"
-                let g:unite_force_overwrite_statusline = 0
-                let g:unite_winheight = 10
-
-                call unite#custom_source('file_rec,file_rec/async,file_mru,file,buffer,grep',
-                      \ 'ignore_pattern', join([
-                      \ '\.git/',
-                      \ 'node_modules/',
-                      \ 'vendor/',
-                      \ 'cache/',
-                      \ ], '\|'))
-
-                call unite#filters#matcher_default#use(['matcher_fuzzy'])
-                call unite#filters#sorter_default#use(['sorter_rank'])
-
-                nnoremap <C-p> :<C-u>Unite  -buffer-name=files   -start-insert buffer file_rec/async:!<cr>
+                " nnoremap <C-p> :<C-u>Unite  -buffer-name=files   -start-insert buffer file_rec/async:!<cr>
 
                 autocmd FileType unite call s:unite_settings()
 
