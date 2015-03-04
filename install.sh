@@ -1,5 +1,5 @@
 #!/bin/bash
-base_dir=/tmp/dotfiles/
+base_dir=~/dotfiles/
 
 function install_common {
     sudo apt-get install git -y 
@@ -12,7 +12,7 @@ function install_common {
     sudo apt-get install python-fontforge -y 
 
     sudo apt-get install screen -y  
-    cp ${base_dir}.screenrc ~/.screenrc
+    ln -s  ${base_dir}.screenrc ~/.screenrc
 }
 
 function install_fonts {
@@ -33,25 +33,25 @@ function install_zsh {
     sudo chsh -s /bin/zsh  $USER
     # cp -r ${base_dir}.oh-my-zsh/ ~g
     git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
-    cp ${base_dir}.zshrc ~
+    ln -s  ${base_dir}.zshrc ~/.zshrc
     if [[ -f ~/.sdk_cde  ]]; then
         compaudit | sudo xargs chmod g-w
         compaudit | sudo xargs chown root
         rm ~/.zcompdump*
         compinit
     fi
-    cp ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
+    ln -s ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
 
 }
 
 function install_tmux {
     sudo apt-get install tmux -y
     sudo apt-get install python-netifaces -y
-    cp -r ${base_dir}.tmux ~/
-    cp -r ${base_dir}.config/ ~/
+    ln -s ${base_dir}.tmux ~/.tmux
+    ln -s ${base_dir}.config/ ~/.config
     git clone https://github.com/Lokaltog/powerline   ~/.tmux/powerline2
     cd ~/.tmux/powerline2; sudo python setup.py install
-    ln -s ~/.tmux/tmux.conf ~/.tmux.conf
+    ln -s ${base_dir}.tmux/tmux.conf ~/.tmux.conf
 }
 
 function install_programing {
@@ -67,12 +67,12 @@ function install_vim {
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
     sudo npm install -g jshint
-    cp ${base_dir}.jshintrc ~/.jshintrc
-    cp -r ${base_dir}.vim ~/
+    ln -s ${base_dir}.jshintrc ~/.jshintrc
+    ln -s  ${base_dir}.vim ~/.vim
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
-    cp ${base_dir}.pylintrc ~/
-    cp ${base_dir}.vimrc ~/
-    vim -c 'BundleInstall' -c qa
+    ln -s ${base_dir}.pylintrc ~/.pylintrc
+    ln -s ${base_dir}.vimrc ~/.vimrc
+    vim -c 'BundleInstall' -c qa | echo '\n'
     cd ~/.vim/bundle/vimproc.vim/; make -f make_unix.mak
 }
 function install_fzf {
@@ -86,7 +86,7 @@ function install_fzf {
 }
 
 function install_gitconf {
-    cp ${base_dir}.gitconfig ~/
+    ln -s  ${base_dir}.gitconfig ~/.gitconfig
     git clone https://github.com/jonas/tig /tmp/tig
     cd /tmp/tig; sudo make prefix=/usr/local
     cd /tmp/tig; sudo make install prefix=/usr/local
@@ -94,7 +94,6 @@ function install_gitconf {
 
 }
 function clean_install {
-    rm -rf ${base_dir}
     rm -rf ~/.vim
     rm -rf ~/.oh-my-zsh
     rm -rf ~/.zshrc
