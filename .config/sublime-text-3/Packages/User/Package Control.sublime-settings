@@ -1,0 +1,30 @@
+{
+	"in_process_packages":
+	[
+	],
+	"installed_packages":
+	[
+		"Alignment",
+		"C++11",
+		"CSScomb",
+		"DocBlockr",
+		"Emmet",
+		"FileDiffs",
+		"Git",
+		"Git Config",
+		"Git GUI Clients",
+		"GitGutter",
+		"Gitignore",
+		"MarkdownEditing",
+		"Package Control",
+		"PackageResourceViewer",
+		"SideBarEnhancements",
+		"SideBarGit",
+		"Sublime Text 3 Snippets",
+		"SublimeEnhancedUtilitiesSet",
+		"SublimeLinter",
+		"Terminal",
+		"Trimmer",
+		"Vintageous"
+	]
+}

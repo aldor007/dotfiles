@@ -94,6 +94,7 @@ function install_gitconf {
 
 }
 function clean_install {
+    echo "Clean install"
     rm -rf ~/.vim
     rm -rf ~/.oh-my-zsh
     rm -rf ~/.zshrc
@@ -107,28 +108,24 @@ function clean_install {
 
 
 install_typ='all'
-while [[ $# > 1 ]]
-do
-    key="$1"
-    shift
+key="$1"
 
-    case $key in
-        -c|--clean)
-            clean_install
-            shift
+case $key in
+    -c|--clean)
+        clean_install
+        shift
+    ;;
+    -i|--install)
+        install_typ="$2"
+        shift
+    ;;
+    *)
+        echo "usage:
+                -c|--clean  - remove dotfiles before install
+                -i|--install [type] copy dotfiles
+        "
         ;;
-        -i|--install)
-            install_typ="$1"
-            shift
-        ;;
-        *)
-            echo "usage:
-                    -c|--clean  - remove dotfiles before install
-                    -i|--install [type] copy dotfiles
-            "
-            ;;
-        esac
-done
+    esac
 install_common
 git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 case $install_typ in
