@@ -42,6 +42,7 @@
         Bundle 'evidens/vim-twig'
         Bundle 'plasticboy/vim-markdown'
         Bundle 'DavidEGx/ctrlp-smarttabs'
+        Bundle 'terryma/vim-multiple-cursors'
 
 
 
@@ -403,40 +404,6 @@
                         let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
                 nnoremap <space>/ :Unite -no-quit -buffer-name=search grep:.<cr>
                 nnoremap <Space>y :Unite -buffer-name=yank  history/yank<cr>
-                " let g:unite_source_history_yank_enable = 1
-                " " call unite#filters#matcher_default#use(['matcher_fuzzy'])
-                " let g:unite_source_grep_default_opts = "-iRHn"
-                "             \ . " --exclude='*.svn*'"
-                "             \ . " --exclude='*.svn*'"
-                "             \ . " --exclude='*.log*'"
-                "             \ . " --exclude='*tmp*'"
-                "             \ . " --exclude-dir='**/tmp'"
-                "             \ . " --exclude-dir='CVS'"
-                "             \ . " --exclude-dir='.svn'"
-                "             \ . " --exclude-dir='.git'"
-                "             \ . " --exclude-dir='node_modules'"
-                " " let g:unite_source_rec_async_command = 'ack -f --nofilter'
-                " nnoremap <C-b> :Unite -quick-match  buffer<C-Right>
-                "
-                " """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-                " let g:unite_enable_start_insert = 1
-                " let g:unite_split_rule = "botright"
-                " let g:unite_force_overwrite_statusline = 0
-                " let g:unite_winheight = 10
-                "
-                " call unite#custom_source('file_rec,file_rec/async,file_mru,file,buffer,grep',
-                "       \ 'ignore_pattern', join([
-                "       \ '\.git/',
-                "       \ 'node_modules/',
-                "       \ 'vendor/',
-                "       \ 'cache/',
-                "       \ ], '\|'))
-                "
-                " call unite#filters#matcher_default#use(['matcher_fuzzy'])
-                " call unite#filters#sorter_default#use(['sorter_rank'])
-
-                " nnoremap <C-p> :<C-u>Unite  -buffer-name=files   -start-insert buffer file_rec/async:!<cr>
-
                 autocmd FileType unite call s:unite_settings()
 
                 function! s:unite_settings()

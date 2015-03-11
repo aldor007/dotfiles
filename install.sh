@@ -72,7 +72,7 @@ function install_vim {
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
     ln -s ${base_dir}.pylintrc ~/.pylintrc
     ln -s ${base_dir}.vimrc ~/.vimrc
-    vim -c 'BundleInstall' -c qa | echo '\n'
+    vim -c 'BundleInstall' -c qa 
     cd ~/.vim/bundle/vimproc.vim/; make -f make_unix.mak
 }
 function install_fzf {
@@ -101,6 +101,7 @@ function clean_install {
     rm -rf ~/.vimrc
     rm -rf ~/.tmux
     rm -rf ~/.tmux.conf
+    rm -rf ~/.screenrc
 
 }
 
