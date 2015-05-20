@@ -6,6 +6,7 @@
 	[
 		"Alignment",
 		"Anaconda",
+		"C++ Snippets",
 		"apiDoc Autocompletion",
 		"AutoCompleteJS",
 		"BracketHighlighter",
@@ -34,6 +35,7 @@
 		"SideBarGit",
 		"Sublime Text 3 Snippets",
 		"SublimeEnhancedUtilitiesSet",
+		"SublimeGDB",
 		"SublimeLinter",
 		"SublimeLinter-cppcheck",
 		"SublimeLinter-phplint",
@@ -41,6 +43,8 @@
 		"Theme - Brogrammer",
 		"Theme - Lyte",
 		"Trimmer",
-		"Vintageous"
+		"Vintageous",
+		"SublimePythonIDE",
+		"Symfony2 Snippets"
 	]
 }
