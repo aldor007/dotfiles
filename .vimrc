@@ -45,10 +45,6 @@
         Bundle 'terryma/vim-multiple-cursors'
 
 
-
-        Bundle 'Shougo/vimshell.vim'
-        Bundle 'Shougo/vimproc.vim'
-
         " Dla putty
         " let g:NERDTreeDirArrows=0
         set encoding=utf-8
