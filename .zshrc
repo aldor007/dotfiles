@@ -45,7 +45,7 @@ ZSH_THEME="birav1"
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
-plugins=(git debian cp django node npm pip symfony2 tmux  web-search python)
+plugins=(git debian cp django node npm pip symfony2 tmux  history history-substring-search git-prompt git-extras python)
 
 source $ZSH/oh-my-zsh.sh
 
