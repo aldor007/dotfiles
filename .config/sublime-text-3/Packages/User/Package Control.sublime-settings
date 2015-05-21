@@ -6,10 +6,10 @@
 	[
 		"Alignment",
 		"Anaconda",
-		"C++ Snippets",
 		"apiDoc Autocompletion",
 		"AutoCompleteJS",
 		"BracketHighlighter",
+		"C++ Snippets",
 		"C++ Starting Kit",
 		"C++11",
 		"CSScomb",
@@ -30,6 +30,7 @@
 		"Nodejs",
 		"Package Control",
 		"PackageResourceViewer",
+		"Perv - Color Scheme",
 		"SaltStack-related syntax highlighting and snippets",
 		"SideBarEnhancements",
 		"SideBarGit",
@@ -38,13 +39,14 @@
 		"SublimeGDB",
 		"SublimeLinter",
 		"SublimeLinter-cppcheck",
+		"SublimeLinter-cpplint",
 		"SublimeLinter-phplint",
+		"SublimePythonIDE",
+		"Symfony2 Snippets",
 		"Terminal",
 		"Theme - Brogrammer",
 		"Theme - Lyte",
 		"Trimmer",
-		"Vintageous",
-		"SublimePythonIDE",
-		"Symfony2 Snippets"
+		"Vintageous"
 	]
 }

@@ -1,6 +1,6 @@
 {
 	"auto_indent": true,
-	"color_scheme": "Packages/User/SublimeLinter/Monokai (SL).tmTheme",
+	"color_scheme": "Packages/User/Perv Orange Moonlight (SL) (SublimePythonIDE).tmTheme",
 	"ignored_packages":
 	[
 		"Vintage",
@@ -9,6 +9,7 @@
 	"indent_to_bracket": true,
 	"smart_indent": true,
 	"tab_size": 4,
+	"theme": "Lyte-Dark.sublime-theme",
 	"translate_tabs_to_spaces": true,
 	"trim_automatic_white_space": true
 }
