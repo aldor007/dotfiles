@@ -1,48 +1,50 @@
-                set nocompatible        " must be first line
-                set background=dark     " Assume a dark background
-                "Vundle  autoload
-                filetype off
-                set runtimepath+=~/.vim/bundle/Vundle.vim
-                set runtimepath^=~/.vim/bundle/ctrlp.vim
+    set nocompatible        " must be first line
+    set background=dark     " Assume a dark background
+    "Vundle  autoload
+    filetype off
+    set runtimepath+=~/.vim/bundle/Vundle.vim
+    set runtimepath^=~/.vim/bundle/ctrlp.vim
 
-                call vundle#rc()
-                Bundle 'gmarik/Vundle.vim'
+    call vundle#rc()
+    Bundle 'gmarik/Vundle.vim'
 
-                " set autochdir
-                " auto read file change
-                set autoread
+    " set autochdir
+    " auto read file change
+    set autoread
 
-        Bundle 'Raimondi/delimitMate'
-        Bundle 'tpope/vim-fugitive'
-        Bundle 'sjl/gundo.vim'
-        Bundle 'sjl/splice.vim'
-        Bundle 'godlygeek/tabular'
-        Bundle 'kien/ctrlp.vim'
-
-        Bundle 'tomtom/tcomment_vim'
-        Bundle 'vim-scripts/tlib'
-        Bundle 'SirVer/ultisnips'
-        Bundle 'honza/vim-snippets'
-        Bundle 'mhinz/vim-startify'
-        Bundle 'Lokaltog/vim-distinguished'
-        Bundle 'bling/vim-airline'
-        Bundle 'scrooloose/syntastic'
-        Bundle 'scrooloose/nerdtree'
-        Bundle 'rodjek/vim-puppet'
-        Bundle 'evanmiller/nginx-vim-syntax'
-        Bundle 'airblade/vim-gitgutter'
-        Bundle 'majutsushi/tagbar'
-        Bundle 'mileszs/ack.vim'
-        Bundle 'xaizek/vim-inccomplete'
-        Bundle 'Shougo/neocomplete.vim'
-        Bundle 'wellle/tmux-complete.vim'
-        Bundle 'Shougo/unite.vim'
-        Bundle 'Shougo/vinarise.vim'
-        Bundle 'Shougo/vimfiler.vim'
-        Bundle 'evidens/vim-twig'
-        Bundle 'plasticboy/vim-markdown'
-        Bundle 'DavidEGx/ctrlp-smarttabs'
-        Bundle 'terryma/vim-multiple-cursors'
+    " Plugins
+    " automatic closing of quotes
+    Bundle 'Raimondi/delimitMate'
+    " git wraper
+    Bundle 'tpope/vim-fugitive'
+    " better history
+    Bundle 'sjl/gundo.vim'
+    " tabulairz
+    Bundle 'godlygeek/tabular'
+    Bundle 'kien/ctrlp.vim'
+    Bundle 'tpope/vim-commentary'
+    Bundle 'vim-scripts/tlib'
+    Bundle 'SirVer/ultisnips'
+    Bundle 'honza/vim-snippets'
+    Bundle 'mhinz/vim-startify'
+    Bundle 'Lokaltog/vim-distinguished'
+    Bundle 'bling/vim-airline'
+    Bundle 'scrooloose/syntastic'
+    Bundle 'scrooloose/nerdtree'
+    Bundle 'rodjek/vim-puppet'
+    Bundle 'evanmiller/nginx-vim-syntax'
+    Bundle 'airblade/vim-gitgutter'
+    Bundle 'majutsushi/tagbar'
+    Bundle 'mileszs/ack.vim'
+    Bundle 'xaizek/vim-inccomplete'
+    Bundle 'Shougo/neocomplete.vim'
+    Bundle 'wellle/tmux-complete.vim'
+    Bundle 'Shougo/unite.vim'
+    Bundle 'Shougo/vimfiler.vim'
+    Bundle 'evidens/vim-twig'
+    Bundle 'plasticboy/vim-markdown'
+    Bundle 'DavidEGx/ctrlp-smarttabs'
+    Bundle 'terryma/vim-multiple-cursors'
 
 
         " Dla putty
@@ -115,7 +117,9 @@
         set gdefault                                    " the /g flag on :s substitutions by default
         set list
         set listchars=tab:>.,trail:.,extends:#,nbsp:. " Highlight problematic whitespace
-" }
+        set relativenumber
+
+" } 
 "   Formatting {
         set wrap                      " wrap long lines
         set autoindent                  " indent at the same level of the previous line
@@ -398,22 +402,7 @@
                         let g:ctrlp_extensions = ['smarttabs']
 
                         let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
-                nnoremap <space>/ :Unite -no-quit -buffer-name=search grep:.<cr>
-                nnoremap <Space>y :Unite -buffer-name=yank  history/yank<cr>
-                autocmd FileType unite call s:unite_settings()
-
-                function! s:unite_settings()
-                  let b:SuperTabDisabled=1
-                  imap <buffer> <C-j>   <Plug>(unite_select_next_line)
-                  imap <buffer> <C-k>   <Plug>(unite_select_previous_line)
-                  imap <silent><buffer><expr> <C-x> unite#do_action('split')
-                  imap <silent><buffer><expr> <C-v> unite#do_action('vsplit')
-                  imap <silent><buffer><expr> <C-t> unite#do_action('tabopen')
-
-                  nmap <buffer> <ESC> <Plug>(unite_exit)
-                endfunction
-
-
+                nnoremap <space>/ :Ack -no-quit -buffer-name=search grep:.<cr>
 
                 " Taglist Variables {
                         let Tlist_Auto_Highlight_Tag = 1

@@ -48,7 +48,7 @@ function install_tmux {
     sudo apt-get install tmux -y
     sudo apt-get install python-netifaces -y
     ln -s ${base_dir}.tmux ~/.tmux
-    ln -s ${base_dir}.config/ ~/.config
+    ln -s ${base_dir}.config/powerline/ ~/.config/powerline
     git clone https://github.com/Lokaltog/powerline   ~/.tmux/powerline2
     cd ~/.tmux/powerline2; sudo python setup.py install
     ln -s ${base_dir}.tmux/tmux.conf ~/.tmux.conf
@@ -73,7 +73,6 @@ function install_vim {
     ln -s ${base_dir}.pylintrc ~/.pylintrc
     ln -s ${base_dir}.vimrc ~/.vimrc
     vim -c 'BundleInstall' -c qa 
-    cd ~/.vim/bundle/vimproc.vim/; make -f make_unix.mak
 }
 function install_fzf {
     sudo apt-get install ruby -y
