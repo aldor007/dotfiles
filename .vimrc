@@ -40,12 +40,16 @@
     Bundle 'Shougo/neocomplete.vim'
     Bundle 'wellle/tmux-complete.vim'
     Bundle 'Shougo/unite.vim'
+    Bundle 'Shougo/vimproc.vim'
     Bundle 'Shougo/vimfiler.vim'
     Bundle 'evidens/vim-twig'
     Bundle 'plasticboy/vim-markdown'
     Bundle 'DavidEGx/ctrlp-smarttabs'
     Bundle 'terryma/vim-multiple-cursors'
-
+    Bundle 'pbrisbin/vim-mkdir'
+    Bundle 'tpope/vim-surround'
+    Bundle "tmhedberg/matchit"
+    Bundle "sickill/vim-pasta"
 
         " Dla putty
         " let g:NERDTreeDirArrows=0
@@ -55,6 +59,7 @@
         filetype plugin indent on       " Automatically detect file types.
         syntax on                                       " syntax highlighting
         syntax enable
+
         set mouse=a                                     " automatically enable mouse usage
        " set autochdir                           " always switch to the current file directory.. Messes with some plugins, best left commented out
         " not every vim is compiled with this, use the following line instead
@@ -225,7 +230,8 @@
             " Note: This option must set it in .vimrc(_vimrc).  NOT IN
             " .gvimrc(_gvimrc)!
             " Disable AutoComplPop.
-            let g:acp_enableAtStartup = 0
+            let g:acp_enableAtStartup = 1
+    
             let g:neocomplete#force_overwrite_completefunc = 1
             " Use neocomplete.
             let g:neocomplete#enable_at_startup = 1
@@ -402,7 +408,7 @@
                         let g:ctrlp_extensions = ['smarttabs']
 
                         let g:ctrlp_custom_ignore = 'node_modules\|report\|vendor\|cache\|git'
-                nnoremap <space>/ :Ack -no-quit -buffer-name=search grep:.<cr>
+                        nnoremap <space>/ :Unite -no-quit -buffer-name=search grep:.<cr>
 
                 " Taglist Variables {
                         let Tlist_Auto_Highlight_Tag = 1
