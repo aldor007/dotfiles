@@ -127,7 +127,7 @@ case $key in
         ;;
     esac
 install_common
-git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
+# git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 case $install_typ in
     zsh)
         install_zsh
@@ -145,9 +145,9 @@ case $install_typ in
         install_gitconf
     ;;
     all)
-        install_tmux
-        install_zsh
-        install_tmux
+        # install_tmux
+        # install_zsh
+        # install_tmux
         install_fzf
         install_vim
         install_fonts
