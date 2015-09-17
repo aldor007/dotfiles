@@ -55,8 +55,8 @@ function install_tmux {
 }
 
 function install_programing {
-    sudo apt-get install nodejs
-    sudo apt-get install python
+    sudo apt-get install nodejs npm -y
+    sudo apt-get install python -y
     sudo apt-get install python-pip -y
 }
 function install_vim {
@@ -127,7 +127,7 @@ case $key in
         ;;
     esac
 install_common
-# git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
+git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 case $install_typ in
     zsh)
         install_zsh
@@ -146,8 +146,8 @@ case $install_typ in
     ;;
     all)
         # install_tmux
-        # install_zsh
-        # install_tmux
+        install_zsh
+        install_tmux
         install_fzf
         install_vim
         install_fonts

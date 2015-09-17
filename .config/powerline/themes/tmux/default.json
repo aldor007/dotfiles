@@ -3,14 +3,6 @@
         "left": [
         ],
 		"right": [
-            {
-                "function": "powerline.segments.common.net.internal_ip",
-                "args": {
-                    "interface": "wlan0"
-                },
-				"priority": 70,
-                "align": "left"
-            },
 			{
 				"function": "powerline.segments.common.net.external_ip",
                 "name": "external_ip",
@@ -35,18 +27,7 @@
 			},
 			{
 				"function": "powerline.segments.common.net.hostname"
-			},
-            {
-                "function": "powerline.segments.common.players.now_playing",
-                "args": { "player": "spotify"},
-                "priority": 10,
-                "draw_soft_divider": false,
-                "width": 1
-
-            },
-            {
-                "function": "powerline.segments.common.bat.battery"
-            }
+			}
 		]
 	}
 }
