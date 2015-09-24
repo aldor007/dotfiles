@@ -9,7 +9,6 @@ function install_common {
     sudo apt-get install mercurial -y 
     sudo apt-get install build-essential -y 
     sudo apt-get install python-pip -y 
-    sudo apt-get install python-fontforge -y 
 
     sudo apt-get install screen -y  
     ln -s  ${base_dir}.screenrc ~/.screenrc
@@ -45,6 +44,14 @@ function install_zsh {
 }
 
 function install_tmux {
+sudo apt-get install python-fontforge -y 
+ubuntu=$(cat /etc/issue | grep -i ubuntu)
+
+    if [ $? -eq 0 ]; then
+        sudo apt-get install -y python-software-properties software-properties-common
+        sudo add-apt-repository -y ppa:pi-rho/dev
+        sudo apt-get update
+    fi
     sudo apt-get install tmux -y
     sudo apt-get install python-netifaces -y
     ln -s ${base_dir}.tmux ~/.tmux
