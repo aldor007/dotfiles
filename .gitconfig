@@ -22,3 +22,5 @@
     changed = yellow
     untracked = magenta
     deleted = red
+[url "https://"]
+	insteadOf = git://
