@@ -74,6 +74,7 @@ function install_vim {
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
     sudo npm install -g jshint
+    rm -f ~/.vimrc
     ln -s ${base_dir}.jshintrc ~/.jshintrc
     ln -s  ${base_dir}.vim ~/.vim
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
