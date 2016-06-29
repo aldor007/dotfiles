@@ -7,7 +7,6 @@
     default = current
 [pull]
 	default = current
-	ff = only
 [merge]
     ff = no
     tool = vimdiff
