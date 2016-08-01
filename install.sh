@@ -62,10 +62,11 @@ ubuntu=$(cat /etc/issue | grep -i ubuntu)
 }
 
 function install_programing {
-    sudo apt-get install nodejs npm -y
     sudo apt-get install python -y
     sudo apt-get install python-pip -y
+    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.4/install.sh | bash
 }
+
 function install_vim {
     sudo apt-get install fontforge --yes
     sudo apt-get install vim-nox --yes
