@@ -1,9 +1,9 @@
-# Instalation
+# Installation
 ```bash 
 curl  https://raw.githubusercontent.com/Aldor007/dotfiles/master/install.sh | bash
 
 ```
-# Screenshots
+# Screenshot
 
 ![Screen](https://raw.githubusercontent.com/Aldor007/dotfiles/master/screenshots/screen1.png "Screen1")
 
