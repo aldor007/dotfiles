@@ -80,3 +80,6 @@ fi
 if [[ -f ~/.sdk_cde ]]; then
     source ~/.sdk_cde
 fi
+
+export NVM_DIR="~/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
