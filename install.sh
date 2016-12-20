@@ -9,7 +9,6 @@ function install_common {
     sudo apt-get install mercurial -y 
     sudo apt-get install build-essential -y 
     sudo apt-get install python-pip -y 
-    sudo apt-get install python-fontforge -y 
 
     sudo apt-get install screen -y  
     ln -s  ${base_dir}.screenrc ~/.screenrc
@@ -45,6 +44,14 @@ function install_zsh {
 }
 
 function install_tmux {
+sudo apt-get install python-fontforge -y 
+ubuntu=$(cat /etc/issue | grep -i ubuntu)
+
+    if [ $? -eq 0 ]; then
+        sudo apt-get install -y python-software-properties software-properties-common
+        sudo add-apt-repository -y ppa:pi-rho/dev
+        sudo apt-get update
+    fi
     sudo apt-get install tmux -y
     sudo apt-get install python-netifaces -y
     ln -s ${base_dir}.tmux ~/.tmux
@@ -55,10 +62,11 @@ function install_tmux {
 }
 
 function install_programing {
-    sudo apt-get install nodejs
-    sudo apt-get install python
+    sudo apt-get install python -y
     sudo apt-get install python-pip -y
+    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.4/install.sh | bash
 }
+
 function install_vim {
     sudo apt-get install fontforge --yes
     sudo apt-get install vim-nox --yes
@@ -67,6 +75,7 @@ function install_vim {
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
     sudo npm install -g jshint
+    rm -f ~/.vimrc
     ln -s ${base_dir}.jshintrc ~/.jshintrc
     ln -s  ${base_dir}.vim ~/.vim
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
@@ -145,13 +154,13 @@ case $install_typ in
         install_gitconf
     ;;
     all)
-        install_tmux
+        # install_tmux
         install_zsh
         install_tmux
         install_fzf
+        install_programing
         install_vim
         install_fonts
-        install_programing
         install_gitconf
     ;;
     *)

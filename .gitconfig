@@ -9,11 +9,7 @@
 	default = current
 [merge]
     ff = no
-    tool = splice
-
-[mergetool "splice"]
-    cmd = "vim -f $BASE $LOCAL $REMOTE $MERGED -c 'SpliceInit'"
-    trustExitCode = true
+    tool = vimdiff
 
 [alias]
     lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
@@ -25,3 +21,5 @@
     changed = yellow
     untracked = magenta
     deleted = red
+[url "https://"]
+	insteadOf = git://

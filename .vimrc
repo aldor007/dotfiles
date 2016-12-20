@@ -73,6 +73,7 @@
         set virtualedit=onemore                 " allow for cursor beyond last character
         set history=1000                                " Store a ton of history (default is 20)
         " set nospell                                     " spell checking off
+        set spell spelllang=en_us
         set backup                                              " backups are nice
         set noswapfile
         set undofile                                    " so is persistent undo ...
