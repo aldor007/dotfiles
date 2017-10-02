@@ -157,11 +157,11 @@ case $install_typ in
         # install_tmux
         install_zsh
         install_tmux
-        install_fzf
-        install_programing
         install_vim
         install_fonts
         install_gitconf
+        install_fzf
+        install_programing
     ;;
     *)
         echo "Unknow"
