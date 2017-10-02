@@ -29,7 +29,7 @@
     Bundle 'mhinz/vim-startify'
     Bundle 'Lokaltog/vim-distinguished'
     Bundle 'bling/vim-airline'
-    Bundle 'scrooloose/syntastic'
+    Plugin 'vim-syntastic/syntastic'
     Bundle 'scrooloose/nerdtree'
     Bundle 'rodjek/vim-puppet'
     Bundle 'evanmiller/nginx-vim-syntax'
@@ -93,6 +93,8 @@
      set statusline+=%*
      let g:syntastic_c_no_include_search = 1
      let g:syntastic_cpp_compiler_options = ' -std=c++11'
+    let g:syntastic_javascript_checkers = ['eslint']
+    let g:syntastic_javascript_eslint_exe = 'eslint'
      " Needed for airline to work
      set laststatus=2
 " Vim UI {

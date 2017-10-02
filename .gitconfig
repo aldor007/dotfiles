@@ -23,3 +23,5 @@
     deleted = red
 [url "https://"]
 	insteadOf = git://
+[core]
+	autocrlf = input

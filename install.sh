@@ -74,9 +74,11 @@ function install_vim {
     sudo pip install jedi -i http://pypi.python.org/simple/
     sudo pip install pylint -i http://pypi.python.org/simple/
     sudo npm install -g jslint
-    sudo npm install -g jshint
+    sudo npm install -g eslint
+    sudo npm install eslint-plugin-jasmine -g
     rm -f ~/.vimrc
     ln -s ${base_dir}.jshintrc ~/.jshintrc
+    ln -s ${base_dir}.eslintrc.json  ~/.eslintrc.json
     ln -s  ${base_dir}.vim ~/.vim
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
     ln -s ${base_dir}.pylintrc ~/.pylintrc
@@ -112,9 +114,6 @@ function clean_install {
     rm -rf ~/.screenrc
 
 }
-
-
-
 
 install_typ='all'
 key="$1"
@@ -155,13 +154,13 @@ case $install_typ in
     ;;
     all)
         # install_tmux
+        install_programing
         install_zsh
         install_tmux
         install_vim
         install_fonts
         install_gitconf
         install_fzf
-        install_programing
     ;;
     *)
         echo "Unknow"
