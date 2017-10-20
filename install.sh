@@ -83,7 +83,7 @@ function install_vim {
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
     ln -s ${base_dir}.pylintrc ~/.pylintrc
     ln -s ${base_dir}.vimrc ~/.vimrc
-    vim -c 'BundleInstall' -c qa 
+    echo | vim -c 'BundleInstall' -c qa
 }
 function install_fzf {
     sudo apt-get install ruby -y
@@ -94,7 +94,7 @@ function install_fzf {
     git clone https://github.com/junegunn/fzf.git ~/.fzf
     ~/.fzf/install &
     pid=$!
-    sleep 10
+    sleep 30
     kill -9 $pid
 }
 
@@ -103,9 +103,13 @@ function install_gitconf {
     git clone https://github.com/jonas/tig /tmp/tig
     cd /tmp/tig; sudo make prefix=/usr/local
     cd /tmp/tig; sudo make install prefix=/usr/local
-
-
 }
+
+function install_bin {
+    mkdir -p ~/.bin/
+    cp -r ${base_dir}/scripts ~/.bin
+}
+
 function clean_install {
     echo "Clean install"
     rm -rf ~/.vim
@@ -165,6 +169,7 @@ case $install_typ in
         install_gitconf
         install_fzf
         install_fzf
+        install_bin
     ;;
     *)
         echo "Unknow"

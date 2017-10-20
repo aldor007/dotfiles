@@ -32,7 +32,7 @@
     Plugin 'vim-syntastic/syntastic'
     Bundle 'scrooloose/nerdtree'
     Bundle 'rodjek/vim-puppet'
-    Bundle 'evanmiller/nginx-vim-syntax'
+    Bundle 'chr4/nginx.vim'
     Bundle 'airblade/vim-gitgutter'
     Bundle 'majutsushi/tagbar'
     Bundle 'mileszs/ack.vim'
