@@ -92,7 +92,10 @@ function install_fzf {
     sudo apt-get install ruby-ncurses -y
     sudo apt-get install libncurses5-dev -y
     git clone https://github.com/junegunn/fzf.git ~/.fzf
-    ~/.fzf/install
+    ~/.fzf/install &
+    pid=$!
+    sleep 10
+    kill -9 $pid
 }
 
 function install_gitconf {
@@ -153,13 +156,14 @@ case $install_typ in
         install_gitconf
     ;;
     all)
-        # install_tmux
+        install_tmux
         install_programing
         install_zsh
         install_tmux
         install_vim
         install_fonts
         install_gitconf
+        install_fzf
         install_fzf
     ;;
     *)
