@@ -30,15 +30,13 @@ function install_zsh {
     # cp -r ${base_dir}.oh-my-zsh/ ~g
     git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
     ln -s  ${base_dir}.zshrc ~/.zshrc
-    if [[ -f ~/.sdk_cde  ]]; then
-        if [[ -f /etc/salt/grains ]]; then
-            cat /etc/salt/grains | grep cde > /dev/null
-            if [[ $? -eq 0 ]]; then
-                compaudit | sudo xargs chmod g-w
-                compaudit | sudo xargs chown root
-                rm ~/.zcompdump*
-                compinit
-            fi
+    if [[ -f /etc/salt/grains ]]; then
+        cat /etc/salt/grains | grep cde > /dev/null
+        if [[ $? -eq 0 ]]; then
+            compaudit | sudo xargs chmod g-w
+            compaudit | sudo xargs chown root
+            rm ~/.zcompdump*
+            compinit
         fi
     fi
     ln -s ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
@@ -91,16 +89,8 @@ function install_vim {
     echo | vim -c 'BundleInstall' -c qa
 }
 function install_fzf {
-    sudo apt-get install ruby -y
-    sudo apt-get install ruby-dev -y
-    sudo apt-get install rubygem -y
-    sudo apt-get install ruby-ncurses -y
-    sudo apt-get install libncurses5-dev -y
     git clone https://github.com/junegunn/fzf.git ~/.fzf
-    ~/.fzf/install &
-    pid=$!
-    sleep 30
-    kill -9 $pid
+    ~/.fzf/install --all
 }
 
 function install_gitconf {
@@ -171,7 +161,6 @@ case $install_typ in
         install_vim
         install_fonts
         install_gitconf
-        install_fzf
         install_fzf
         install_bin
     ;;
