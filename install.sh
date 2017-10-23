@@ -24,29 +24,29 @@ function install_fonts {
   fc-cache -vf ~/.fonts/
 }
 
-
-
 function install_zsh {
-
     sudo apt-get install zsh -y
     sudo chsh -s /bin/zsh  $USER
     # cp -r ${base_dir}.oh-my-zsh/ ~g
     git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
     ln -s  ${base_dir}.zshrc ~/.zshrc
     if [[ -f ~/.sdk_cde  ]]; then
-        compaudit | sudo xargs chmod g-w
-        compaudit | sudo xargs chown root
-        rm ~/.zcompdump*
-        compinit
+        if [[ -f /etc/salt/grains ]]; then
+            cat /etc/salt/grains | grep cde > /dev/null
+            if [[ $? -eq 0 ]]; then
+                compaudit | sudo xargs chmod g-w
+                compaudit | sudo xargs chown root
+                rm ~/.zcompdump*
+                compinit
+            fi
+        fi
     fi
     ln -s ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
-
 }
 
 function install_tmux {
-sudo apt-get install python-fontforge -y 
-ubuntu=$(cat /etc/issue | grep -i ubuntu)
-
+    sudo apt-get install python-fontforge -y 
+    ubuntu=$(cat /etc/issue | grep -i ubuntu)
     if [ $? -eq 0 ]; then
         sudo apt-get install -y python-software-properties software-properties-common
         sudo add-apt-repository -y ppa:pi-rho/dev
@@ -65,6 +65,14 @@ function install_programing {
     sudo apt-get install python -y
     sudo apt-get install python-pip -y
     curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.4/install.sh | bash
+
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+    nvm install stable
+    nvm use stable
+    npm install -g jslint
+    npm install -g eslint
+    npm install eslint-plugin-jasmine -g
 }
 
 function install_vim {
@@ -73,9 +81,6 @@ function install_vim {
     sudo apt-get install ctags --yes
     sudo pip install jedi -i http://pypi.python.org/simple/
     sudo pip install pylint -i http://pypi.python.org/simple/
-    sudo npm install -g jslint
-    sudo npm install -g eslint
-    sudo npm install eslint-plugin-jasmine -g
     rm -f ~/.vimrc
     ln -s ${base_dir}.jshintrc ~/.jshintrc
     ln -s ${base_dir}.eslintrc.json  ~/.eslintrc.json
@@ -107,7 +112,7 @@ function install_gitconf {
 
 function install_bin {
     mkdir -p ~/.bin/
-    cp -r ${base_dir}/scripts ~/.bin
+    cp -r ${base_dir}/scripts/* ~/.bin
 }
 
 function clean_install {
@@ -119,7 +124,6 @@ function clean_install {
     rm -rf ~/.tmux
     rm -rf ~/.tmux.conf
     rm -rf ~/.screenrc
-
 }
 
 install_typ='all'
@@ -173,7 +177,4 @@ case $install_typ in
     ;;
     *)
         echo "Unknow"
-
     esac
-
-
