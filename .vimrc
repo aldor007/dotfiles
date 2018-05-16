@@ -50,6 +50,7 @@
     Bundle 'tpope/vim-surround'
     Bundle "tmhedberg/matchit"
     Bundle "sickill/vim-pasta"
+    Bundle "fatih/vim-go"
 
         " Dla putty
         " let g:NERDTreeDirArrows=0
