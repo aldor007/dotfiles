@@ -45,7 +45,7 @@ ZSH_THEME="birav1"
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
-plugins=(git debian cp django node npm pip symfony2 tmux  history history-substring-search git-prompt git-extras python)
+plugins=(git debian cp django node npm pip symfony2 tmux golang history history-substring-search git-prompt git-extras python nvm rust)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -74,13 +74,38 @@ export EDITOR='vim'
 if [ -f ~/.bin/tmuxinator.zsh ]; then
     source ~/.bin/tmuxinator.zsh
 fi
+
 if [[ -f ~/.fzf.zsh ]]; then
     source ~/.fzf.zsh
 fi
 
-if [[ -f ~/.sdk_cde ]]; then
-    source ~/.sdk_cde
+export PSZSH=$PS1
+
+if [[ -f /etc/salt/grains ]]; then
+    cat /etc/salt/grains | grep cde > /dev/null
+    if [[ $? -eq 0 ]]; then
+        trap SDKScript SIGUSR2
+        SDKScript() {
+            _OLD_PS1_CDE=$PSZSH
+            source /tmp/cde_$$.sh
+            rm /tmp/cde_$$.sh
+            if [[ -z "$CDE_SDK_VERSION" ]]; then
+                PS1="$PSZSH"
+                export PS1
+            else
+                PS1="$CDE_SDK_VERSION $PSZSH"
+                export PS1
+            fi
+
+            if [[ -f ~/.fzf.zsh ]]; then
+                source ~/.fzf.zsh
+            fi
+
+        }
+    fi
 fi
+
+export PATH="$HOME/.bin":$PATH
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm

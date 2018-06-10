@@ -24,29 +24,27 @@ function install_fonts {
   fc-cache -vf ~/.fonts/
 }
 
-
-
 function install_zsh {
-
     sudo apt-get install zsh -y
     sudo chsh -s /bin/zsh  $USER
     # cp -r ${base_dir}.oh-my-zsh/ ~g
     git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
     ln -s  ${base_dir}.zshrc ~/.zshrc
-    if [[ -f ~/.sdk_cde  ]]; then
-        compaudit | sudo xargs chmod g-w
-        compaudit | sudo xargs chown root
-        rm ~/.zcompdump*
-        compinit
+    if [[ -f /etc/salt/grains ]]; then
+        cat /etc/salt/grains | grep cde > /dev/null
+        if [[ $? -eq 0 ]]; then
+            compaudit | sudo xargs chmod g-w
+            compaudit | sudo xargs chown root
+            rm ~/.zcompdump*
+            compinit
+        fi
     fi
     ln -s ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
-
 }
 
 function install_tmux {
-sudo apt-get install python-fontforge -y 
-ubuntu=$(cat /etc/issue | grep -i ubuntu)
-
+    sudo apt-get install python-fontforge -y 
+    ubuntu=$(cat /etc/issue | grep -i ubuntu)
     if [ $? -eq 0 ]; then
         sudo apt-get install -y python-software-properties software-properties-common
         sudo add-apt-repository -y ppa:pi-rho/dev
@@ -65,6 +63,14 @@ function install_programing {
     sudo apt-get install python -y
     sudo apt-get install python-pip -y
     curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.4/install.sh | bash
+
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+    nvm install stable
+    nvm use stable
+    npm install -g jslint
+    npm install -g eslint
+    npm install eslint-plugin-jasmine -g
 }
 
 function install_vim {
@@ -73,24 +79,18 @@ function install_vim {
     sudo apt-get install ctags --yes
     sudo pip install jedi -i http://pypi.python.org/simple/
     sudo pip install pylint -i http://pypi.python.org/simple/
-    sudo npm install -g jslint
-    sudo npm install -g jshint
     rm -f ~/.vimrc
     ln -s ${base_dir}.jshintrc ~/.jshintrc
+    ln -s ${base_dir}.eslintrc.json  ~/.eslintrc.json
     ln -s  ${base_dir}.vim ~/.vim
     git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
     ln -s ${base_dir}.pylintrc ~/.pylintrc
     ln -s ${base_dir}.vimrc ~/.vimrc
-    vim -c 'BundleInstall' -c qa 
+    echo | vim -c 'BundleInstall' -c qa
 }
 function install_fzf {
-    sudo apt-get install ruby -y
-    sudo apt-get install ruby-dev -y
-    sudo apt-get install rubygem -y
-    sudo apt-get install ruby-ncurses -y
-    sudo apt-get install libncurses5-dev -y
     git clone https://github.com/junegunn/fzf.git ~/.fzf
-    ~/.fzf/install
+    ~/.fzf/install --all
 }
 
 function install_gitconf {
@@ -98,9 +98,13 @@ function install_gitconf {
     git clone https://github.com/jonas/tig /tmp/tig
     cd /tmp/tig; sudo make prefix=/usr/local
     cd /tmp/tig; sudo make install prefix=/usr/local
-
-
 }
+
+function install_bin {
+    mkdir -p ~/.bin/
+    cp -r ${base_dir}/scripts/* ~/.bin
+}
+
 function clean_install {
     echo "Clean install"
     rm -rf ~/.vim
@@ -110,11 +114,7 @@ function clean_install {
     rm -rf ~/.tmux
     rm -rf ~/.tmux.conf
     rm -rf ~/.screenrc
-
 }
-
-
-
 
 install_typ='all'
 key="$1"
@@ -154,18 +154,16 @@ case $install_typ in
         install_gitconf
     ;;
     all)
-        # install_tmux
+        install_tmux
+        install_programing
         install_zsh
         install_tmux
-        install_fzf
-        install_programing
         install_vim
         install_fonts
         install_gitconf
+        install_fzf
+        install_bin
     ;;
     *)
         echo "Unknow"
-
     esac
-
-
