@@ -25,6 +25,7 @@
     Bundle 'tpope/vim-commentary'
     Bundle 'vim-scripts/tlib'
     Bundle 'SirVer/ultisnips'
+    Bundle 'hashivim/vim-terraform'
     Bundle 'honza/vim-snippets'
     Bundle 'mhinz/vim-startify'
     Bundle 'Lokaltog/vim-distinguished'
@@ -51,7 +52,7 @@
     Bundle "tmhedberg/matchit"
     Bundle "sickill/vim-pasta"
     Bundle "fatih/vim-go"
-
+    Bundle 'leafgarland/typescript-vim'
         " Dla putty
         " let g:NERDTreeDirArrows=0
         set encoding=utf-8
