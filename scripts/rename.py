@@ -4,7 +4,7 @@ import re
 from os import listdir
 from os.path import isfile, join
 
-parser = argparse.ArgumentParser(description='Process some integers.')
+parser = argparse.ArgumentParser(description='Rename given image files in format [prefix][delimter]number.jpg where number is  >sart nad <stop')
 parser.add_argument('--start', dest='start', required=True)
 parser.add_argument('--stop', dest='stop', required=True)
 parser.add_argument('--prefix', dest='prefix', required=True)
