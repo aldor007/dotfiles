@@ -53,8 +53,9 @@
     Bundle "sickill/vim-pasta"
     Bundle "fatih/vim-go"
     Bundle 'leafgarland/typescript-vim'
-        " Dla putty
-        " let g:NERDTreeDirArrows=0
+    Bundle 'editorconfig/editorconfig-vim'
+    Bundle 'prettier/vim-prettier'
+
         set encoding=utf-8
 " General
         set background=dark         " Assume a dark background
@@ -74,8 +75,8 @@
         set viewoptions=folds,options,cursor,unix,slash " better unix / windows compatibility
         set virtualedit=onemore                 " allow for cursor beyond last character
         set history=1000                                " Store a ton of history (default is 20)
-        " set nospell                                     " spell checking off
-        set spell spelllang=en_us
+        set nospell                                     " spell checking off
+        " set spell spelllang=en_us
         set backup                                              " backups are nice
         set noswapfile
         set undofile                                    " so is persistent undo ...
@@ -123,11 +124,19 @@
         set whichwrap=b,s,h,l,<,>,[,]   " backspace and cursor keys wrap to
         set scrolljump=5                                " lines to scroll when cursor leaves screen
         set scrolloff=3                                 " minimum lines to keep above and below cursor
-        set foldenable                                  " auto fold code
+        set nofoldenable                                  " auto fold code
         set gdefault                                    " the /g flag on :s substitutions by default
         set list
         set listchars=tab:>.,trail:.,extends:#,nbsp:. " Highlight problematic whitespace
-        set relativenumber
+        " set relativenumber
+        " set nornu
+        set number relativenumber
+
+        augroup numbertoggle
+          autocmd!
+          autocmd BufEnter,FocusGained,InsertLeave * set relativenumber
+          autocmd BufLeave,FocusLost,InsertEnter   * set norelativenumber
+        augroup END
 
 " } 
 "   Formatting {
@@ -144,6 +153,9 @@
         au BufRead,BufNewFile /etc/nginx/*,/usr/local/nginx/conf/* if &ft == '' | setfiletype nginx | endif
         au BufRead,BufNewFile *.md,*.markdown setfiletype markdown
         au BufRead,BufNewFile *.cu,*.ch  setfiletype cpp
+        set modeline
+        set modelines=5
+
 
         " Remove trailing whitespaces and ^M chars - not work
         " autocmd FileType c,cpp,java,php,js,python,twig,xml,yml autocmd BufWritePre <buffer> :call setline(1,map(getline(1,"$"),'substitute(v:val,"\\s\\+$","","")'))
