@@ -45,7 +45,7 @@ ZSH_THEME="birav1"
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
-plugins=(aws git debian cp django node npm pip symfony2 tmux golang history history-substring-search git-prompt git-extras python nvm rust aws kubectl kube-ps1)
+plugins=(aws git debian cp django node npm pip symfony2 tmux golang history history-substring-search git-prompt git-extras python nvm rust aws kubectl kube-ps1 zsh-autosuggestions)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -105,7 +105,10 @@ if [[ -f /etc/salt/grains ]]; then
     fi
 fi
 
+export GPG_TTY=$(tty)    
 export PATH="$HOME/.bin":$PATH
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+
+export PATH="$HOME/.tfenv/bin:$PATH"

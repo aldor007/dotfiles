@@ -30,15 +30,7 @@ function install_zsh {
     # cp -r ${base_dir}.oh-my-zsh/ ~g
     git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
     ln -s  ${base_dir}.zshrc ~/.zshrc
-    if [[ -f /etc/salt/grains ]]; then
-        cat /etc/salt/grains | grep cde > /dev/null
-        if [[ $? -eq 0 ]]; then
-            compaudit | sudo xargs chmod g-w
-            compaudit | sudo xargs chown root
-            rm ~/.zcompdump*
-            compinit
-        fi
-    fi
+    git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/plugins/zsh-autosuggestions
     ln -s ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
 }
 

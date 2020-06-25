@@ -1,14 +1,15 @@
 [user]
 	name = "Marcin Kaciuba"
-    email = "aldor007@gmail.com"
+    email = "marcin.kaciuba@gmail.com"
+	signingkey = E5B45EB8A209BDC1
 [diff]
     tool = vimdiff
 [push]
     default = current
 [pull]
-	default = current
+    default = current
 [merge]
-    ff = no
+    ff = yes
     tool = vimdiff
 
 [alias]
@@ -25,3 +26,5 @@
 	insteadOf = git://
 [core]
 	autocrlf = input
+[diff "sopsdiffer"]
+	textconv = sops -d
