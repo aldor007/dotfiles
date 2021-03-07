@@ -81,30 +81,6 @@ fi
 
 export PSZSH=$PS1
 
-if [[ -f /etc/salt/grains ]]; then
-    cat /etc/salt/grains | grep cde > /dev/null
-    if [[ $? -eq 0 ]]; then
-        trap SDKScript SIGUSR2
-        SDKScript() {
-            _OLD_PS1_CDE=$PSZSH
-            source /tmp/cde_$$.sh
-            rm /tmp/cde_$$.sh
-            if [[ -z "$CDE_SDK_VERSION" ]]; then
-                PS1="$PSZSH"
-                export PS1
-            else
-                PS1="$CDE_SDK_VERSION $PSZSH"
-                export PS1
-            fi
-
-            if [[ -f ~/.fzf.zsh ]]; then
-                source ~/.fzf.zsh
-            fi
-
-        }
-    fi
-fi
-
 export GPG_TTY=$(tty)    
 export PATH="$HOME/.bin":$PATH
 

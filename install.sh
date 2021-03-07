@@ -62,7 +62,12 @@ function install_programing {
     nvm use stable
     npm install -g jslint
     npm install -g eslint
-    npm install eslint-plugin-jasmine -g
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl
+    curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash 
+    curl -sL https://istio.io/downloadIstioctl | sh -
+    git clone https://github.com/cunymatthieu/tgenv.git ~/.tgenv
+    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash 
+    cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install
 }
 
 function install_vim {
@@ -86,6 +91,7 @@ function install_fzf {
 }
 
 function install_gitconf {
+    sudo apt-get install libncurses5-dev libncursesw5-dev
     ln -s  ${base_dir}.gitconfig ~/.gitconfig
     git clone https://github.com/jonas/tig /tmp/tig
     cd /tmp/tig; sudo make prefix=/usr/local
