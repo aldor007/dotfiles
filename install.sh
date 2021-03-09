@@ -67,7 +67,9 @@ function install_programing {
     curl -sL https://istio.io/downloadIstioctl | sh -
     git clone https://github.com/cunymatthieu/tgenv.git ~/.tgenv
     curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash 
-    cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install
+    cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install 
+    git clone https://github.com/tfutils/tfenv.git ~/.tfenv
+
 }
 
 function install_vim {
