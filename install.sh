@@ -62,7 +62,7 @@ function install_programing {
     nvm use stable
     npm install -g jslint
     npm install -g eslint
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl && chmod a+x ~/.bin/kubectl
     curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash 
     curl -sL https://istio.io/downloadIstioctl | sh -
     git clone https://github.com/cunymatthieu/tgenv.git ~/.tgenv
@@ -93,7 +93,7 @@ function install_fzf {
 }
 
 function install_gitconf {
-    sudo apt-get install libncurses5-dev libncursesw5-dev
+    sudo apt-get install libncurses5-dev libncursesw5-dev -y
     ln -s  ${base_dir}.gitconfig ~/.gitconfig
     git clone https://github.com/jonas/tig /tmp/tig
     cd /tmp/tig; sudo make prefix=/usr/local
