@@ -24,7 +24,6 @@
     Bundle 'kien/ctrlp.vim'
     Bundle 'tpope/vim-commentary'
     Bundle 'vim-scripts/tlib'
-    Bundle 'SirVer/ultisnips'
     Bundle 'hashivim/vim-terraform'
     Bundle 'honza/vim-snippets'
     Bundle 'mhinz/vim-startify'

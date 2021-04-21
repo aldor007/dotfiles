@@ -89,4 +89,8 @@ export NVM_DIR="$HOME/.nvm"
 
 export PATH="$HOME/.tfenv/bin:$PATH"
 export PATH=$PATH:$HOME/.istioctl/bin
-export PATH="$HOME/.tgenv/bin:$PATH"''
+export PATH="$HOME/.tgenv/bin:$PATH"
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+
+test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+
