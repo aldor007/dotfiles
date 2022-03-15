@@ -62,14 +62,20 @@ function install_programing {
     nvm use stable
     npm install -g jslint
     npm install -g eslint
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl && chmod a+x ~/.bin/kubectl
     curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash 
     curl -sL https://istio.io/downloadIstioctl | sh -
     git clone https://github.com/cunymatthieu/tgenv.git ~/.tgenv
     curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash 
     cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install 
     git clone https://github.com/tfutils/tfenv.git ~/.tfenv
-
+    set -x; cd "$(mktemp -d)" &&
+    OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
+    ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
+    curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/krew.tar.gz" &&
+    tar zxvf krew.tar.gz &&
+    KREW=./krew-"${OS}_${ARCH}" &&
+    "$KREW" install krew
 }
 
 function install_vim {
@@ -93,7 +99,7 @@ function install_fzf {
 }
 
 function install_gitconf {
-    sudo apt-get install libncurses5-dev libncursesw5-dev
+    sudo apt-get install libncurses5-dev libncursesw5-dev -y
     ln -s  ${base_dir}.gitconfig ~/.gitconfig
     git clone https://github.com/jonas/tig /tmp/tig
     cd /tmp/tig; sudo make prefix=/usr/local
