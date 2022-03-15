@@ -1,7 +1,7 @@
 [user]
 	name = "Marcin Kaciuba"
     email = "marcin.kaciuba@gmail.com"
-	signingkey = E5B45EB8A209BDC1
+	signingkey = C2728BC86FEAB4C8
 [diff]
     tool = vimdiff
 [push]

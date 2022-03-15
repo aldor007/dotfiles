@@ -87,6 +87,9 @@ export PATH="$HOME/.bin":$PATH
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
 
+source /home/aldor/.gvm/scripts/gvm
+
 export PATH="$HOME/.tfenv/bin:$PATH"
 export PATH=$PATH:$HOME/.istioctl/bin
 export PATH="$HOME/.tgenv/bin:$PATH"''
+export PATH=$PATH:/usr/local/go/bin
