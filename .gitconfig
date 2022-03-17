@@ -8,6 +8,7 @@
     default = current
 [pull]
     default = current
+	rebase = true
 [merge]
     ff = yes
     tool = vimdiff
