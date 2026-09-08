@@ -1,0 +1,57 @@
+onboarding = false
+
+# ---- migrated from ~/.tmux.conf ----
+[keys]
+prefix = "ctrl+a"                       # tmux: set -g prefix C-a
+reload_config = "prefix+r"              # tmux: bind r source-file
+split_vertical = "prefix+|"             # tmux: bind | split-window -h (side by side)
+split_horizontal = "prefix+minus"       # tmux: bind - split-window -v (stacked)
+focus_pane_left = "prefix+h"            # tmux: bind h/j/k/l select-pane (defaults match)
+focus_pane_down = "prefix+j"
+focus_pane_up = "prefix+k"
+focus_pane_right = "prefix+l"
+previous_tab = ["prefix+p", "prefix+ctrl+h"]   # tmux: bind -r C-h select-window :-
+next_tab = ["prefix+n", "prefix+ctrl+l"]       # tmux: bind -r C-l select-window :+
+resize_pane_left = "prefix+shift+h"     # tmux: bind -r H/J/K/L resize-pane
+resize_pane_down = "prefix+shift+j"
+resize_pane_up = "prefix+shift+k"
+resize_pane_right = "prefix+shift+l"
+swap_pane_left = "prefix+alt+h"         # herdr default prefix+shift+h/l (swap) moved here
+swap_pane_down = "prefix+alt+j"
+swap_pane_up = "prefix+alt+k"
+swap_pane_right = "prefix+alt+l"
+new_tab = "prefix+c"
+copy_mode = ["prefix+[", "prefix+esc"]  # tmux: bind Escape copy-mode (vi-style copy mode is herdr default)
+
+# tmux: new-window -c "#{pane_current_path}"
+[terminal]
+new_cwd = "follow"
+
+# Solarized status bar replacement (235=#262626 240=#585858 136=#af8700 166=#d75f00 244=#808080 33=#0087ff)
+[ui]
+tab_bar_position = "bottom"
+tab_bar_right = [
+  { type = "hostname" },
+  { type = "datetime", format = "%H:%M" },
+]
+accent = "rgb(215,95,0)"
+
+[theme]
+name = "terminal"
+
+auto_switch = false
+[theme.custom]
+panel_bg = "#262626"
+surface_dim = "#585858"
+text = "#af8700"
+subtext0 = "#808080"
+accent = "#d75f00"
+yellow = "#af8700"
+blue = "#0087ff"
+
+# ---- existing herdr settings (unchanged) ----
+[ui.sound]
+enabled = false
+
+[ui.toast]
+delivery = "terminal"
