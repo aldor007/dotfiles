@@ -30,11 +30,16 @@ new_cwd = "follow"
 # Solarized status bar replacement (235=#262626 240=#585858 136=#af8700 166=#d75f00 244=#808080 33=#0087ff)
 [ui]
 tab_bar_position = "bottom"
+
 tab_bar_right = [
   { type = "hostname" },
   { type = "datetime", format = "%H:%M" },
 ]
 accent = "rgb(215,95,0)"
+
+# glab-status plugin: render the $mr token on a third row of each workspace entry
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace"], ["branch", "git_status"], ["$mr"]]
 
 [theme]
 name = "terminal"
@@ -52,6 +57,55 @@ blue = "#0087ff"
 # ---- existing herdr settings (unchanged) ----
 [ui.sound]
 enabled = false
+
+# command-center plugin: one popup for all plugin actions
+[[keys.command]]
+key = "prefix+b"
+type = "plugin_action"
+command = "cdragon.command-center.open"
+description = "Open Command Center"
+
+# glab-status plugin: prefix+shift+m refreshes all MR statuses, prefix+shift+o opens the MR
+[[keys.command]]
+key = "prefix+shift+m"
+type = "plugin_action"
+command = "glab-status.refresh"
+description = "refresh GitLab MR status"
+
+[[keys.command]]
+key = "prefix+shift+o"
+type = "plugin_action"
+command = "glab-status.open-mr"
+description = "open GitLab MR"
+
+# missionctl-companion plugin: toggle the PR + telemetry dashboard pane.
+# The action invokes $HERDR_PLUGIN_ROOT/bin/toggle-pane.sh, which
+# opens (or closes) the companion pane in the current workspace.
+# Herdr 0.9.0 has a bug where `plugin pane open --placement split`
+# rejects every --target-pane flag variant (help text says
+# `--target-pane`, error says `target_pane_id`, both rejected).
+# The workaround is `--placement split --no-focus` with no
+# --target-pane flag — herdr auto-picks the active pane. See the
+# comment in bin/toggle-pane.sh for details.
+[[keys.command]]
+key = "prefix+m"
+type = "plugin_action"
+command = "toggle-pane"
+description = "Open Missionctl Companion dashboard (split)"
+
+# herdr-plus plugin: prefix+up opens the Projects browser (service-a / service-b),
+# prefix+down opens the Quick Actions fuzzy launcher (worktree actions etc).
+[[keys.command]]
+key = "prefix+up"
+type = "plugin_action"
+command = "cloudmanic.herdr-plus.projects"
+description = "herdr-plus: projects"
+
+[[keys.command]]
+key = "prefix+down"
+type = "plugin_action"
+command = "cloudmanic.herdr-plus.quick-actions"
+description = "herdr-plus: quick actions"
 
 [ui.toast]
 delivery = "terminal"

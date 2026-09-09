@@ -1,0 +1,18 @@
+# Auto-layout applied to every worktree herdr creates/opens for the service-repo repo.
+# The worktree checkout is the root; tabs land at the repo root.
+repo = "service-repo"
+
+[[tabs]]
+name = "kimchi"
+command = "kimchi"
+
+[[tabs]]
+name = "lazygit"
+command = "lazygit"
+
+[[tabs]]
+name = "nvim"
+command = "nvim ."
+
+[[tabs]]
+name = "shell"

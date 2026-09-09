@@ -62,6 +62,7 @@ function install_programing {
     nvm use stable
     npm install -g jslint
     npm install -g eslint
+    mkdir -p ~/.bin
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl && chmod a+x ~/.bin/kubectl
     curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash 
     curl -sL https://istio.io/downloadIstioctl | sh -
@@ -76,6 +77,16 @@ function install_programing {
     tar zxvf krew.tar.gz &&
     KREW=./krew-"${OS}_${ARCH}" &&
     "$KREW" install krew
+    bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)
+    (
+  set -x; cd "$(mktemp -d)" &&
+  OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
+  ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
+  KREW="krew-${OS}_${ARCH}" &&
+  curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz" &&
+  tar zxvf "${KREW}.tar.gz" &&
+  ./"${KREW}" install krew
+)
 }
 
 function install_vim {
@@ -143,7 +154,28 @@ case $key in
     esac
 install_common
 git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
+function install_herdr {
+    curl -fsSL https://herdr.dev/install.sh | sh
+    herdr plugin install cloudmanic/herdr-plus
+    mkdir -p ~/.config/herdr
+    ln -sf ${base_dir}.config/herdr/config.toml ~/.config/herdr/config.toml
+    # herdr-plus plugin config: projects / quick-actions / worktrees are symlinked
+    # in, so the repo stays the single source of truth for the plugin's TOML files.
+    mkdir -p ~/.config/herdr/plugins/config/cloudmanic.herdr-plus
+    for d in projects quick-actions worktrees; do
+        dst=~/.config/herdr/plugins/config/cloudmanic.herdr-plus/$d
+        rm -rf "$dst"
+        ln -s ${base_dir}.config/herdr/plugins/config/cloudmanic.herdr-plus/$d "$dst"
+    done
+    # service-repo-project helper script (worktree-aware project opener)
+    mkdir -p ~/.local/bin
+    ln -sf ${base_dir}scripts/service-repo-project ~/.local/bin/service-repo-project
+}
+
 case $install_typ in
+    herdr)
+        install_herdr
+    ;;
     zsh)
         install_zsh
     ;;

@@ -1,0 +1,20 @@
+# service-repo service-a service workspace
+name = "service-a"
+description = "service-repo services/service-a — main checkout (ctrl+g for a fresh worktree)"
+group = "service-repo"
+working_dir = "~/work/service-repo/services/service-a"
+
+[[tabs]]
+name = "kimchi"
+command = "kimchi"
+
+[[tabs]]
+name = "lazygit"
+command = "lazygit"
+
+[[tabs]]
+name = "nvim"
+command = "nvim ."
+
+[[tabs]]
+name = "shell"

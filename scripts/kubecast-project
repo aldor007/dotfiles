@@ -1,0 +1,63 @@
+#!/bin/sh
+# service-repo-project — ensure a dedicated git worktree exists for a service-repo
+# herdr-plus project, optionally check out a branch in it, then open the project.
+#
+# Each project (service-a, service-b, service-repo) has its own worktree at
+# ~/work/service-repo/.worktrees/<name>, created off origin/master on first use
+# and reused afterwards.
+#
+# Usage:
+#   service-repo-project [--ensure] service-a|service-b|service-repo [branch]
+#
+#     --ensure   create/checkout only; do not open the project
+#     branch     optional branch to check out in the worktree:
+#                  - existing local branch  -> checked out
+#                  - branch only on origin  -> tracking branch created off it
+#                  - anything else         -> new branch off current HEAD
+#                  - empty / omitted        -> keep the current branch
+
+set -eu
+
+ensure_only=0
+if [ "${1:-}" = "--ensure" ]; then
+    ensure_only=1
+    shift
+fi
+
+name="${1:-}"
+case "$name" in
+    service-a|service-b|service-repo) ;;
+    *) echo "usage: service-repo-project [--ensure] service-a|service-b|service-repo [branch]" >&2; exit 2 ;;
+esac
+
+branch="${2:-}"
+
+repo="$HOME/work/service-repo"
+wt="$repo/.worktrees/$name"
+
+if ! git -C "$repo" worktree list --porcelain | grep -qx "worktree $wt"; then
+    echo "service-repo-project: creating worktree .worktrees/$name (branch '$name' off origin/master)"
+    if ! git -C "$repo" worktree add -b "$name" ".worktrees/$name" origin/master; then
+        echo "service-repo-project: branch '$name' already exists, checking it out instead"
+        git -C "$repo" worktree add ".worktrees/$name" "$name"
+    fi
+fi
+
+if [ -n "$branch" ] && [ "$(git -C "$wt" branch --show-current)" != "$branch" ]; then
+    if git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"; then
+        echo "service-repo-project: checking out existing branch '$branch'"
+        git -C "$wt" checkout "$branch"
+    elif git -C "$repo" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+        echo "service-repo-project: creating branch '$branch' off origin/$branch"
+        git -C "$wt" checkout -b "$branch" "origin/$branch"
+    else
+        echo "service-repo-project: creating new branch '$branch' off current HEAD"
+        git -C "$wt" checkout -b "$branch"
+    fi
+fi
+
+if [ "$ensure_only" -eq 1 ]; then
+    exit 0
+fi
+
+exec herdr-plus open "$name"

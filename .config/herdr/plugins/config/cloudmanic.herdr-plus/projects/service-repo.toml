@@ -1,0 +1,20 @@
+# service-repo monorepo root workspace
+name = "service-repo"
+description = "service-repo monorepo root — main checkout (ctrl+g for a fresh worktree)"
+group = "service-repo"
+working_dir = "~/work/service-repo"
+
+[[tabs]]
+name = "kimchi"
+command = "kimchi"
+
+[[tabs]]
+name = "lazygit"
+command = "lazygit"
+
+[[tabs]]
+name = "nvim"
+command = "nvim ."
+
+[[tabs]]
+name = "shell"

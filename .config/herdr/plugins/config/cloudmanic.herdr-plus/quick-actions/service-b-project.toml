@@ -1,0 +1,4 @@
+name = "service-b"
+description = "Open the service-b project workspace (main checkout, services/service-b)"
+type = "command"
+command = "herdr-plus open service-b || read -t 10 _ </dev/tty || true"

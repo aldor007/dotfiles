@@ -1,0 +1,4 @@
+name = "service-repo"
+description = "Open the service-repo project workspace (monorepo root)"
+type = "command"
+command = "herdr-plus open service-repo || read -t 10 _ </dev/tty || true"
