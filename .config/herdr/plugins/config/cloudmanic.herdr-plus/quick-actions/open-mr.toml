@@ -1,0 +1,4 @@
+name = "Open MR / PR"
+description = "Open the merge/pull request for the current branch in the browser (GitLab or GitHub)"
+type = "command"
+command = "r=$(git -C '{{.WorkDir}}' remote get-url origin 2>/dev/null); case $r in *github.com*) gh pr view --web ;; *) glab mr view --web ;; esac || read -t 10 _ </dev/tty || true"
