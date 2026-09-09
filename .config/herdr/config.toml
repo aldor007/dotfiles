@@ -114,5 +114,12 @@ type = "plugin_action"
 command = "persiyanov.reviewr.toggle"
 description = "reviewr: toggle pane"
 
+# token-dashboard plugin: live token spend across agent panes
+[[keys.command]]
+key = "prefix+$"
+type = "plugin_action"
+command = "dave.token-dashboard.open-dashboard"
+description = "token dashboard"
+
 [ui.toast]
 delivery = "terminal"
