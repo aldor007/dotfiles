@@ -107,5 +107,12 @@ type = "plugin_action"
 command = "cloudmanic.herdr-plus.quick-actions"
 description = "herdr-plus: quick actions"
 
+# reviewr plugin: toggle the code-review + file-viewer sidebar pane
+[[keys.command]]
+key = "prefix+v"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "reviewr: toggle pane"
+
 [ui.toast]
 delivery = "terminal"
