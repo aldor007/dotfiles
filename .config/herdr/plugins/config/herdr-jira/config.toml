@@ -1,0 +1,63 @@
+# herdr-jira configuration for castai.atlassian.net.
+#
+# The API token is NOT in this file — it is read from the macOS Keychain via
+# api_token_cmd below. Add it once (token from
+# https://id.atlassian.com/manage-profile/security/api-tokens):
+#
+#   security add-generic-password -s jira-api-token -a "$USER" -w '<TOKEN>'
+#
+# The running pane reloads this file on `R` (capital R).
+
+[jira]
+base_url = "https://castai.atlassian.net"
+auth = "basic"                      # Jira Cloud: email + API token
+email = "marcin@cast.ai"
+api_token_cmd = "security find-generic-password -s jira-api-token -w"
+default_project = "service-a"            # {project} placeholder in filters
+max_results = 50
+
+[[filters]]
+name = "My open issues"
+jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
+
+[[filters]]
+name = "service-a board"
+jql = "project = {project} AND statusCategory != Done ORDER BY updated DESC"
+
+[[filters]]
+name = "Recently updated"
+jql = "project = {project} ORDER BY updated DESC"
+
+[search]
+jql = 'text ~ "{query}" ORDER BY updated DESC'
+
+[delegate]
+# Prompt sent to the agent you pick with `d`. Placeholders:
+#   {key} {summary} {description} {url} {status} {assignee} {reporter}
+#   {priority} {type} {labels}
+prompt = """
+You are asked to work on Jira issue {key}: {summary}
+
+Status: {status} | Assignee: {assignee} | Priority: {priority} | Type: {type}
+Link: {url}
+
+Description:
+{description}
+
+Please analyze the issue, implement the fix or feature it describes, and
+summarize what you changed when you are done.
+"""
+submit = true
+max_description_chars = 6000
+default_cwd = "~/work/service-repo"
+placement = "tab"                   # new agent gets its own tab, labelled with the issue key
+focus_new = false
+startup_delay_ms = 1500
+wait_ready_ms = 30000
+
+# Kimchi as the delegate agent, launched the session-aware way (HERDR_AGENT=pi
+# + herdr:pi reporting) so herdr stores its sessions and the token dashboard
+# picks it up — same as the herdr-plus project tabs.
+[[delegate.agents]]
+name = "kimchi"
+command = ["env", "HERDR_AGENT=pi", "KIMCHI_AGENT_SOURCE=herdr:pi", "KIMCHI_AGENT_NAME=pi", "kimchi"]

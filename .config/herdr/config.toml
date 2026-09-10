@@ -121,5 +121,19 @@ type = "plugin_action"
 command = "dave.token-dashboard.open-dashboard"
 description = "token dashboard"
 
+# herdr-jira plugin: browse Jira (castai.atlassian.net) in a split / tab
+# (prefix+j / prefix+shift+j are taken by tmux-style focus/resize bindings)
+[[keys.command]]
+key = "prefix+i"
+type = "plugin_action"
+command = "herdr-jira.open-jira"
+description = "Jira (split)"
+
+[[keys.command]]
+key = "prefix+shift+i"
+type = "plugin_action"
+command = "herdr-jira.open-jira-tab"
+description = "Jira (tab)"
+
 [ui.toast]
 delivery = "terminal"
