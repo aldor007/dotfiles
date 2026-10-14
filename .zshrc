@@ -45,16 +45,32 @@ ZSH_THEME="birav1"
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
-plugins=(aws git debian cp django node npm pip symfony2 tmux golang history history-substring-search git-prompt git-extras python nvm rust aws kubectl kube-ps1 zsh-autosuggestions)
+# nvm removed from plugins: it eagerly sources nvm (adds ~700ms); lazy-loaded below
+plugins=(aws git debian cp node npm pip symfony2 tmux golang history-substring-search python rust kubectl kube-ps1 zsh-autosuggestions herdr)
+
+# Skip oh-my-zsh update check (~90ms slower startup)
+zstyle ':omz:update' mode disabled
 
 source $ZSH/oh-my-zsh.sh
 
 # User configuration
 
+# Force English locale for the whole shell session. macOS defaults
+# to pl_PL.UTF-8 from the system region, which makes lazygit and
+# many other tools translate their UI to Polish. This override fixes
+# lazygit + every other LANG-aware tool without per-tool config
+# dances. Override later in this file (per-tool LANG settings) wins.
+export LANG=en_US.UTF-8
+
 export PATH=$HOME/bin:/usr/local/bin:$PATH
 # export MANPATH="/usr/local/man:$MANPATH"
 
-# # Preferred editor for local and remote sessions
+# # TERM is set by the terminal emulator; only override inside tmux
+if [ -n "$TMUX" ]; then
+    export TERM=screen-256color
+fi
+
+# Preferred editor for local and remote sessions
 # if [[ -n $SSH_CONNECTION ]]; then
 #   export EDITOR='vim'
 # else
@@ -66,9 +82,6 @@ export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # ssh
 # export SSH_KEY_PATH="~/.ssh/dsa_id"
-
-export TERM=xterm-256color
-[ -n "$TMUX" ] && export TERM=screen-256color
 
 export EDITOR='vim'
 if [ -f ~/.bin/tmuxinator.zsh ]; then
@@ -84,10 +97,16 @@ export PSZSH=$PS1
 export GPG_TTY=$(tty)    
 export PATH="$HOME/.bin":$PATH
 
+# Lazy nvm: node/npm/npx work immediately via the default version's PATH;
+# full nvm only loads the first time you call `nvm` (saves ~1.2s startup)
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+export PATH="$NVM_DIR/versions/node/v24.16.0/bin:$PATH"
+nvm() {
+    unset -f nvm
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+    nvm "$@"
+}
 
-source /home/aldor/.gvm/scripts/gvm
 
 export PATH="$HOME/.tfenv/bin:$PATH"
 export PATH=$PATH:$HOME/.istioctl/bin
@@ -96,3 +115,55 @@ export PATH="$HOME/.tgenv/bin:$PATH"
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+
+[ -s ~/.gvm/scripts/gvm ] && source ~/.gvm/scripts/gvm
+
+# useful only for Mac OS Silicon M1, 
+# # still working but useless for the other platforms
+docker() {
+    if [[ `uname -m` == "arm64" ]] && [[ "$1" == "run" || "$1" == "build" ]]; then
+        /usr/local/bin/docker "$1" --platform linux/amd64 "${@:2}"
+    else
+        /usr/local/bin/docker "$@"
+    fi
+}
+
+export PATH="$HOME/.poetry/bin:$PATH"
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+export PATH="$HOME/.local/bin:$PATH"
+
+### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
+export PATH="/Users/mkaciuba/.rd/bin:$PATH"
+### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
+#
+export GOPROXY=https://us-central1-go.pkg.dev/cicd-master-oxk5/go-modules,https://proxy.golang.org,direct
+export GONOSUMDB=github.com/castai/*,gitlab.com/castai/*
+# export GOPRIVATE=gitlab.com/castai,github.com/castai
+# opencode
+export PATH=/Users/mkaciuba/.opencode/bin:$PATH
+
+# Secrets live outside the repo (gitignored dotfiles shouldn't contain them)
+[ -f ~/.secrets.zsh ] && source ~/.secrets.zsh
+
+alias vim=nvim
+# Override git-svn alias from oh-my-zsh git plugin
+alias gsd='GSD_VERSION=2.78.1 node /Users/mkaciuba/.nvm/versions/node/v24.14.1/lib/node_modules/gsd-pi/dist/cli.js'
+[ -f /opt/homebrew/share/google-cloud-sdk/path.zsh.inc ] && source /opt/homebrew/share/google-cloud-sdk/path.zsh.inc
+# kimchi inside herdr panes: always start with experimental features enabled.
+# herdr sets HERDR_ENV=1 in the panes it manages; outside herdr the flag is
+# not added. `command kimchi` bypasses this function for the real binary.
+kimchi() {
+  if [ "${HERDR_ENV:-}" = "1" ]; then
+    # Report as herdr's pi integration (source herdr:pi) so the pane gets a
+    # resume-eligible session ref and is tracked again after a herdr server
+    # restart. Same convention as the herdr-plus/herdr-jira TOML launches.
+    env HERDR_AGENT=pi KIMCHI_AGENT_SOURCE=herdr:pi KIMCHI_AGENT_NAME=pi \
+      kimchi --enable-experimental-features "$@"
+  else
+    command kimchi "$@"
+  fi
+}
+
+alias pi=kimchi

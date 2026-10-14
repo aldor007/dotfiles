@@ -1,0 +1,10 @@
+#!/bin/sh
+# pi shim for herdr's pi integration.
+# herdr resumes pi-family agent panes with the canonical command
+# `pi --session <path>`, and that command's first word must be a plain
+# binary on PATH. Kimchi is a pi-compatible fork (same flags: --session,
+# --resume, --continue) and is the only pi-family agent here, so forwarding
+# `pi` to `kimchi` makes herdr's native session restore work.
+# Revisit this if the real Pi agent is ever installed alongside kimchi.
+# See .kimchi/docs/herdr-kimchi-restore.md
+exec kimchi "$@"

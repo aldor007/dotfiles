@@ -156,7 +156,20 @@ install_common
 git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 function install_herdr {
     curl -fsSL https://herdr.dev/install.sh | sh
+    # All herdr plugins are installed from this list; their configs live in
+    # this repo and get symlinked in below, so the repo stays the single
+    # source of truth for every plugin install + config.
     herdr plugin install cloudmanic/herdr-plus
+    herdr plugin install --yes speardragon/herdr-command-center
+    herdr plugin install --yes ChmaraX/herdr-nvim
+    herdr plugin install --yes Davidcreador/herdr-token-dashboard
+    herdr plugin install --yes jpwallace22/herdr-glab-status
+    herdr plugin install --yes qu8n/herdr-automatic-rename
+    herdr plugin install --yes a2u/herdr-jira
+    herdr plugin install --yes robbyrussell/herdr-ohmyzsh
+    herdr plugin install --yes persiyanov/herdr-reviewr
+    # missionctl-companion is a local plugin that lives in its own repo
+    [ -d "${HOME}/work/missionctl" ] && herdr plugin link "${HOME}/work/missionctl" 2>/dev/null || true
     mkdir -p ~/.config/herdr
     ln -sf ${base_dir}.config/herdr/config.toml ~/.config/herdr/config.toml
     # herdr-plus plugin config: projects / quick-actions / worktrees are symlinked
@@ -167,9 +180,21 @@ function install_herdr {
         rm -rf "$dst"
         ln -s ${base_dir}.config/herdr/plugins/config/cloudmanic.herdr-plus/$d "$dst"
     done
+    # cdragon.command-center / glab-status / herdr-jira plugin configs are
+    # fully repo-managed: each config dir is replaced with a symlink into this repo.
+    for p in cdragon.command-center glab-status herdr-jira; do
+        dst=~/.config/herdr/plugins/config/$p
+        rm -rf "$dst"
+        ln -s ${base_dir}.config/herdr/plugins/config/$p "$dst"
+    done
     # service-repo-project helper script (worktree-aware project opener)
     mkdir -p ~/.local/bin
     ln -sf ${base_dir}scripts/service-repo-project ~/.local/bin/service-repo-project
+    # worktree-clean helper script (inactive worktree cleanup)
+    ln -sf ${base_dir}scripts/worktree-clean ~/.local/bin/worktree-clean
+    # pi -> kimchi shim so herdr's pi integration can resume sessions
+    # (herdr runs canonical `pi --session <path>`; there is no pi binary)
+    ln -sf ${base_dir}scripts/pi ~/.local/bin/pi
 }
 
 case $install_typ in
