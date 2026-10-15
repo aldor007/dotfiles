@@ -83,7 +83,11 @@ fi
 # ssh
 # export SSH_KEY_PATH="~/.ssh/dsa_id"
 
-export EDITOR='vim'
+# Default editor: nvim (vim binary itself is hijacked by alias below anyway).
+# VISUAL is what git (core.editor unset), crontab -e, sudoedit, less 'v',
+# and most tools consult first; EDITOR covers the rest.
+export VISUAL='nvim'
+export EDITOR='nvim'
 if [ -f ~/.bin/tmuxinator.zsh ]; then
     source ~/.bin/tmuxinator.zsh
 fi
