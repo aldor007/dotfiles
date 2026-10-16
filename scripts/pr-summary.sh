@@ -118,9 +118,19 @@ else
       esac
     fi
 
-    # Merge conflicts? (mergeStateStatus DIRTY = unmergeable as-is)
-    ms=$(gh pr view "$num" -R "$repo" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo '?')
+    # Merge conflicts + review state in ONE gh pr view call:
+    # mergeStateStatus DIRTY = unmergeable as-is; reviewDecision in
+    # APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED (may be empty).
+    ms_rd=$(gh pr view "$num" -R "$repo" --json mergeStateStatus,reviewDecision \
+            --jq '[.mergeStateStatus, (.reviewDecision // "")] | @tsv' 2>/dev/null || printf '?\t')
+    ms=$(printf '%s' "$ms_rd" | cut -f1)
+    rd=$(printf '%s' "$ms_rd" | cut -f2)
     if [ "$ms" = "DIRTY" ]; then conflict="${RED}⇄conflict${RST} "; else conflict=""; fi
+    case "$rd" in
+      APPROVED)           appr="${GRN}✔approved${RST} " ;;
+      CHANGES_REQUESTED)  appr="${RED}✋changes${RST} " ;;
+      *)                  appr="" ;;
+    esac
 
     # New comments: issue comments + review comments + review bodies, not mine
     c1=$(gh api "repos/$repo/issues/$num/comments?since=$LAST_GH&per_page=100" 2>/dev/null || echo '[]')
@@ -132,8 +142,8 @@ else
           '[ .[] | select(.body != "" and (.submitted_at|sub("\\.[0-9]+Z$";"Z")) > ($ts|sub("\\.[0-9]+Z$";"Z")) and .user.login != $me) ] | length' 2>/dev/null || echo 0)
     n=$((n1+n2+n3)); TOTAL_NEW=$((TOTAL_NEW+n))
     if [ "$n" -gt 0 ]; then cmm="${BLD}${BLU}+$n new${RST}"; else cmm="${DIM}no new${RST}"; fi
-    printf ' %s %s %-28s %s · %s\n       %s\n' \
-      "$ci_line" "$conflict" "${repo}#${num}" "$cmm" "$title" "${DIM}${url}${RST}"
+    printf ' %s %s%s %-28s %s · %s\n       %s\n' \
+      "$ci_line" "$conflict" "$appr" "${repo}#${num}" "$cmm" "$title" "${DIM}${url}${RST}"
   done < <(printf '%s' "$GH_PRS" | jq -c '.[]')
 fi
 echo
@@ -166,12 +176,17 @@ render_mr() {
     conflict=""
   fi
 
+  # approval state (approvals API: .approved bool, .approved_by arr)
+  appr=$(glab api "projects/$pid/merge_requests/$iid/approvals" 2>/dev/null \
+         | jq -r 'if .approved then "yes" else "no" end' 2>/dev/null || echo '?')
+  if [ "$appr" = "yes" ]; then appr="${GRN}✔approved${RST} "; else appr=""; fi
+
   notes=$(glab api "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at" 2>/dev/null || echo '[]')
   n=$(count_new "$notes" "$LAST_GL" "$GL_ME" updated_at)
   TOTAL_NEW=$((TOTAL_NEW+n))
   if [ "$n" -gt 0 ]; then cmm="${BLD}${BLU}+$n new${RST}"; else cmm="${DIM}no new${RST}"; fi
-  printf ' %s %s %-28s %s · %s\n       %s\n' \
-    "$ci_line" "$conflict" "${ns}!${iid}" "$cmm" "$title" "${DIM}${url}${RST}"
+  printf ' %s %s%s %-28s %s · %s\n       %s\n' \
+    "$ci_line" "$conflict" "$appr" "${ns}!${iid}" "$cmm" "$title" "${DIM}${url}${RST}"
 }
 
 # ---- GitLab -----------------------------------------------------------------

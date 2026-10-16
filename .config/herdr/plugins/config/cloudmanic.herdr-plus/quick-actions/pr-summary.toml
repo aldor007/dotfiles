@@ -1,0 +1,4 @@
+name = "PR Summary (GitHub + GitLab)"
+description = "All open PRs/MRs: pipeline state, merge conflicts, and new comments since last check (scripts/pr-summary.sh; holds pane for review)"
+type = "command"
+command = "'$HOME/dotfiles/scripts/pr-summary.sh'; printf '\nPress Enter to close'; read -t 300 _ </dev/tty || printf '\n'; true"

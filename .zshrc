@@ -171,3 +171,32 @@ kimchi() {
 }
 
 alias pi=kimchi
+
+# --- morning monitor: PR/MR digest --------------------------------------------
+# Once/day per machine: prints cached summary, kicks a background refresh.
+# Skipped inside herdr panes (HERDR_ENV=1) so restored/hosted panes stay quiet.
+# Kill-switch: PR_SUMMARY_AUTO=0. Fresh run on demand: `prs`.
+alias prs='$HOME/dotfiles/scripts/pr-summary.sh'
+_pr_summary_morning() {
+  [ -n "${HERDR_ENV:-}" ] && return 0
+  [ "${PR_SUMMARY_AUTO:-1}" = "0" ] && return 0
+  local cache="$HOME/.cache/pr-summary"
+  local script="$HOME/dotfiles/scripts/pr-summary.sh"
+  [ -x "$script" ] || return 0
+  mkdir -p "$cache"
+  local stamp="$cache/stamp-$(date +%F)"
+
+  if [ -f "$cache/output.txt" ]; then
+    printf '\n%s PR/MR digest (cached, refreshes once/day in background; `prs` = live) %s\n' "---" "---"
+    cat "$cache/output.txt"
+    if [ ! -e "$stamp" ]; then
+      rm -f "$cache"/stamp-* 2>/dev/null; touch "$stamp"
+      ( timeout 420 "$script" >| "$cache/output.txt" 2>&1 &! )
+    fi
+  else
+    # First day ever: run once in the foreground so you see today's state now.
+    touch "$stamp"
+    timeout 420 "$script" | tee "$cache/output.txt"
+  fi
+}
+_pr_summary_morning
