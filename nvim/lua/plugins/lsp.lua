@@ -19,7 +19,7 @@ return {
       { "neovim/nvim-lspconfig" },
     },
     opts = {
-      ensure_installed = { "gopls", "ts_ls", "lua_ls", "terraformls", "basedpyright" },
+      ensure_installed = { "gopls", "ts_ls", "lua_ls", "terraformls", "basedpyright", "yaml-language-server" },
       automatic_enable = false,
     },
   },
@@ -33,6 +33,8 @@ return {
       "mason-org/mason-lspconfig.nvim",
     },
     config = function()
+      -- yamlls is NOT enabled here — yaml-companion owns it (k8s.lua does
+      -- vim.lsp.config("yamlls", cfg) + enable, so schemas come with it).
       local servers = { "gopls", "ts_ls", "lua_ls", "terraformls", "basedpyright" }
 
       vim.lsp.config("lua_ls", {
@@ -113,7 +115,21 @@ return {
       },
       signature = { enabled = true },
       sources = {
-        default = { "lsp", "path", "snippets", "buffer" },
+        default = { "lsp", "path", "snippets", "buffer", "minuet" },
+        -- dadbod completion for SQL buffers (vim-dadbod-completion, db.lua)
+        per_filetype = {
+          sql = { "snippets", "dadbod", "buffer" },
+        },
+        providers = {
+          dadbod = { name = "Dadbod", module = "vim_dadbod_completion.blink" },
+          minuet = {
+            name = "minuet",
+            module = "minuet.blink",
+            async = true,
+            timeout_ms = 3000, -- matches minuet.request_timeout (s) * 1000
+            score_offset = 50,
+          },
+        },
       },
       fuzzy = { implementation = "prefer_rust_with_warning" },
     },

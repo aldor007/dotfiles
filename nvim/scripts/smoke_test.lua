@@ -310,6 +310,36 @@ check("mini.starter active", function()
   assert(_G.MiniStarter, "MiniStarter global missing")
 end)
 
+-- 12. DB + k8s + AI batch (db.lua, k8s.lua, ai.lua)
+check("vim-dadbod + dadbod-ui commands", function()
+  assert(vim.fn.exists(":DB") == 2, ":DB not defined")
+  assert(vim.fn.exists(":DBUIToggle") == 2, ":DBUIToggle not defined")
+end)
+
+check("dadbod blink source loads", function()
+  assert(type(require("vim_dadbod_completion.blink")) == "table", "dadbod blink module missing")
+end)
+
+check("kubectl.nvim commands", function()
+  assert(vim.fn.exists(":Kubectl") == 2, ":Kubectl not defined")
+end)
+
+check("yaml-companion loads + yamlls enabled", function()
+  require("yaml-companion")
+  local ok, enabled = pcall(vim.lsp.is_enabled, "yamlls")
+  assert(ok and enabled, "yamlls not enabled")
+end)
+
+check("minuet + blink source load", function()
+  require("minuet")
+  assert(type(require("minuet.blink")) == "table", "minuet.blink module missing")
+end)
+
+check("kubeconform command + binary", function()
+  assert(vim.fn.exists(":Kubeconform") == 2, ":Kubeconform not defined")
+  assert(vim.fn.executable("kubeconform") == 1, "kubeconform binary missing")
+end)
+
 print(string.format("\n%d/%d checks passed", checks - #failures, checks))
 if #failures > 0 then
   print("VALIDATION FAILED")
