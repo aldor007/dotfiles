@@ -1,0 +1,6 @@
+# macOS junk
+.DS_Store
+
+# Local runtime data (created by nvim itself; not part of the config)
+nvim-data/
+lazy-lock.json.bak
