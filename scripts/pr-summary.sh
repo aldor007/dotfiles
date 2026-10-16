@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # pr-summary.sh — summary of open PRs (GitHub) + MRs (GitLab):
-#   per item: title, repo#number, pipeline/CI state, and NEW comments
-#   (comments, review comments, review bodies) since the last run.
+#   per item: title, repo#number, pipeline/CI state, merge-conflict flag,
+#   and NEW comments (comments, review comments, review bodies) since the
+#   last run.
 #
 # Baselines (last-run timestamps) persist in:
 #   ${XDG_STATE_HOME:-~/.local/state}/pr-summary/last-run.env
+# Optional config (sourced if present):
+#   ${XDG_CONFIG_HOME:-~/.config}/pr-summary/config
+#   GL_TAGS="label A,label B" — extra section: open GitLab MRs carrying
+#   these labels (any author, any project).
 #
 # Usage:
 #   pr-summary.sh            # normal run (updates baselines)
@@ -19,11 +24,17 @@ set -uo pipefail
 # ---- config -----------------------------------------------------------------
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pr-summary"
 STATE_FILE="$STATE_DIR/last-run.env"
+CFG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pr-summary/config"
+[ -f "$CFG_FILE" ] && . "$CFG_FILE"
+
+# MRs already rendered (pid:iid); used to de-dupe the label section
+SHOWN_FILE=$(mktemp)
+trap 'rm -f "$SHOWN_FILE"' EXIT
 
 SINCE=""
 for arg in "$@"; do
   case "$arg" in
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR==1{next} /^set -uo pipefail/{exit} {print}' "$0"; exit 0 ;;
     -r|--reset) rm -f "$STATE_FILE"; shift ;;
     -s|--since) SINCE="$2"; shift 2 ;;
     *) ;;
@@ -107,6 +118,10 @@ else
       esac
     fi
 
+    # Merge conflicts? (mergeStateStatus DIRTY = unmergeable as-is)
+    ms=$(gh pr view "$num" -R "$repo" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo '?')
+    if [ "$ms" = "DIRTY" ]; then conflict="${RED}⇄conflict${RST} "; else conflict=""; fi
+
     # New comments: issue comments + review comments + review bodies, not mine
     c1=$(gh api "repos/$repo/issues/$num/comments?since=$LAST_GH&per_page=100" 2>/dev/null || echo '[]')
     c2=$(gh api "repos/$repo/pulls/$num/comments?since=$LAST_GH&per_page=100" 2>/dev/null || echo '[]')
@@ -117,11 +132,47 @@ else
           '[ .[] | select(.body != "" and (.submitted_at|sub("\\.[0-9]+Z$";"Z")) > ($ts|sub("\\.[0-9]+Z$";"Z")) and .user.login != $me) ] | length' 2>/dev/null || echo 0)
     n=$((n1+n2+n3)); TOTAL_NEW=$((TOTAL_NEW+n))
     if [ "$n" -gt 0 ]; then cmm="${BLD}${BLU}+$n new${RST}"; else cmm="${DIM}no new${RST}"; fi
-    printf ' %s  %-28s %s · %s\n       %s\n' \
-      "$ci_line" "${repo}#${num}" "$cmm" "$title" "${DIM}${url}${RST}"
+    printf ' %s %s %-28s %s · %s\n       %s\n' \
+      "$ci_line" "$conflict" "${repo}#${num}" "$cmm" "$title" "${DIM}${url}${RST}"
   done < <(printf '%s' "$GH_PRS" | jq -c '.[]')
 fi
 echo
+
+# Render one GitLab MR entry (pipeline, conflict flag, new-comment count)
+# and register it in the shown-set for the label section's de-dup.
+# Uses/updates globals: LAST_GL GL_ME SHOWN_FILE TOTAL_NEW.
+render_mr() {
+  local mr="$1" pid iid title url ns pl notes n ci_line conflict cmm
+  pid=$(printf '%s' "$mr" | jq -r '.project_id')
+  iid=$(printf '%s' "$mr" | jq -r '.iid')
+  title=$(printf '%s' "$mr" | jq -r '.title')
+  url=$(printf '%s'  "$mr" | jq -r '.web_url')
+  ns=$(printf '%s'  "$mr" | jq -r '.references.full' | sed 's/![0-9]*$//')
+  echo "$pid:$iid" >> "$SHOWN_FILE"
+
+  pl=$(glab api "projects/$pid/merge_requests/$iid" 2>/dev/null | jq -r '.head_pipeline.status // "none"' || echo '?')
+  case "$pl" in
+    success)              ci_line="${GRN}✓ success${RST}" ;;
+    failed|canceled)      ci_line="${RED}✗ $pl${RST}" ;;
+    running|pending|preparing|waiting_for_resource|created|manual) ci_line="${YEL}… $pl${RST}" ;;
+    none|'')              ci_line="${DIM}no pipeline${RST}" ;;
+    *)                    ci_line="${DIM}$pl${RST}" ;;
+  esac
+
+  # merge conflicts? (has_conflicts ships in every MR list/detail payload)
+  if [ "$(printf '%s' "$mr" | jq -r '.has_conflicts // false')" = "true" ]; then
+    conflict="${RED}⇄conflict${RST} "
+  else
+    conflict=""
+  fi
+
+  notes=$(glab api "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at" 2>/dev/null || echo '[]')
+  n=$(count_new "$notes" "$LAST_GL" "$GL_ME" updated_at)
+  TOTAL_NEW=$((TOTAL_NEW+n))
+  if [ "$n" -gt 0 ]; then cmm="${BLD}${BLU}+$n new${RST}"; else cmm="${DIM}no new${RST}"; fi
+  printf ' %s %s %-28s %s · %s\n       %s\n' \
+    "$ci_line" "$conflict" "${ns}!${iid}" "$cmm" "$title" "${DIM}${url}${RST}"
+}
 
 # ---- GitLab -----------------------------------------------------------------
 GL_FETCH_OK=1; GL_ME=""; GL_PRS="[]"
@@ -149,29 +200,36 @@ else
   TOTAL_MR=$N
   [ "$N" -eq 0 ] && echo "${DIM}  no open MRs${RST}"
   while read -r mr; do
-    pid=$(printf '%s' "$mr" | jq -r '.project_id')
-    iid=$(printf '%s' "$mr" | jq -r '.iid')
-    title=$(printf '%s' "$mr" | jq -r '.title')
-    url=$(printf '%s'  "$mr" | jq -r '.web_url')
-    ns=$(printf '%s'  "$mr" | jq -r '.references.full' | sed 's/![0-9]*$//')
-
-    # head pipeline status
-    pl=$(glab api "projects/$pid/merge_requests/$iid" 2>/dev/null | jq -r '.head_pipeline.status // "none"' || echo '?')
-    case "$pl" in
-      success)              ci_line="${GRN}✓ success${RST}" ;;
-      failed|canceled)      ci_line="${RED}✗ $pl${RST}" ;;
-      running|pending|preparing|waiting_for_resource|created|manual) ci_line="${YEL}… $pl${RST}" ;;
-      none|'')              ci_line="${DIM}no pipeline${RST}" ;;
-      *)                    ci_line="${DIM}$pl${RST}" ;;
-    esac
-
-    notes=$(glab api "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at" 2>/dev/null || echo '[]')
-    n=$(count_new "$notes" "$LAST_GL" "$GL_ME" updated_at)
-    TOTAL_NEW=$((TOTAL_NEW+n))
-    if [ "$n" -gt 0 ]; then cmm="${BLD}${BLU}+$n new${RST}"; else cmm="${DIM}no new${RST}"; fi
-    printf ' %s  %-28s %s · %s\n       %s\n' \
-      "$ci_line" "${ns}!${iid}" "$cmm" "$title" "${DIM}${url}${RST}"
+    render_mr "$mr"
   done < <(printf '%s' "$GL_PRS" | jq -c '.[]')
+fi
+echo
+
+# ---- GitLab: MRs by configured label(s) --------------------------------------
+# GL_TAGS from $CFG_FILE (comma-separated; spaces inside label names are OK).
+if [ "$GL_FETCH_OK" = 1 ] && [ -n "${GL_TAGS:-}" ]; then
+  echo "${BLD}=== GITLAB labelled (${GL_TAGS}) ===${RST}"
+  TOTAL_TAG=0
+  IFS=',' read -ra TAG_ARR <<< "$GL_TAGS"
+  for tag in "${TAG_ARR[@]}"; do
+    tag=$(printf '%s' "$tag" | sed 's/^ *//;s/ *$//')
+    [ -z "$tag" ] && continue
+    enc=$(printf '%s' "$tag" | jq -sRr @uri)
+    TAGGED=$(glab api "merge_requests?scope=all&state=opened&labels=$enc&per_page=100&order_by=updated_at&sort=desc" 2>/dev/null || echo '[]')
+    cnt=$(printf '%s' "$TAGGED" | jq 'length' 2>/dev/null || echo 0)
+    if [ "$cnt" -eq 0 ]; then
+      echo "${DIM}  [$tag] — no open MRs${RST}"
+      continue
+    fi
+    while read -r mr; do
+      pid=$(printf '%s' "$mr" | jq -r '.project_id')
+      iid=$(printf '%s' "$mr" | jq -r '.iid')
+      grep -qx "$pid:$iid" "$SHOWN_FILE" && continue  # already listed above
+      TOTAL_TAG=$((TOTAL_TAG+1))
+      render_mr "$mr"
+    done < <(printf '%s' "$TAGGED" | jq -c '.[]')
+  done
+  [ "${TOTAL_TAG:-0}" -eq 0 ] && echo "${DIM}  (nothing beyond your authored MRs above)${RST}"
 fi
 
 # ---- persist baselines ------------------------------------------------------
@@ -182,7 +240,9 @@ mkdir -p "$STATE_DIR"
 } > "$STATE_FILE"
 
 echo
-echo "${BLD}total: ${TOTAL_PR} PRs (GitHub), ${TOTAL_MR} MRs (GitLab), ${TOTAL_NEW} new comments since baseline${RST}"
+TAG_EXTRA=""; [ "${TOTAL_TAG:-0}" -gt 0 ] && TAG_EXTRA=", +${TOTAL_TAG} labelled"
+echo "${BLD}total: ${TOTAL_PR} PRs (GitHub), ${TOTAL_MR} MRs (GitLab)${TAG_EXTRA}, ${TOTAL_NEW} new comments since baseline${RST}"
+[ -z "${GL_TAGS:-}" ] && echo "${DIM}(tip: set GL_TAGS in $CFG_FILE to also list MRs by label)${RST}"
 echo "${DIM}baseline for 'new comments': since $LAST_GH → now $TODAY (state: $STATE_FILE)${RST}"
 [ "$FIRST_RUN" = 1 ] && echo "${DIM}(first run — baseline initialized; future runs show the delta)${RST}"
 exit 0
