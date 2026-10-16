@@ -9,6 +9,7 @@ Terminal multiplexer: **tmux**. Workflows: **herdr**-managed panes/workspaces.
 | Path | What |
 |---|---|
 | `nvim/` | Neovim config (lazy.nvim). Plugin list + docs live with the config; `,kk` lists every keymap. Validate with `nvim/scripts/validate.sh` |
+| `nvim/` formatters | `conform.nvim` formats on save (LSP fallback), `nvim-lint` adds ruff/shellcheck. Binaries: `brew install stylua ruff prettier shellcheck` or `./install.sh -i formatters` |
 | `.zshrc` | oh-my-zsh, PATH/tool wiring (gsd, kimchi/pi, docker wrapper, PR summary) |
 | `.tmux/` | tmux config (prefix `C-a`, mouse on, optional powerline2) |
 | `scripts/` | `pr-summary.sh` (daily PR/MR digest), `worktree-clean`, `service-repo-project`, `pi` (kimchi shim), small utils |
@@ -21,6 +22,9 @@ Terminal multiplexer: **tmux**. Workflows: **herdr**-managed panes/workspaces.
 ```bash
 # herdr + plugin configs (works on macOS and Linux)
 ./install.sh -i herdr
+
+# formatters/linters for nvim (conform.nvim + nvim-lint)
+./install.sh -i formatters
 
 # legacy full stack — Debian/Ubuntu only (apt-based, includes nvim-era tools)
 ./install.sh -i all

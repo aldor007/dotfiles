@@ -129,6 +129,22 @@ function install_bin {
     cp -r ${base_dir}/scripts/* ~/.bin
 }
 
+# Formatters/linters used by conform.nvim + nvim-lint (nvim/lua/plugins/format.lua).
+# macOS: everything via brew. Debian/Ubuntu: apt only ships shellcheck; the
+# rest come from their own toolchains (cargo install stylua, pipx install
+# ruff, npm -g prettier). Missing binaries are skipped gracefully by conform.
+function install_formatters {
+    if command -v brew >/dev/null 2>&1; then
+        brew install stylua ruff prettier shellcheck
+        echo "formatters installed: stylua ruff prettier shellcheck"
+    elif command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get install -y shellcheck
+        echo "apt: shellcheck installed; install stylua (cargo), ruff (pipx), prettier (npm) separately"
+    else
+        echo "install_formatters: no brew/apt found — install stylua, ruff, prettier, shellcheck manually"
+    fi
+}
+
 function clean_install {
     echo "Clean install"
     rm -rf ~/.vim
@@ -208,6 +224,9 @@ case $install_typ in
     herdr)
         install_herdr
     ;;
+    formatters)
+        install_formatters
+    ;;
     zsh)
         install_zsh
     ;;
@@ -229,6 +248,7 @@ case $install_typ in
         install_zsh
         install_tmux
         install_vim
+        install_formatters
         install_fonts
         install_gitconf
         install_fzf
