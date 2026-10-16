@@ -68,12 +68,23 @@ if [ -z "$LAST_GH" ] && [ -z "$LAST_GL" ]; then
   FIRST_RUN=1
   LAST_GH="$TODAY"; LAST_GL="$TODAY"
 fi
+# BSD/macOS date uses -v-3d; GNU/Linux uses -d '-3 days'.
+date_ago() { # date_ago <n> <unit: d|h>
+  if date -u -v-1d +%F >/dev/null 2>&1; then
+    case "$2" in
+      d) date -u -v-"$1"d +%Y-%m-%dT%H:%M:%SZ ;;
+      h) date -u -v-"$1"H +%Y-%m-%dT%H:%M:%SZ ;;
+    esac
+  else
+    case "$2" in
+      d) date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ ;;
+      h) date -u -d "-$1 hours" +%Y-%m-%dT%H:%M:%SZ ;;
+    esac
+  fi
+}
 if [ -n "$SINCE" ]; then
   case "$SINCE" in
-    *[dh]) n=${SINCE%[dh]}; case "$SINCE" in
-             *d) BASE_TMP=$(date -u -v-"${n}"d +%Y-%m-%dT%H:%M:%SZ) ;;
-             *h) BASE_TMP=$(date -u -v-"${n}"H +%Y-%m-%dT%H:%M:%SZ) ;;
-           esac ;;
+    *[dh]) n=${SINCE%[dh]}; BASE_TMP=$(date_ago "$n" "${SINCE: -1}") ;;
     *)     BASE_TMP="$SINCE" ;;  # raw ISO timestamp allowed
   esac
   LAST_GH="$BASE_TMP"; LAST_GL="$BASE_TMP"; FIRST_RUN=0

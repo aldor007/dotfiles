@@ -11,7 +11,7 @@ parser.add_argument('--prefix', dest='prefix', required=True)
 parser.add_argument('--delimiter', dest='delimiter',default='_', required=False)
 parser.add_argument('--search', dest='search' , required=False)
 parser.add_argument('--replacement', dest='replacement' , required=False)
-parser.add_argument('--dryrun', dest='debug' , required=False)
+parser.add_argument('--dryrun', dest='debug', action='store_true')
 
 args = parser.parse_args()
 print(args)
@@ -52,6 +52,6 @@ for fileName in files:
     else:
         newName = '-'.join([prefix, fileId])
     print('{} -> {}'.format(fileName, newName))
-    # if not args.debug:
-    #     os.rename(fileName, newName)
+    if not args.debug:
+        os.rename(fileName, newName)
 

@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser(description='Remove files that match given name
 parser.add_argument('dir', type=str, help='dir')
 parser.add_argument('--file', dest='file', required=False)
 parser.add_argument('--files', dest='files', nargs='+', required=False)
-parser.add_argument('--dryrun', dest='debug' , required=False)
+parser.add_argument('--dryrun', dest='debug', action='store_true')
 
 args = parser.parse_args()
 toRemove = []
