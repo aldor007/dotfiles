@@ -21,7 +21,7 @@ return {
     event = { "BufReadPre", "BufNewFile" },
     dependencies = {
       "lewis6991/gitsigns.nvim", -- OPTIONAL per README: git status in tabs
-      "nvim-tree/nvim-web-devicons", -- OPTIONAL per README: file icons
+      "echasnovski/mini.icons", -- icons (devicons replaced; mock keeps compat)
     },
     init = function()
       vim.g.barbar_auto_setup = false

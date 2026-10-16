@@ -17,7 +17,7 @@ return {
   {
     "nvim-lualine/lualine.nvim",
     event = "VeryLazy",
-    dependencies = { "nvim-tree/nvim-web-devicons" },
+    dependencies = { "echasnovski/mini.icons" },
     opts = {
       options = {
         theme = "auto",

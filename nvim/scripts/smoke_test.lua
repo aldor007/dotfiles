@@ -275,6 +275,41 @@ check("fugitive :Git available", function()
   assert(vim.fn.exists(":Git") == 2, ":Git command not defined")
 end)
 
+-- 11. Plugins added in the 2026-10 batch
+check("flash loads", function()
+  assert(type(require("flash").jump) == "function", "flash.jump missing")
+end)
+
+check("conform loads + :ConformInfo", function()
+  require("conform")
+  assert(vim.fn.exists(":ConformInfo") == 2, ":ConformInfo not defined")
+end)
+
+check("nvim-lint loads", function()
+  assert(type(require("lint").try_lint) == "function", "lint.try_lint missing")
+end)
+
+check("nvim-dap loads", function()
+  assert(type(require("dap").toggle_breakpoint) == "function", "dap.toggle_breakpoint missing")
+end)
+
+check("nvim-dap-ui loads", function()
+  assert(type(require("dapui").toggle) == "function", "dapui.toggle missing")
+end)
+
+check("resession loads", function()
+  assert(type(require("resession").save) == "function", "resession.save missing")
+end)
+
+check("mini.icons mocks nvim-web-devicons", function()
+  require("mini.icons")
+  assert(type(require("nvim-web-devicons")) == "table", "devicons mock failed")
+end)
+
+check("mini.starter active", function()
+  assert(_G.MiniStarter, "MiniStarter global missing")
+end)
+
 print(string.format("\n%d/%d checks passed", checks - #failures, checks))
 if #failures > 0 then
   print("VALIDATION FAILED")

@@ -8,7 +8,7 @@ return {
       { "<leader>e", "<cmd>NvimTreeFindFile<cr>", desc = "Reveal file in tree" },
       { "<leader>nt", "<cmd>NvimTreeFindFile<cr>", desc = "Reveal file in tree" },
     },
-    dependencies = { "nvim-tree/nvim-web-devicons" },
+    dependencies = { "echasnovski/mini.icons" },
     opts = {
       -- NERDTree-style 't' = open in a new tab (keeps all default mappings)
       on_attach = function(bufnr)
