@@ -49,4 +49,30 @@ return {
     main = "ibl",
     opts = {},
   },
+
+  -- nui.nvim: UI component library (Popup/Layout/Input/Menu/Split + text
+  -- blocks). Zero-deps, no setup() — modules are required directly by other
+  -- plugins (lazy-loaded library).
+  {
+    "MunifTanjim/nui.nvim",
+    lazy = true,
+  },
+
+  -- nvim-notify: real floating notifications sink for every plugin's vim.notify
+  -- (hardtime hints, mason, LSP, …). Must own vim.notify as early as possible,
+  -- so NOT lazy. termguicolors already enabled (options.lua).
+  {
+    "rcarriga/nvim-notify",
+    lazy = false,
+    priority = 800,
+    opts = {
+      stages = "fade_in_slide_out",
+      timeout = 3000,
+      render = "default",
+    },
+    config = function(_, opts)
+      require("notify").setup(opts)
+      vim.notify = require("notify")
+    end,
+  },
 }

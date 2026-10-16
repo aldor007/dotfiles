@@ -237,6 +237,35 @@ check("colorscheme is kanagawa", function()
   assert((vim.g.colors_name or ""):match("^kanagawa"), "colors_name is " .. tostring(vim.g.colors_name))
 end)
 
+check("hardtime works (its nui dep must be present)", function()
+  local ok, err = pcall(require, "hardtime")
+  assert(ok, "require('hardtime') failed: " .. tostring(err))
+  assert(vim.fn.exists(":Hardtime") == 2, ":Hardtime not defined")
+  local ok2, err2 = pcall(vim.cmd, "Hardtime report")
+  assert(ok2, ":Hardtime report failed (nui popup broken?): " .. tostring(err2))
+end)
+
+check("nvim-notify owns vim.notify (hardtime hints sink)", function()
+  local notify = require("notify")
+  assert(vim.fn.exists(":Notifications") == 2, ":Notifications not defined")
+  assert(vim.notify == notify, "vim.notify not replaced by nvim-notify")
+  -- hardtime's hints route through plain vim.notify — prove the chain lands
+  -- in notify history (records may hold message as string or table of lines)
+  local before = #require("notify").history()
+  vim.notify("hardtime sink probe", vim.log.levels.WARN, { title = "Hardtime" })
+  vim.wait(800, function()
+    return #require("notify").history() > before
+  end, 100)
+  assert(#require("notify").history() > before, "notification did not land in nvim-notify history")
+end)
+
+check("nui.nvim components load", function()
+  for _, mod in ipairs({ "nui.popup", "nui.layout", "nui.input", "nui.menu", "nui.split" }) do
+    local ok, err = pcall(require, mod)
+    assert(ok, mod .. " failed to load: " .. tostring(err))
+  end
+end)
+
 check("indent-blankline (ibl) active", function()
   assert(package.loaded["ibl"] or vim.g.ibl_loaded_config ~= false, "ibl not loaded")
 end)

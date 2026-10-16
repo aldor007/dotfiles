@@ -152,5 +152,11 @@ return {
         },
       }
     end,
+    config = function(_, opts)
+      require("telescope").setup(opts)
+      -- telescope is lazy-loaded; the notify extension hooks in when it is,
+      -- per nvim-notify README (manual load for lazy-loaded telescope).
+      pcall(require("telescope").load_extension, "notify")
+    end,
   },
 }
