@@ -1,0 +1,8 @@
+# Removed legacy / Linux-era config directories (dead weight, git rm --cached;
+# kept on disk so existing symlinks keep working). See git history for content.
+.vim/
+.config/sublime-text-3/
+
+# macOS + python junk
+.DS_Store
+*.pyc
