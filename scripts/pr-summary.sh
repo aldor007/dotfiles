@@ -14,6 +14,7 @@
 # Usage:
 #   pr-summary.sh            # normal run (updates baselines)
 #   pr-summary.sh --since 7d # pretend last run was N days/hours ago (e.g. 7d, 12h)
+#   pr-summary.sh --analyze  # additionally ask kimchi (LLM) which item to focus
 #   pr-summary.sh --reset    # forget baselines, act like first run
 #   pr-summary.sh --help
 #
@@ -26,25 +27,33 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pr-summary"
 STATE_FILE="$STATE_DIR/last-run.env"
 CFG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pr-summary/config"
 [ -f "$CFG_FILE" ] && . "$CFG_FILE"
-
+DIGEST_FILE=""
 # MRs already rendered (pid:iid); used to de-dupe the label section
 SHOWN_FILE=$(mktemp)
-trap 'rm -f "$SHOWN_FILE"' EXIT
+trap 'rm -f "$SHOWN_FILE" ${DIGEST_FILE:+"$DIGEST_FILE"}' EXIT
 
-SINCE=""
+SINCE=""; ANALYZE=0
 for arg in "$@"; do
   case "$arg" in
     -h|--help) awk 'NR==1{next} /^set -uo pipefail/{exit} {print}' "$0"; exit 0 ;;
     -r|--reset) rm -f "$STATE_FILE"; shift ;;
     -s|--since) SINCE="$2"; shift 2 ;;
+    -a|--analyze) ANALYZE=1; shift ;;
     *) ;;
   esac
 done
 
 command -v jq >/dev/null || { echo "error: jq required (brew install jq)" >&2; exit 1; }
 
+# When --analyze: stream everything to tty AND tee it into a file for the LLM.
+TTY_PRESENT=0; [ -t 1 ] && TTY_PRESENT=1
+if [ "$ANALYZE" = "1" ]; then
+  DIGEST_FILE=$(mktemp)
+  exec > >(tee -a "$DIGEST_FILE")
+fi
+
 # ---- colors (tty only) ------------------------------------------------------
-if [ -t 1 ]; then
+if [ "$TTY_PRESENT" = "1" ]; then
   GRN=$(tput setaf 2); RED=$(tput setaf 1); YEL=$(tput setaf 3)
   BLU=$(tput setaf 4); BLD=$(tput bold); DIM=$(tput dim); RST=$(tput sgr0)
 else
@@ -260,4 +269,30 @@ echo "${BLD}total: ${TOTAL_PR} PRs (GitHub), ${TOTAL_MR} MRs (GitLab)${TAG_EXTRA
 [ -z "${GL_TAGS:-}" ] && echo "${DIM}(tip: set GL_TAGS in $CFG_FILE to also list MRs by label)${RST}"
 echo "${DIM}baseline for 'new comments': since $LAST_GH → now $TODAY (state: $STATE_FILE)${RST}"
 [ "$FIRST_RUN" = 1 ] && echo "${DIM}(first run — baseline initialized; future runs show the delta)${RST}"
+
+# ---- optional LLM focus analysis -------------------------------------------
+if [ "$ANALYZE" = "1" ]; then
+  echo
+  echo "${BLD}=== AI FOCUS (kimchi) ===${RST}"
+  if ! command -v kimchi >/dev/null; then
+    echo "${YEL}  kimchi not on PATH — skipping analysis${RST}"
+    exit 0
+  fi
+  PROMPT="You are my personal PR triage assistant. Below is a digest of my open PRs (GitHub) and MRs (GitLab). Per item you see: CI state, a conflict flag, an approved flag, and how many new comments arrived since my last check.
+
+Decision policy, most to least important:
+1) Feedback from people (new comments) — unblock the discussion or address what reviewers asked.
+2) Items that are DONE pending my action to ship: green pipeline + approved + no conflict → propose merging or closing.
+3) Broken mechanics: failed pipeline or merge conflict → fix code or rebase.
+4) Drafts with nothing pending → keep parked, do not promote.
+5) The labelled section is team radar — only mention if something there affects me.
+
+Task: name THE ONE item I should focus on first today and why (max 3 sentences, cite concrete evidence from the digest), then an ordered next-up list of at most 4 items with one-line justification each. If the digest says 'first run' or there is no meaningful comment-delta window, say so instead of fabricating statistics. Be terse. No preamble.
+
+DIGEST:
+"
+  CLEAN=$(sed $'s/\x1b\\[[0-9;]*m//g' "$DIGEST_FILE")
+  printf '%s\n' "$PROMPT$CLEAN" | kimchi --print --no-session --thinking minimal 2>/dev/null \
+    || echo "${YEL}  kimchi analysis failed (timeout/auth)${RST}"
+fi
 exit 0

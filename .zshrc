@@ -177,6 +177,7 @@ alias pi=kimchi
 # Skipped inside herdr panes (HERDR_ENV=1) so restored/hosted panes stay quiet.
 # Kill-switch: PR_SUMMARY_AUTO=0. Fresh run on demand: `prs`.
 alias prs='$HOME/dotfiles/scripts/pr-summary.sh'
+alias prsa='$HOME/dotfiles/scripts/pr-summary.sh --analyze'
 _pr_summary_morning() {
   [ -n "${HERDR_ENV:-}" ] && return 0
   [ "${PR_SUMMARY_AUTO:-1}" = "0" ] && return 0
