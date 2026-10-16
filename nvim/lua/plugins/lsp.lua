@@ -19,7 +19,7 @@ return {
       { "neovim/nvim-lspconfig" },
     },
     opts = {
-      ensure_installed = { "gopls", "ts_ls", "lua_ls", "terraformls", "basedpyright", "yaml-language-server" },
+      ensure_installed = { "gopls", "ts_ls", "lua_ls", "terraformls", "basedpyright", "yamlls" },
       automatic_enable = false,
     },
   },
