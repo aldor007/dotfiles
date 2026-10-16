@@ -1,4 +1,4 @@
 name = "PR Summary + AI focus"
 description = "Full PR/MR digest, then kimchi picks the one item to focus on first (scripts/pr-summary.sh --analyze; holds pane for review)"
 type = "command"
-command = "'$HOME/dotfiles/scripts/pr-summary.sh' --analyze; printf '\nPress Enter to close'; read -t 300 _ </dev/tty || printf '\n'; true"
+command = "~/dotfiles/scripts/pr-summary.sh --analyze; printf '\nPress Enter to close'; read -t 300 _ </dev/tty || printf '\n'; true"
