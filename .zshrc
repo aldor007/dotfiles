@@ -124,11 +124,17 @@ test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell
 
 # useful only for Mac OS Silicon M1, 
 # # still working but useless for the other platforms
+# Resolves the docker binary explicitly (Rancher Desktop ships it under
+# ~/.rd/bin; /usr/local/bin is the Intel-era location) so the wrapper never
+# recurses into itself and works regardless of which install is present.
 docker() {
+    local d=/usr/local/bin/docker
+    [ -x "$d" ] || d="$HOME/.rd/bin/docker"
+    [ -x "$d" ] || { echo "docker: no binary found (/usr/local/bin or \$HOME/.rd/bin)" >&2; return 127; }
     if [[ `uname -m` == "arm64" ]] && [[ "$1" == "run" || "$1" == "build" ]]; then
-        /usr/local/bin/docker "$1" --platform linux/amd64 "${@:2}"
+        "$d" "$1" --platform linux/amd64 "${@:2}"
     else
-        /usr/local/bin/docker "$@"
+        "$d" "$@"
     fi
 }
 
@@ -153,7 +159,9 @@ export PATH=/Users/mkaciuba/.opencode/bin:$PATH
 
 alias vim=nvim
 # Override git-svn alias from oh-my-zsh git plugin
-alias gsd='GSD_VERSION=2.78.1 node /Users/mkaciuba/.nvm/versions/node/v24.14.1/lib/node_modules/gsd-pi/dist/cli.js'
+# Resolve the gsd-pi CLI through npm's global root so a node/nvm upgrade
+# doesn't break the hardcoded version path.
+alias gsd='GSD_VERSION=2.78.1 node "$(npm root -g)/gsd-pi/dist/cli.js"'
 [ -f /opt/homebrew/share/google-cloud-sdk/path.zsh.inc ] && source /opt/homebrew/share/google-cloud-sdk/path.zsh.inc
 # kimchi inside herdr panes: always start with experimental features enabled.
 # herdr sets HERDR_ENV=1 in the panes it manages; outside herdr the flag is
@@ -173,6 +181,15 @@ kimchi() {
 alias pi=kimchi
 
 # --- morning monitor: PR/MR digest --------------------------------------------
+# macOS ships no `timeout` (coreutils' gtimeout); fall back so the refresh
+# below never fails silently.
+if ! command -v timeout >/dev/null 2>&1; then
+  if command -v gtimeout >/dev/null 2>&1; then
+    timeout() { gtimeout "$@"; }
+  else
+    timeout() { "$@"; }
+  fi
+fi
 # Once/day per machine: prints cached summary, kicks a background refresh.
 # Skipped inside herdr panes (HERDR_ENV=1) so restored/hosted panes stay quiet.
 # Kill-switch: PR_SUMMARY_AUTO=0. Fresh run on demand: `prs`.
@@ -201,3 +218,4 @@ _pr_summary_morning() {
   fi
 }
 _pr_summary_morning
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"

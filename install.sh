@@ -2,6 +2,7 @@
 base_dir=~/dotfiles/
 
 function install_common {
+    command -v apt-get >/dev/null 2>&1 || { echo "install_common: apt-get not found — skipping (Debian/Ubuntu only)"; return; }
     sudo apt-get install git -y 
     sudo apt-get install zip -y 
     sudo apt-get install unzip -y 
@@ -15,6 +16,7 @@ function install_common {
 }
 
 function install_fonts {
+  command -v apt-get >/dev/null 2>&1 || { echo "install_fonts: skipping (Debian/Ubuntu only)"; return; }
   wget https://github.com/Lokaltog/powerline/raw/develop/font/PowerlineSymbols.otf
   wget https://github.com/Lokaltog/powerline/raw/develop/font/10-powerline-symbols.conf
   mkdir -p ~/.fonts
@@ -25,6 +27,7 @@ function install_fonts {
 }
 
 function install_zsh {
+    command -v apt-get >/dev/null 2>&1 || { echo "install_zsh: skipping (Debian/Ubuntu only)"; return; }
     sudo apt-get install zsh -y
     sudo chsh -s /bin/zsh  $USER
     # cp -r ${base_dir}.oh-my-zsh/ ~g
@@ -35,6 +38,7 @@ function install_zsh {
 }
 
 function install_tmux {
+    command -v apt-get >/dev/null 2>&1 || { echo "install_tmux: skipping (Debian/Ubuntu only)"; return; }
     sudo apt-get install python-fontforge -y 
     ubuntu=$(cat /etc/issue | grep -i ubuntu)
     if [ $? -eq 0 ]; then
@@ -52,9 +56,9 @@ function install_tmux {
 }
 
 function install_programing {
-    sudo apt-get install python -y
-    sudo apt-get install python-pip -y
-    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.4/install.sh | bash
+    sudo apt-get install python -y 2>/dev/null || true
+    sudo apt-get install python-pip -y 2>/dev/null || true
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
@@ -63,21 +67,22 @@ function install_programing {
     npm install -g jslint
     npm install -g eslint
     mkdir -p ~/.bin
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl && chmod a+x ~/.bin/kubectl
+    if [ "$(uname -s)" = "Linux" ]; then
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl && chmod a+x ~/.bin/kubectl
+    else
+        echo "kubectl: skipping (linux/amd64 binary only; use brew install kubectl instead)"
+    fi
     curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash 
     curl -sL https://istio.io/downloadIstioctl | sh -
     git clone https://github.com/cunymatthieu/tgenv.git ~/.tgenv
-    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash 
-    cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install 
+    if [ "$(uname -s)" = "Linux" ]; then
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash 
+        cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install 
+    else
+        echo "awscli/azure: skipping (Linux installers; use brew install awscli azure-cli)"
+    fi
     git clone https://github.com/tfutils/tfenv.git ~/.tfenv
-    set -x; cd "$(mktemp -d)" &&
-    OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
-    ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
-    curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/krew.tar.gz" &&
-    tar zxvf krew.tar.gz &&
-    KREW=./krew-"${OS}_${ARCH}" &&
-    "$KREW" install krew
-    bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)
+    # krew (repeatable, idempotent-ish block — one copy; was duplicated here)
     (
   set -x; cd "$(mktemp -d)" &&
   OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
@@ -90,6 +95,7 @@ function install_programing {
 }
 
 function install_vim {
+    command -v apt-get >/dev/null 2>&1 || { echo "install_vim: skipping (Debian/Ubuntu only)"; return; }
     sudo apt-get install fontforge --yes
     sudo apt-get install vim-nox --yes
     sudo apt-get install ctags --yes
@@ -110,6 +116,7 @@ function install_fzf {
 }
 
 function install_gitconf {
+    command -v apt-get >/dev/null 2>&1 || { echo "install_gitconf: skipping (Debian/Ubuntu only)"; return; }
     sudo apt-get install libncurses5-dev libncursesw5-dev -y
     ln -s  ${base_dir}.gitconfig ~/.gitconfig
     git clone https://github.com/jonas/tig /tmp/tig
@@ -153,7 +160,7 @@ case $key in
         ;;
     esac
 install_common
-git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
+[ -d "${base_dir}" ] || git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
 function install_herdr {
     curl -fsSL https://herdr.dev/install.sh | sh
     # All herdr plugins are installed from this list; their configs live in
@@ -217,7 +224,7 @@ case $install_typ in
         install_gitconf
     ;;
     all)
-        install_tmux
+        install_herdr
         install_programing
         install_zsh
         install_tmux
