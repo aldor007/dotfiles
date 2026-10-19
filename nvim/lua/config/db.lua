@@ -52,16 +52,25 @@ function M.seed()
   return job
 end
 
----Ensure the px tunnel for every env is up (idempotent: sql-db.sh only
----starts what's missing; per-env ports keep them independent). Quiet on
----success; notifies when a tunnel fails. Called on `User DBUIOpened` so
----,DBUIToggle is immediately usable.
-function M.ensure_all()
+---Check which env tunnels are up and notify the exact command to bring
+---missing ones up. px glass proxy is a TUI wizard that must run in a real
+---terminal (sql-db.sh --fg); it cannot be backgrounded from nvim. Called on
+---`User DBUIOpened`.
+function M.check_tunnels()
+  local pending = #ENVS
+  local down = {}
   for _, env in ipairs(ENVS) do
     vim.system({ SCRIPT, "--env", env }, { text = true }, function(obj)
       if obj.code ~= 0 then
-        local err = ((obj.stderr or "") .. (obj.stdout or "")):gsub("%s+", " "):sub(1, 200)
-        vim.notify("db: tunnel for " .. env .. " failed — " .. err, vim.log.levels.WARN)
+        down[#down + 1] = env
+      end
+      pending = pending - 1
+      if pending == 0 and #down > 0 then
+        vim.notify(
+          "db: tunnel(s) down: " .. table.concat(down, ", ")
+            .. " — start in a terminal:  sql-db.sh --env <env> --fg",
+          vim.log.levels.WARN
+        )
       end
     end)
   end

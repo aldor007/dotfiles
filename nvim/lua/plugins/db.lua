@@ -14,11 +14,12 @@ return {
     cmd = { "DB", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer" },
     config = function()
       require("config.db").seed()
-      -- When the DB browser opens, ensure every env's px tunnel is up so
-      -- selecting a connection actually works (idempotent, per-env ports).
+      -- When the DB browser opens, check which env tunnels are up and
+      -- tell the user the exact command for any that aren't (px glass
+      -- proxy is a TUI wizard — the tunnel must run in a real terminal).
       vim.api.nvim_create_autocmd("User", {
         pattern = "DBUIOpened",
-        callback = function() require("config.db").ensure_all() end,
+        callback = function() require("config.db").check_tunnels() end,
       })
     end,
     keys = {
