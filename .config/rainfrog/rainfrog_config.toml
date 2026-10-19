@@ -3,8 +3,18 @@
 # (or prompted), so nothing in this file can leak credentials.
 mouse_mode = true
 
-# [db]
-# Frequently-used named connections would go here, e.g.:
-#   dev-postgres = { host = "127.0.0.1", driver = "postgres", port = 15432, database = "service-a", username = "marcin@cast.ai" }
-# Prefer `sql-db.sh --rainfrog` instead — the IAM token rotates ~hourly,
-# so a static password in this file would silently break.
+[db]
+# CAST AI Cloud SQL (service-a db) through the px IAP tunnel. Ports must match
+# scripts/sql-db.sh port_for_env() — the tunnel has to be running
+# (`sql-db.sh --env <env> --fg` in a terminal) for these to connect.
+#
+# Passwords intentionally omitted: Cloud SQL IAM tokens rotate ~hourly and
+# never belong in a file. The supported flows are:
+#   1. preferred:  sql-db.sh --env <env> --rainfrog  (fresh token, no prompt)
+#   2. manual:     pick a connection below — rainfrog prompts for the
+#                  password; paste the output of `gcloud auth
+#                  print-access-token`.
+dev-master  = { host = "127.0.0.1", driver = "postgres", port = 15432, database = "service-a", username = "marcin@cast.ai" }
+prod-master = { host = "127.0.0.1", driver = "postgres", port = 15433, database = "service-a", username = "marcin@cast.ai" }
+prod-eu     = { host = "127.0.0.1", driver = "postgres", port = 15434, database = "service-a", username = "marcin@cast.ai" }
+prod-india  = { host = "127.0.0.1", driver = "postgres", port = 15435, database = "service-a", username = "marcin@cast.ai" }
