@@ -14,8 +14,11 @@ local function parse_dsn(out)
 end
 
 ---Connect to <env> and open the dadbod console (async, non-blocking).
+---Also registers the env in g:dbs so :DBUIToggle shows it (fresh token).
 ---@param env string
 function M.use_env(env)
+  vim.g.dbs = vim.g.dbs or {}
+  vim.g.dbs[env] = nil -- force a fresh resolve; re-added on success below
   local job = vim.system({ SCRIPT, "--env", env }, { text = true }, function(obj)
     local out = (obj.stdout or "") .. (obj.stderr or "")
     if obj.code ~= 0 then
@@ -28,6 +31,7 @@ function M.use_env(env)
       return
     end
     vim.g.db = dsn
+    vim.g.dbs[env] = dsn -- :DBUIToggle will list this env while the token is valid
     vim.notify("db: connected to " .. env, vim.log.levels.INFO)
     pcall(vim.cmd, "DB")
   end)
