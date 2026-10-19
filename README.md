@@ -53,6 +53,7 @@ Real project names, GCP IDs and DB names live in `local/projects.env` (gitignore
 
 ```bash
 ./scripts/dotfiles-init.sh --example    # first time: copy + edit the example
+./scripts/dotfiles-init.sh --deps       # install rainfrog + vi-sql (brew/cargo)
 ./scripts/dotfiles-init.sh              # render herdr/rainfrog local configs
 ```
 `sql-db.sh`, nvim's DB keys and `service-repo-project` read this file; herdr and

@@ -19,6 +19,8 @@
 #
 # Usage:
 #   dotfiles-init.sh            validate + render everything
+#   dotfiles-init.sh --deps     install DB TUIs (rainfrog, vi-sql) via brew
+#                               (cargo/install-script fallback on other OSes)
 #   dotfiles-init.sh --example  copy scripts/projects.env.example -> local/
 #   dotfiles-init.sh --show     print the local config (passwords never exist)
 #   dotfiles-init.sh --help
@@ -32,18 +34,36 @@ TEMPLATES="$REPO_DIR/scripts/templates"
 HERDR_SRC="$REPO_DIR/.config/herdr/plugins/config/cloudmanic.herdr-plus"
 
 show=""
+install_deps=""
 for arg in "$@"; do
   case "$arg" in
+    --deps) install_deps=1 ;;
     --example)
       mkdir -p "$LOCALS"
       cp "$REPO_DIR/scripts/projects.env.example" "$ENV_FILE"
       echo "dotfiles-init: created $ENV_FILE from example — edit it, then re-run"
       exit 0 ;;
     --show) show=1 ;;
-    --help) sed -n '1,24p' "$0"; exit 0 ;;
+    --help) sed -n '1,28p' "$0"; exit 0 ;;
     *) echo "dotfiles-init: unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+if [ -n "$install_deps" ]; then
+  echo "dotfiles-init: installing DB TUIs (rainfrog, vi-sql)..."
+  if command -v brew >/dev/null 2>&1; then
+    brew install rainfrog vi-sql
+  else
+    if command -v cargo >/dev/null 2>&1; then
+      echo "dotfiles-init: no brew — cargo install rainfrog"
+      cargo install rainfrog --locked
+    fi
+    command -v vi-sql >/dev/null 2>&1 || \
+      VI_SQL_VERSION="${VI_SQL_VERSION:-v0.6.0}" sh -c "$(curl -fsSL https://vi-sql.com/install.sh)"
+  fi
+  command -v rainfrog && command -v vi-sql && echo "dotfiles-init: rainfrog + vi-sql available"
+  exit 0
+fi
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "dotfiles-init: $ENV_FILE missing." >&2
