@@ -31,27 +31,19 @@
 
 set -eu
 
-# env -> GCP project (verified 2026-10: instance + IAM user exist per env)
-project_for_env() {
-  case "$1" in
-    prod-master) echo "project-prod-master" ;;
-    prod-eu)     echo "project-prod-eu" ;;
-    prod-india)  echo "project-prod-india" ;;
-    dev-master)  echo "project-dev-master" ;;
-    *) echo "sql-db: unknown env '$1' (prod-master|prod-eu|prod-india|dev-master)" >&2; exit 2 ;;
-  esac
-}
+# Real names/IDs live in local/projects.env (gitignored; rendered/edited via
+# scripts/dotfiles-init.sh) — nothing infra-specific is tracked in git.
+LOCAL_ENV="${DOTFILES_LOCAL_FILE:-$HOME/dotfiles/local/projects.env}"
+[ -f "$LOCAL_ENV" ] || { echo "sql-db: missing $LOCAL_ENV — run scripts/dotfiles-init.sh" >&2; exit 1; }
+. "$LOCAL_ENV"
 
-# env -> local tunnel port (keep in sync with nvim/lua/config/db.lua ENV_PORTS)
-port_for_env() {
-  case "$1" in
-    dev-master)  echo "15432" ;;
-    prod-master) echo "15433" ;;
-    prod-eu)     echo "15434" ;;
-    prod-india)  echo "15435" ;;
-    *) echo "15432" ;;
-  esac
+env_lookup() { # env_lookup <env> <project|port>
+  local k
+  k="env_$(printf '%s' "$1" | tr '-' '_')_$2"
+  eval "printf '%s' \"\${$k:-}\""
 }
+project_for_env() { env_lookup "$1" project; }
+port_for_env() { env_lookup "$1" port; }
 
 ENV="prod-master"
 NAME="service-a"
@@ -82,7 +74,9 @@ done
 
 [ -n "$PROJECT" ] || PROJECT=$(project_for_env "$ENV")
 [ -n "$PORT" ] || PORT=$(port_for_env "$ENV")
-[ -n "$DB" ] || DB="$NAME"
+[ -n "$NAME" ] || NAME="${SQL_SUFFIX:-}"
+[ -n "$DB" ] || DB="${DB_NAME:-$NAME}"
+[ -n "$USER" ] || USER="${DB_USER:-}"
 
 if [ "$mode" = stop ]; then
   pkill -f "px glass" 2>/dev/null || true

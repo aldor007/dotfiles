@@ -1,13 +1,14 @@
 #!/bin/sh
-# service-repo-project — ensure a dedicated git worktree exists for a service-repo
-# herdr-plus project, optionally check out a branch in it, then open the project.
+# service-repo-project — ensure a dedicated git worktree exists for a project,
+# optionally check out a branch in it, then open the project.
 #
-# Each project (service-a, service-b, service-repo) has its own worktree at
-# ~/work/service-repo/.worktrees/<name>, created off origin/master on first use
-# and reused afterwards.
+# Project names, the repo path and service list live in local/projects.env
+# (gitignored, rendered via scripts/dotfiles-init.sh) — nothing infra-specific
+# is tracked in git. Keep the CLI identical: all that changed is where the
+# values come from.
 #
 # Usage:
-#   service-repo-project [--ensure] service-a|service-b|service-repo [branch]
+#   service-repo-project [--ensure] <project> [branch]
 #
 #     --ensure   create/checkout only; do not open the project
 #     branch     optional branch to check out in the worktree:
@@ -18,6 +19,15 @@
 
 set -eu
 
+LOCAL_ENV="${DOTFILES_LOCAL_FILE:-$HOME/dotfiles/local/projects.env}"
+if [ ! -f "$LOCAL_ENV" ]; then
+  echo "service-repo-project: missing $LOCAL_ENV — run scripts/dotfiles-init.sh" >&2
+  exit 1
+fi
+. "$LOCAL_ENV"
+
+repo="${KUBECAST_REPO:-$HOME/work/service-repo}"
+
 ensure_only=0
 if [ "${1:-}" = "--ensure" ]; then
     ensure_only=1
@@ -25,17 +35,31 @@ if [ "${1:-}" = "--ensure" ]; then
 fi
 
 name="${1:-}"
-case "$name" in
-    service-a|service-b|service-repo) ;;
-    *) echo "usage: service-repo-project [--ensure] service-a|service-b|service-repo [branch]" >&2; exit 2 ;;
+case " $KUBECAST_PROJECTS " in
+    *" $name "*) ;;
+    *) echo "usage: service-repo-project [--ensure] <one of: $KUBECAST_PROJECTS> [branch]" >&2; exit 2 ;;
 esac
 
 branch="${2:-}"
 
-repo="$HOME/work/service-repo"
 wt="$repo/.worktrees/$name"
 
-if ! git -C "$repo" worktree list --porcelain | grep -qx "worktree $wt"; then
+wt_exists=0
+if git -C "$repo" worktree list --porcelain | grep -qx "worktree $wt"; then
+    wt_exists=1
+fi
+
+# Refresh origin refs before basing work on them: new worktree creation
+# (branched off origin/master) or an explicit branch checkout (may need
+# origin/$branch). Opening an existing worktree without a branch stays
+# network-free.
+if [ "$wt_exists" -eq 0 ] || [ -n "$branch" ]; then
+    if ! git -C "$repo" fetch origin --prune --quiet; then
+        echo "service-repo-project: warning: git fetch origin failed, continuing with local refs" >&2
+    fi
+fi
+
+if [ "$wt_exists" -eq 0 ]; then
     echo "service-repo-project: creating worktree .worktrees/$name (branch '$name' off origin/master)"
     if ! git -C "$repo" worktree add -b "$name" ".worktrees/$name" origin/master; then
         echo "service-repo-project: branch '$name' already exists, checking it out instead"

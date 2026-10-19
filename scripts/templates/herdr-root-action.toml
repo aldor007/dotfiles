@@ -1,0 +1,5 @@
+# rendered by dotfiles-init.sh
+name = "@@REPO_BASENAME@@"
+description = "Open the @@REPO_BASENAME@@ project workspace (monorepo root)"
+type = "command"
+command = "herdr-plus open @@REPO_BASENAME@@ || read -t 10 _ </dev/tty || true"

@@ -1,0 +1,19 @@
+# Auto-layout applied to every worktree herdr creates/opens for the
+# @@REPO_BASENAME@@ repo (rendered by dotfiles-init.sh). The worktree
+# checkout is the root; tabs land at the repo root.
+repo = "@@REPO_BASENAME@@"
+
+[[tabs]]
+name = "kimchi"
+command = "env HERDR_AGENT=pi KIMCHI_AGENT_SOURCE=herdr:pi KIMCHI_AGENT_NAME=pi kimchi"
+
+[[tabs]]
+name = "lazygit"
+command = "lazygit"
+
+[[tabs]]
+name = "nvim"
+command = "nvim ."
+
+[[tabs]]
+name = "shell"

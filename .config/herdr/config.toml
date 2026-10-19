@@ -93,7 +93,8 @@ type = "plugin_action"
 command = "toggle-pane"
 description = "Open Missionctl Companion dashboard (split)"
 
-# herdr-plus plugin: prefix+up opens the Projects browser (service-a / service-b),
+# herdr-plus plugin: prefix+up opens the Projects browser (one workspace
+# per service, rendered locally by scripts/dotfiles-init.sh)
 # prefix+down opens the Quick Actions fuzzy launcher (worktree actions etc).
 [[keys.command]]
 key = "prefix+up"

@@ -173,7 +173,10 @@ function install_rainfrog {
         *)      conf="$HOME/.config/rainfrog" ;;
     esac
     mkdir -p "$conf"
-    ln -sf "${base_dir}.config/rainfrog/rainfrog_config.toml" "$conf/rainfrog_config.toml"
+    # local generated config (dotfiles-init.sh) wins; tracked base is fallback
+    src=${base_dir}local/rainfrog/rainfrog_config.toml
+    [ -f "$src" ] || src=${base_dir}.config/rainfrog/rainfrog_config.toml
+    ln -sf "$src" "$conf/rainfrog_config.toml"
     echo "rainfrog installed; config linked -> $conf/rainfrog_config.toml"
 }
 
@@ -227,13 +230,16 @@ function install_herdr {
     [ -d "${HOME}/work/missionctl" ] && herdr plugin link "${HOME}/work/missionctl" 2>/dev/null || true
     mkdir -p ~/.config/herdr
     ln -sf ${base_dir}.config/herdr/config.toml ~/.config/herdr/config.toml
-    # herdr-plus plugin config: projects / quick-actions / worktrees are symlinked
-    # in, so the repo stays the single source of truth for the plugin's TOML files.
+    # herdr-plus plugin config: projects / quick-actions / worktrees are
+    # symlinked in, so the LOCAL generated dir (dotfiles-init.sh) wins; the
+    # tracked dir is only the template fallback.
     mkdir -p ~/.config/herdr/plugins/config/cloudmanic.herdr-plus
     for d in projects quick-actions worktrees; do
         dst=~/.config/herdr/plugins/config/cloudmanic.herdr-plus/$d
+        src=${base_dir}local/herdr/$d
+        [ -d "$src" ] || src=${base_dir}.config/herdr/plugins/config/cloudmanic.herdr-plus/$d
         rm -rf "$dst"
-        ln -s ${base_dir}.config/herdr/plugins/config/cloudmanic.herdr-plus/$d "$dst"
+        ln -s "$src" "$dst"
     done
     # cdragon.command-center / glab-status / herdr-jira plugin configs are
     # fully repo-managed: each config dir is replaced with a symlink into this repo.

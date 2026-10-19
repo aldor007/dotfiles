@@ -2,15 +2,37 @@
 -- Runs the script (starts the px IAP tunnel on demand), parses the printed
 -- DSN, sets g:db for vim-dadbod, and opens the interactive console.
 -- Note: IAM tokens rotate ~hourly — a failing query means re-run the keybind.
+-- Real names/IDs (GCP projects, DB/instance names, ports) are read from the
+-- gitignored local/projects.env (scripts/dotfiles-init.sh) — not from git.
 local M = {}
 
 local SCRIPT = vim.fn.expand("~/dotfiles/scripts/sql-db.sh")
+local ENV_FILE = vim.fn.expand("~/dotfiles/local/projects.env")
 
--- Keep in sync with scripts/sql-db.sh port_for_env()
+local function load_env_file()
+  local out = {}
+  if vim.fn.filereadable(ENV_FILE) == 1 then
+    for _, line in ipairs(vim.fn.readfile(ENV_FILE)) do
+      local k, v = line:match("^([%w_]+)=(.*)$")
+      if k and v then
+        out[k] = v:gsub('^"', ""):gsub('"$', "")
+      end
+    end
+  end
+  return out
+end
+
+local env = load_env_file()
 local ENVS = { "dev-master", "prod-master", "prod-eu", "prod-india" }
-local ENV_PORTS = { dev_master = 15432, prod_master = 15433, prod_eu = 15434, prod_india = 15435 }
-local DB_USER = "marcin@cast.ai"
-local DB_NAME = "service-a"
+local DB_USER = env.DB_USER or "you@example.com"
+local DB_NAME = env.DB_NAME or "app"
+
+-- env name -> local tunnel port, from local/projects.env (env_<env>_port)
+local function port_for_env(envname)
+  local k = "env_" .. envname:gsub("-", "_") .. "_port"
+  local v = env[k]
+  return v and tonumber(v) or nil
+end
 
 ---Parse the DSN out of sql-db.sh output ("sql-db: dsn    postgres://...")
 ---@param out string
@@ -37,13 +59,21 @@ function M.seed()
       return
     end
     local port_by_env = {}
-    for k, port in pairs(ENV_PORTS) do
-      port_by_env[k:gsub("%_", "-")] = port
+    for _, e in ipairs(ENVS) do
+      local p = port_for_env(e)
+      if p then port_by_env[e] = p end
     end
-    for _, env in ipairs(ENVS) do
-      dbs[env] = string.format(
+    if next(port_by_env) == nil or #ENVS ~= vim.tbl_count(port_by_env) then
+      vim.notify(
+        "db: " .. ENV_FILE .. " missing/empty — run scripts/dotfiles-init.sh first",
+        vim.log.levels.ERROR
+      )
+      return
+    end
+    for _, envname in ipairs(ENVS) do
+      dbs[envname] = string.format(
         "postgres://%s%%40cast.ai:%s@127.0.0.1:%d/%s?sslmode=require",
-        DB_USER:gsub("@.*", ""), token, port_by_env[env], DB_NAME
+        DB_USER:gsub("@.*", ""), token, port_by_env[envname], DB_NAME
       )
     end
     vim.g.dbs = dbs

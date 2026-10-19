@@ -1,22 +1,5 @@
-# rainfrog config — dotfiles-managed. NO secrets here: connections are
-# passed at runtime as a fresh IAM DSN via `sql-db.sh --rainfrog`
-# (or prompted), so nothing in this file can leak credentials.
+# rainfrog config — DOTFILES-MANAGED BASE (tracked, no names/IDs). The real
+# connection list is rendered locally by scripts/dotfiles-init.sh into
+# local/rainfrog/rainfrog_config.toml (gitignored) and symlinked into place
+# by install.sh — keep runtime connections out of git.
 mouse_mode = true
-
-[db]
-# CAST AI Cloud SQL (service-a db) through the px IAP tunnel. Ports must match
-# scripts/sql-db.sh port_for_env() — the tunnel has to be running
-# (`sql-db.sh --env <env> --fg` in a terminal) for these to connect.
-#
-# Passwords intentionally omitted: Cloud SQL IAM tokens rotate ~hourly and
-# never belong in a file. The supported flows are:
-#   1. preferred:  sql-db.sh --env <env> --rainfrog  (fresh token, no prompt)
-#   2. manual:     pick a connection below — rainfrog prompts for the
-#                  password; paste the output of `gcloud auth
-#                  print-access-token`. The token must be FRESH (<1h):
-#                  an expired or hand-edited paste fails with
-#                  "Cloud SQL IAM user authentication failed".
-dev-master  = { host = "127.0.0.1", driver = "postgres", port = 15432, database = "service-a", username = "marcin@cast.ai" }
-prod-master = { host = "127.0.0.1", driver = "postgres", port = 15433, database = "service-a", username = "marcin@cast.ai" }
-prod-eu     = { host = "127.0.0.1", driver = "postgres", port = 15434, database = "service-a", username = "marcin@cast.ai" }
-prod-india  = { host = "127.0.0.1", driver = "postgres", port = 15435, database = "service-a", username = "marcin@cast.ai" }

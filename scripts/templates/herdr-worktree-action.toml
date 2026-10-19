@@ -1,0 +1,9 @@
+# rendered by dotfiles-init.sh
+name = "@@SERVICE@@ worktree"
+description = "Fresh throwaway @@REPO_BASENAME@@ worktree — asks for the branch name (empty = @@SERVICE@@-<timestamp>)"
+type = "form"
+command = "herdr worktree create --cwd @@REPO@@ --branch {{ if .Value }}{{ .Value }}{{ else }}@@SERVICE@@-$(date +%Y%m%d-%H%M%S){{ end }} --label {{ if .Value }}{{ .Value }}{{ else }}@@SERVICE@@-$(date +%m%d-%H%M){{ end }} --focus || read -t 10 _ </dev/tty || true"
+
+[form]
+prompt = "Branch name for the new @@SERVICE@@ worktree"
+placeholder = "e.g. feat/@@SERVICE@@-thing (empty = @@SERVICE@@-<timestamp>)"

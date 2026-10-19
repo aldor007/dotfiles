@@ -1,0 +1,5 @@
+# rendered by dotfiles-init.sh
+name = "@@SERVICE@@"
+description = "Open the @@SERVICE@@ project workspace (main checkout, services/@@SERVICE@@)"
+type = "command"
+command = "herdr-plus open @@SERVICE@@ || read -t 10 _ </dev/tty || true"

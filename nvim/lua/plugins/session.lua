@@ -1,6 +1,6 @@
 -- Session management: resession.nvim — branch/worktree-aware sessions.
--- Fits the herdr worktree flow (service-a/service-b/service-repo per-branch
--- checkouts); `,ss` saves named sessions for the current directory+branch.
+-- Fits the herdr worktree flow (per-branch checkouts; project names come
+-- from the gitignored local/projects.env, see scripts/dotfiles-init.sh); `,ss` saves named sessions for the current directory+branch.
 return {
   {
     "stevearc/resession.nvim",

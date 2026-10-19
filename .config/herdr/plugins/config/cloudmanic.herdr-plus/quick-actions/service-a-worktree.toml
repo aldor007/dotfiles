@@ -1,8 +1,0 @@
-name = "service-a worktree"
-description = "Fresh throwaway service-repo worktree — asks for the branch name (empty = service-a-<timestamp>)"
-type = "form"
-command = "herdr worktree create --cwd ~/work/service-repo --branch {{ if .Value }}{{ .Value }}{{ else }}service-a-$(date +%Y%m%d-%H%M%S){{ end }} --label {{ if .Value }}{{ .Value }}{{ else }}service-a-$(date +%m%d-%H%M){{ end }} --focus || read -t 10 _ </dev/tty || true"
-
-[form]
-prompt = "Branch name for the new service-a worktree"
-placeholder = "e.g. feat/service-a-thing (empty = service-a-<timestamp>)"

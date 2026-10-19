@@ -1,8 +1,5 @@
-# Removed legacy / Linux-era config directories (dead weight, git rm --cached;
-# kept on disk so existing symlinks keep working). See git history for content.
-.vim/
-.config/sublime-text-3/
-
-# macOS + python junk
+# Local dotfiles config (see local/README or scripts/projects.env.example).
+# Real project names / GCP IDs / DB names are generated here and never tracked.
+local/
 .DS_Store
 *.pyc

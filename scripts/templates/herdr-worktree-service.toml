@@ -1,0 +1,24 @@
+# Branch-specific layout for the "@@SERVICE@@" branch of the @@REPO_BASENAME@@
+# repo (rendered by dotfiles-init.sh). Branch-specific beats the repo-only
+# @@REPO_BASENAME@@.toml layout. Tabs rooted at services/@@SERVICE@@.
+repo = "@@REPO_BASENAME@@"
+branch = "@@SERVICE@@"
+
+[[tabs]]
+name = "kimchi"
+command = "env HERDR_AGENT=pi KIMCHI_AGENT_SOURCE=herdr:pi KIMCHI_AGENT_NAME=pi kimchi"
+working_dir = "services/@@SERVICE@@"
+
+[[tabs]]
+name = "lazygit"
+command = "lazygit"
+working_dir = "services/@@SERVICE@@"
+
+[[tabs]]
+name = "nvim"
+command = "nvim ."
+working_dir = "services/@@SERVICE@@"
+
+[[tabs]]
+name = "shell"
+working_dir = "services/@@SERVICE@@"

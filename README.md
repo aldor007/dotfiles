@@ -12,7 +12,7 @@ Terminal multiplexer: **tmux**. Workflows: **herdr**-managed panes/workspaces.
 | `nvim/` formatters | `conform.nvim` formats on save (LSP fallback), `nvim-lint` adds ruff/shellcheck. Binaries: `brew install stylua ruff prettier shellcheck` or `./install.sh -i formatters` |
 | `.zshrc` | oh-my-zsh, PATH/tool wiring (gsd, kimchi/pi, docker wrapper, PR summary) |
 | `.tmux/` | tmux config (prefix `C-a`, mouse on, optional powerline2) |
-| `scripts/` | `pr-summary.sh` (daily PR/MR digest), `worktree-clean`, `service-repo-project`, `pi` (kimchi shim), `sql-db.sh` (per-env Cloud SQL via px IAP tunnel + IAM — `--psql`, `--rainfrog`, `--visql`, `--fg`), small utils |
+| `scripts/` | `pr-summary.sh` (daily PR/MR digest), `worktree-clean`, `service-repo-project` (names/ids from gitignored `local/projects.env`), `pi` (kimchi shim), `sql-db.sh` (per-env Cloud SQL via px IAP tunnel + IAM — `--psql`, `--rainfrog`, `--visql`, `--fg`), `dotfiles-init.sh` (renders the local config), small utils |
 | `.config/herdr/` | herdr plugin configs (single source of truth, symlinked in by install.sh) |
 | `install.sh` | installer — `-i herdr` (any OS), `-i all` (legacy Debian/Ubuntu stack) |
 | `.gitconfig` `.pylintrc` `.eslintrc.json` `.jshintrc` `.screenrc` | classic dotfiles |
@@ -45,5 +45,17 @@ Terminal multiplexer: **tmux**. Workflows: **herdr**-managed panes/workspaces.
 - `scripts/pr-summary.sh` — open-PR/MR digest with CI state, merge conflicts
   and new comments since the last run; wire up via the `prs`/`prsa` aliases.
 - `scripts/worktree-clean` — safe removal of inactive git worktrees.
-- `scripts/service-repo-project` — worktree-aware project opener for service-repo.
+- `scripts/service-repo-project` — worktree-aware project opener (projects/repo read from `local/projects.env`, not git).
+
+## Local config (not tracked)
+
+Real project names, GCP IDs and DB names live in `local/projects.env` (gitignored):
+
+```bash
+./scripts/dotfiles-init.sh --example    # first time: copy + edit the example
+./scripts/dotfiles-init.sh              # render herdr/rainfrog local configs
+```
+`sql-db.sh`, nvim's DB keys and `service-repo-project` read this file; herdr and
+rainfrog pick up the generated `local/herdr` / `local/rainfrog` outputs, which
+`install.sh` symlinks ahead of the tracked templates.
 - `scripts/pi` — `pi` -> `kimchi` shim so herdr's native session restore works.
