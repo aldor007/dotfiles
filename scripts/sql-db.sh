@@ -20,6 +20,8 @@
 #   sql-db.sh --env X --psql          same, then exec psql
 #   sql-db.sh --env X --rainfrog      same, then open rainfrog TUI with the
 #                                     fresh DSN (spreadsheet-style browser)
+#   sql-db.sh --env X --visql         same, then open vi-sql TUI (vim-mode
+#                                     SQL editor + schema browser + MCP)
 #   sql-db.sh --stop                  kill px glass processes
 #   extra flags pass through to px glass proxy (--instance VM, --zone Z,
 #                                     --skip-grants, ...)
@@ -71,6 +73,7 @@ while [ $# -gt 0 ]; do
     --fg|--foreground) mode=foreground; shift ;;
     --psql)     mode=psql; shift ;;
     --rainfrog) mode=rainfrog; shift ;;
+    --visql)    mode=visql; shift ;;
     --stop)     mode=stop; shift ;;
     --*)        px_extra="$px_extra $1"; shift ;;
     *) echo "sql-db: unknown arg: $1" >&2; exit 2 ;;
@@ -136,4 +139,8 @@ fi
 
 if [ "$mode" = rainfrog ]; then
   exec rainfrog --url "$dsn"
+fi
+
+if [ "$mode" = visql ]; then
+  exec vi-sql --connect "$dsn"
 fi

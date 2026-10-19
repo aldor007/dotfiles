@@ -145,6 +145,17 @@ function install_formatters {
     fi
 }
 
+# vi-sql: vim-mode SQL TUI (schema browser, grid editing, EXPLAIN, MCP
+# server for AI). brew on macOS; pinned curl installer elsewhere.
+function install_vi_sql {
+    if command -v brew >/dev/null 2>&1; then
+        brew install vi-sql
+    else
+        VI_SQL_VERSION="${VI_SQL_VERSION:-v0.6.0}" sh -c "$(curl -fsSL https://vi-sql.com/install.sh)"
+    fi
+    echo "vi-sql installed: vi-sql --connect <dsn> (or sql-db.sh --visql)"
+}
+
 # rainfrog: spreadsheet-style DB TUI (Postgres/MySQL/SQLite).
 # macOS via brew; elsewhere via cargo. Config is repo-managed (no secrets;
 # connections come from sql-db.sh --rainfrog with a fresh IAM DSN).
@@ -251,6 +262,9 @@ case $install_typ in
     rainfrog)
         install_rainfrog
     ;;
+    vi-sql)
+        install_vi_sql
+    ;;
     zsh)
         install_zsh
     ;;
@@ -274,6 +288,7 @@ case $install_typ in
         install_vim
         install_formatters
         install_rainfrog
+        install_vi_sql
         install_fonts
         install_gitconf
         install_fzf
