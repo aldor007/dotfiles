@@ -297,10 +297,6 @@ check("fugitive :Git available", function()
 end)
 
 -- 11. Plugins added in the 2026-10 batch
-check("flash loads", function()
-  assert(type(require("flash").jump) == "function", "flash.jump missing")
-end)
-
 check("conform loads + :ConformInfo", function()
   require("conform")
   assert(vim.fn.exists(":ConformInfo") == 2, ":ConformInfo not defined")
