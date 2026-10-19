@@ -42,7 +42,7 @@ function M.seed()
     end
     for _, env in ipairs(ENVS) do
       dbs[env] = string.format(
-        "postgres://%s%%40cast.ai:%s@127.0.0.1:%d/%s?sslmode=disable",
+        "postgres://%s%%40cast.ai:%s@127.0.0.1:%d/%s?sslmode=require",
         DB_USER:gsub("@.*", ""), token, port_by_env[env], DB_NAME
       )
     end

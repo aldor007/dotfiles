@@ -99,9 +99,12 @@ if [ -z "$instance" ]; then
 fi
 
 # fresh IAM token as the password (user email URL-encoded: @ -> %40)
+# sslmode=require: Cloud SQL Postgres pg_hba rejects unencrypted IAM logins;
+# the px IAP tunnel is the trust boundary, so encryption without cert
+# verification (require) is sufficient here.
 token=$(gcloud auth print-access-token)
 user_enc=$(printf '%s' "$USER" | sed 's/@/%40/g')
-dsn="postgres://$user_enc:$token@127.0.0.1:$PORT/$DB?sslmode=disable"
+dsn="postgres://$user_enc:$token@127.0.0.1:$PORT/$DB?sslmode=require"
 
 if [ "$mode" = foreground ]; then
   echo "sql-db: tunnel ${ENV} (${instance}) on 127.0.0.1:${PORT} — Ctrl-C stops it"
