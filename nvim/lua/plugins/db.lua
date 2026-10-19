@@ -11,6 +11,23 @@ return {
     cmd = { "DB", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer" },
     keys = {
       { "<leader>dbx", function() require("dbui").toggle() end, desc = "db: toggle browser" },
+      -- ,dk / ,dD / ,dx: connect via scripts/sql-db.sh (px IAP tunnel +
+      -- Cloud SQL IAM; see scripts/sql-db.sh --help). Sets g:db + console.
+      { "<leader>dk", function() require("config.db").use_env("prod-master") end, desc = "db: connect prod-master (service-a)" },
+      {
+        "<leader>dD",
+        function()
+          vim.ui.select(
+            { "dev-master", "prod-master", "prod-eu", "prod-india" },
+            { prompt = "Connect DB env" },
+            function(env)
+              if env then require("config.db").use_env(env) end
+            end
+          )
+        end,
+        desc = "db: connect env (picker)",
+      },
+      { "<leader>dx", function() require("config.db").stop() end, desc = "db: stop tunnel" },
     },
   },
   {
