@@ -52,6 +52,21 @@ function M.seed()
   return job
 end
 
+---Ensure the px tunnel for every env is up (idempotent: sql-db.sh only
+---starts what's missing; per-env ports keep them independent). Quiet on
+---success; notifies when a tunnel fails. Called on `User DBUIOpened` so
+---,DBUIToggle is immediately usable.
+function M.ensure_all()
+  for _, env in ipairs(ENVS) do
+    vim.system({ SCRIPT, "--env", env }, { text = true }, function(obj)
+      if obj.code ~= 0 then
+        local err = ((obj.stderr or "") .. (obj.stdout or "")):gsub("%s+", " "):sub(1, 200)
+        vim.notify("db: tunnel for " .. env .. " failed — " .. err, vim.log.levels.WARN)
+      end
+    end)
+  end
+end
+
 ---Connect to <env> and open the dadbod console (async, non-blocking).
 ---Also registers the env in g:dbs so :DBUIToggle shows it (fresh token).
 ---@param env string

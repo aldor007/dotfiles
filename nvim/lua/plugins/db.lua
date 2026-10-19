@@ -14,6 +14,12 @@ return {
     cmd = { "DB", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer" },
     config = function()
       require("config.db").seed()
+      -- When the DB browser opens, ensure every env's px tunnel is up so
+      -- selecting a connection actually works (idempotent, per-env ports).
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "DBUIOpened",
+        callback = function() require("config.db").ensure_all() end,
+      })
     end,
     keys = {
       { "<leader>dbx", function() require("dbui").toggle() end, desc = "db: toggle browser" },
