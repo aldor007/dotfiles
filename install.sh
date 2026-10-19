@@ -222,12 +222,12 @@ function install_herdr {
     herdr plugin install --yes ChmaraX/herdr-nvim
     herdr plugin install --yes Davidcreador/herdr-token-dashboard
     herdr plugin install --yes jpwallace22/herdr-glab-status
-    herdr plugin install --yes qu8n/herdr-automatic-rename
     herdr plugin install --yes a2u/herdr-jira
     herdr plugin install --yes robbyrussell/herdr-ohmyzsh
     herdr plugin install --yes persiyanov/herdr-reviewr
-    # missionctl-companion is a local plugin that lives in its own repo
-    [ -d "${HOME}/work/missionctl" ] && herdr plugin link "${HOME}/work/missionctl" 2>/dev/null || true
+    # herdr-bar: Cmd+K fuzzy jump (takes over auto tab titles now that
+    # herdr-automatic-rename is removed; prefix+k binding in config.toml)
+    herdr plugin install --yes jeffarese/herdr-bar
     mkdir -p ~/.config/herdr
     ln -sf ${base_dir}.config/herdr/config.toml ~/.config/herdr/config.toml
     # herdr-plus plugin config: projects / quick-actions / worktrees are

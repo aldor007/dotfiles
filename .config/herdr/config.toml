@@ -78,21 +78,6 @@ type = "plugin_action"
 command = "glab-status.open-mr"
 description = "open GitLab MR"
 
-# missionctl-companion plugin: toggle the PR + telemetry dashboard pane.
-# The action invokes $HERDR_PLUGIN_ROOT/bin/toggle-pane.sh, which
-# opens (or closes) the companion pane in the current workspace.
-# Herdr 0.9.0 has a bug where `plugin pane open --placement split`
-# rejects every --target-pane flag variant (help text says
-# `--target-pane`, error says `target_pane_id`, both rejected).
-# The workaround is `--placement split --no-focus` with no
-# --target-pane flag — herdr auto-picks the active pane. See the
-# comment in bin/toggle-pane.sh for details.
-[[keys.command]]
-key = "prefix+m"
-type = "plugin_action"
-command = "toggle-pane"
-description = "Open Missionctl Companion dashboard (split)"
-
 # herdr-plus plugin: prefix+up opens the Projects browser (one workspace
 # per service, rendered locally by scripts/dotfiles-init.sh)
 # prefix+down opens the Quick Actions fuzzy launcher (worktree actions etc).
@@ -135,6 +120,14 @@ key = "prefix+shift+i"
 type = "plugin_action"
 command = "herdr-jira.open-jira-tab"
 description = "Jira (tab)"
+
+# herdr-bar: fuzzy jump to any tab/agent/workspace/repo/branch (Cmd+K style).
+# Auto tab titles for unnamed Claude/Codex tabs are enabled by default.
+[[keys.command]]
+key = "prefix+k"
+type = "plugin_action"
+command = "herdr-bar.open"
+description = "command bar (jump to tab/agent)"
 
 [ui.toast]
 delivery = "terminal"
