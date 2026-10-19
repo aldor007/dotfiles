@@ -1,0 +1,4 @@
+name = "db prod-eu (tunnel + vi-sql)"
+description = "Two panes: px IAP tunnel for prod-eu, then vi-sql (service-a)"
+type = "command"
+command = "herdr-plus open db-prod-eu || read -t 10 _ </dev/tty || true"

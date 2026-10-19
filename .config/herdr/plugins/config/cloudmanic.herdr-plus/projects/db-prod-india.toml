@@ -1,0 +1,18 @@
+# DB workspace: prod-india (service-a) — tunnel pane + vi-sql pane.
+name = "db-prod-india"
+description = "prod-india service-a DB — px IAP tunnel + vi-sql"
+group = "DB"
+working_dir = "~"
+
+[[tabs]]
+name = "db"
+
+[[tabs.panes]]
+label = "tunnel"
+command = "~/dotfiles/scripts/sql-db.sh --env prod-india --fg"
+
+[[tabs.panes]]
+label = "vi-sql"
+command = "~/dotfiles/scripts/sql-db.sh --env prod-india --visql"
+split = "right"
+ratio = 0.75

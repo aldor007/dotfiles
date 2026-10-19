@@ -1,0 +1,18 @@
+# DB workspace: dev-master (service-a) — tunnel pane + vi-sql pane.
+name = "db-dev-master"
+description = "dev-master service-a DB — px IAP tunnel + vi-sql"
+group = "DB"
+working_dir = "~"
+
+[[tabs]]
+name = "db"
+
+[[tabs.panes]]
+label = "tunnel"
+command = "~/dotfiles/scripts/sql-db.sh --env dev-master --fg"
+
+[[tabs.panes]]
+label = "vi-sql"
+command = "~/dotfiles/scripts/sql-db.sh --env dev-master --visql"
+split = "right"
+ratio = 0.75
