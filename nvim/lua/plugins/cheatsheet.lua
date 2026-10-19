@@ -301,63 +301,6 @@ return {
     end
 
     ---------------------------------------------------------------------
-    -- Curated hints (accumulated across agent sessions)
-    ---------------------------------------------------------------------
-    local function hint_lines()
-      return {
-        "## Hints (curated from your sessions)",
-        "",
-        "-- Hardtime & typing habits",
-        "  h/j/k/l repeated >3x per second is blocked, with a hint popup",
-        "  popups go through nvim-notify — they need it installed to be visible",
-        "  :Hardtime report — usage stats · :Hardtime toggle — pause",
-        "  mouse is disabled by default (disable_mouse=true in lua/plugins/hardtime.lua)",
-        "",
-        "-- Notifications",
-        "  vim.notify → nvim-notify floats · :Notifications history · :Telescope notify",
-        "",
-        "-- Telescope & monorepo focus",
-        "  <C-p> files · <C-b> buffers · <Space>/ grep · <Space>g grep-in-dir · <Space>f files-in-dir",
-        "  <Space>cd pick a service dir under git root · <Space>cD back to git root",
-        "",
-        "-- Tabs & buffers",
-        "  barbar: <A-,/.> prev/next · <A-1..9,0> goto · <A-p> pin · <A-c> close · <A-S-c> restore",
-        "  <Space>bp pick buffer · <Space>bb/bn/bd/bl/bw re-sort",
-        "  tabman: ,t tabpage manager (o expand · x delete · <CR> jump · q quit)",
-        "",
-        "-- LSP",
-        "  gd def · gD decl · gi impl (picker) · gr refs (picker) · K hover",
-        "  ,rn rename · ,ca code action · ]d / [d diagnostics · ,ld ,lw ,ls pickers",
-        "",
-        "-- Completion & AI",
-        "  blink.cmp: <C-space> show · <C-y> accept · <C-p/n> select",
-        "  minuet inline AI: <A-y> in insert · needs ANTHROPIC_/OPENAI_/GEMINI_API_KEY",
-        "",
-        "-- Git",
-        "  fugitive :Git · diffview ,go tree · ,gl file history · ,gH repo history · ,gc close",
-        "  gitsigns: ]h [h hunks · ,hs stage · ,hr reset · ,hp preview · ,gb ,gB blame",
-        "",
-        "-- Debug / DB / Sessions",
-        "  dap: ,db breakpoint · ,dc continue · ,do ,di ,du steps · ,dut stop · ,dui UI",
-        "  dadbod: ,dbx browser · :DB query · :DBUIAddConnection",
-        "  resession: ,ss save · ,sl load · ,sd delete (per dir+branch; herdr worktrees)",
-        "",
-        "-- Format & lint",
-        "  format on save; ,cf manual (conform) · ruff + shellcheck run automatically",
-        "",
-        "-- Kubernetes",
-        "  :Kubectl view pods — full cluster TUI (drill <CR> · up <BS> · g? help inside)",
-        "  :Kubectx / :Kubens switch · gs sort · gd describe · gD delete · gl logs · f follow",
-        "  yaml: :YamlFetchClusterCRD · :YamlBrowseClusterCRDs · :Kubeconform validate file",
-        "",
-        "-- Gotchas",
-        "  s is Vim substitute again (flash removed) — mini.surround sa/sd/sr unchanged",
-        "  ,kk flat keymap list · this popup: ,kh",
-        "",
-      }
-    end
-
-    ---------------------------------------------------------------------
     -- Popup (nui, like :Hardtime report)
     ---------------------------------------------------------------------
     local popup
@@ -376,7 +319,6 @@ return {
         for _, l in ipairs(t) do lines[#lines + 1] = l end
       end
       append(quickstart_lines())
-      append(hint_lines())
       append(plugin_keys_lines())
       append(harvest_keymaps())
       append(plugin_lines())
