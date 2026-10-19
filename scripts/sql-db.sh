@@ -99,8 +99,10 @@ if ! nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; then
 fi
 
 # 4. mint a fresh IAM token as the password and print the connection
+#    (user email must be URL-encoded: @ -> %40)
 token=$(gcloud auth print-access-token)
-dsn="postgres://$USER:$token@127.0.0.1:$PORT/$DB?sslmode=disable"
+user_enc=$(printf '%s' "$USER" | sed 's/@/%40/g')
+dsn="postgres://$user_enc:$token@127.0.0.1:$PORT/$DB?sslmode=disable"
 echo "sql-db: env=${ENV} project=${PROJECT} instance=${instance}"
 echo "sql-db: tunnel 127.0.0.1:$PORT -> $instance (via px IAP)"
 echo "sql-db: dsn    $dsn"
