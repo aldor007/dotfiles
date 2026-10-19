@@ -245,6 +245,27 @@ check("hardtime works (its nui dep must be present)", function()
   assert(ok2, ":Hardtime report failed (nui popup broken?): " .. tostring(err2))
 end)
 
+check("cheatsheet popup (:Cheatsheet / ,kh)", function()
+  assert(vim.fn.exists(":Cheatsheet") == 2, ":Cheatsheet not defined")
+  for _, lhs in ipairs({ "?", "<leader>?" }) do
+    local m = vim.fn.maparg(lhs, "n", false, true)
+    assert(type(m) == "table" and tostring(m.rhs or ""):find("Cheatsheet"),
+      "cheatsheet not mapped to " .. lhs)
+  end
+  vim.cmd("Cheatsheet")
+  local bufnr = vim.g.cheatsheet_bufnr
+  assert(bufnr and vim.api.nvim_buf_is_valid(bufnr), "cheatsheet buffer missing")
+  local n = vim.api.nvim_buf_line_count(bufnr)
+  assert(n > 80, "cheatsheet too thin: " .. n .. " lines")
+  local txt = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+  for _, needle in ipairs({ "Environment (live)", "Hints", "Plugin keys", "Keymaps", "Plugins", "Leader", "barbar" }) do
+    assert(txt:find(needle, 1, true), "cheatsheet missing section: " .. needle)
+  end
+  vim.cmd("Cheatsheet") -- toggle closed
+  vim.wait(200)
+  assert(vim.g.cheatsheet_bufnr == nil, "cheatsheet did not close on toggle")
+end)
+
 check("nvim-notify owns vim.notify (hardtime hints sink)", function()
   local notify = require("notify")
   assert(vim.fn.exists(":Notifications") == 2, ":Notifications not defined")
@@ -338,6 +359,19 @@ end)
 check("kubeconform command + binary", function()
   assert(vim.fn.exists(":Kubeconform") == 2, ":Kubeconform not defined")
   assert(vim.fn.executable("kubeconform") == 1, "kubeconform binary missing")
+end)
+
+check("db: all envs seeded in g:dbs", function()
+  require("config.db").seed()
+  vim.wait(8000, function()
+    return vim.g.dbs and next(vim.g.dbs) ~= nil
+  end)
+  local keys = vim.g.dbs and vim.tbl_keys(vim.g.dbs) or {}
+  assert(#keys >= 4, "expected 4 env connections, got " .. vim.inspect(keys))
+  -- each URL must use the port of its env (and an encoded user)
+  for env, url in pairs(vim.g.dbs) do
+    assert(url:find("marcin%%40cast.ai"), env .. " url lacks encoded user")
+  end
 end)
 
 print(string.format("\n%d/%d checks passed", checks - #failures, checks))

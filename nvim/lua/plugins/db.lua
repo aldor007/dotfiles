@@ -8,7 +8,13 @@
 return {
   {
     "tpope/vim-dadbod",
+    -- VeryLazy: register all env connections in g:dbs at startup (one IAM
+    -- token mint; no tunnel started — see config/db.lua seed())
+    event = { "VeryLazy" },
     cmd = { "DB", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer" },
+    config = function()
+      require("config.db").seed()
+    end,
     keys = {
       { "<leader>dbx", function() require("dbui").toggle() end, desc = "db: toggle browser" },
       -- ,dk / ,dD / ,dx: connect via scripts/sql-db.sh (px IAP tunnel +

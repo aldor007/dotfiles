@@ -33,11 +33,22 @@ project_for_env() {
   esac
 }
 
+# env -> local tunnel port (keep in sync with nvim/lua/config/db.lua ENV_PORTS)
+port_for_env() {
+  case "$1" in
+    dev-master)  echo "15432" ;;
+    prod-master) echo "15433" ;;
+    prod-eu)     echo "15434" ;;
+    prod-india)  echo "15435" ;;
+    *) echo "15432" ;;
+  esac
+}
+
 ENV="prod-master"
 NAME="service-a"
 DB=""
 USER="marcin@cast.ai"
-PORT="${SQL_DB_PORT:-15432}"
+PORT="${SQL_DB_PORT:-}"
 PROJECT="${SQL_DB_PROJECT:-}"
 mode=print
 px_extra=""
@@ -58,6 +69,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$PROJECT" ] || PROJECT=$(project_for_env "$ENV")
+[ -n "$PORT" ] || PORT=$(port_for_env "$ENV")
 [ -n "$DB" ] || DB="$NAME"
 log_file="${TMPDIR:-/tmp}/sql-db-px.log"
 
