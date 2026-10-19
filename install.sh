@@ -145,6 +145,27 @@ function install_formatters {
     fi
 }
 
+# rainfrog: spreadsheet-style DB TUI (Postgres/MySQL/SQLite).
+# macOS via brew; elsewhere via cargo. Config is repo-managed (no secrets;
+# connections come from sql-db.sh --rainfrog with a fresh IAM DSN).
+function install_rainfrog {
+    if command -v brew >/dev/null 2>&1; then
+        brew install rainfrog
+    elif command -v cargo >/dev/null 2>&1; then
+        cargo install rainfrog --locked
+    else
+        echo "install_rainfrog: no brew/cargo found — install manually (brew install rainfrog)"
+        return
+    fi
+    case "$(uname -s)" in
+        Darwin) conf="$HOME/Library/Application Support/dev.rainfrog.rainfrog" ;;
+        *)      conf="$HOME/.config/rainfrog" ;;
+    esac
+    mkdir -p "$conf"
+    ln -sf "${base_dir}.config/rainfrog/rainfrog_config.toml" "$conf/rainfrog_config.toml"
+    echo "rainfrog installed; config linked -> $conf/rainfrog_config.toml"
+}
+
 function clean_install {
     echo "Clean install"
     rm -rf ~/.vim
@@ -227,6 +248,9 @@ case $install_typ in
     formatters)
         install_formatters
     ;;
+    rainfrog)
+        install_rainfrog
+    ;;
     zsh)
         install_zsh
     ;;
@@ -249,6 +273,7 @@ case $install_typ in
         install_tmux
         install_vim
         install_formatters
+        install_rainfrog
         install_fonts
         install_gitconf
         install_fzf
