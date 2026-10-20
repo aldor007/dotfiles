@@ -8,14 +8,23 @@
 # values come from.
 #
 # Usage:
-#   service-repo-project [--ensure] <project> [branch]
+#   service-repo-project [--ensure] [--sparse "dir1 dir2"] [--full] <project> [branch]
 #
 #     --ensure   create/checkout only; do not open the project
+#     --sparse   sparse-checkout (cone mode): materialize ONLY these top-level
+#                dirs (+ root files) — a 12G monorepo becomes ~tens of MB and
+#                creation drops to <1s. Value: space/comma-separated dirs.
+#                Default when omitted: $KUBECAST_SPARSE from projects.env
+#                (unset = full checkout).
+#     --full     force full checkout (overrides KUBECAST_SPARSE)
 #     branch     optional branch to check out in the worktree:
 #                  - existing local branch  -> checked out
 #                  - branch only on origin  -> tracking branch created off it
 #                  - anything else         -> new branch off current HEAD
 #                  - empty / omitted        -> keep the current branch
+#
+# Huge-repo tuning (applied to the repo once, at first sparse creation):
+#   core.fsmonitor + core.untrackedCache keep `git status` fast on big trees.
 
 set -eu
 
@@ -29,18 +38,28 @@ fi
 repo="${KUBECAST_REPO:-$HOME/work/service-repo}"
 
 ensure_only=0
-if [ "${1:-}" = "--ensure" ]; then
-    ensure_only=1
+force_full=0
+sparse_dirs="${KUBECAST_SPARSE:-}"
+name=""
+branch=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --ensure) ensure_only=1 ;;
+        --full) force_full=1 ;;
+        --sparse) shift; sparse_dirs="${1:-}" ;;
+        --sparse=*) sparse_dirs="${1#--sparse=}" ;;
+        *) if [ -z "$name" ]; then name="$1"; elif [ -z "$branch" ]; then branch="$1"; fi ;;
+    esac
     shift
-fi
+done
 
-name="${1:-}"
 case " $KUBECAST_PROJECTS " in
     *" $name "*) ;;
-    *) echo "usage: service-repo-project [--ensure] <one of: $KUBECAST_PROJECTS> [branch]" >&2; exit 2 ;;
+    *) echo "usage: service-repo-project [--ensure] [--sparse \"dir1 dir2\"] [--full] <one of: $KUBECAST_PROJECTS> [branch]" >&2; exit 2 ;;
 esac
 
-branch="${2:-}"
+# commas -> spaces so both "a,b" and "a b" work
+sparse_dirs=$(echo "$sparse_dirs" | tr ',' ' ')
 
 wt="$repo/.worktrees/$name"
 
@@ -60,10 +79,30 @@ if [ "$wt_exists" -eq 0 ] || [ -n "$branch" ]; then
 fi
 
 if [ "$wt_exists" -eq 0 ]; then
-    echo "service-repo-project: creating worktree .worktrees/$name (branch '$name' off origin/master)"
-    if ! git -C "$repo" worktree add -b "$name" ".worktrees/$name" origin/master; then
-        echo "service-repo-project: branch '$name' already exists, checking it out instead"
-        git -C "$repo" worktree add ".worktrees/$name" "$name"
+    if [ "$force_full" -eq 0 ] && [ -n "$sparse_dirs" ]; then
+        echo "service-repo-project: creating SPARSE worktree .worktrees/$name (dirs: $sparse_dirs)"
+        # --no-checkout: create HEAD/branch without materializing 12G of files;
+        # sparse-checkout (cone) then limits the tree; reset populates it.
+        if ! git -C "$repo" worktree add --no-checkout -b "$name" ".worktrees/$name" origin/master; then
+            echo "service-repo-project: branch '$name' already exists, checking it out instead"
+            git -C "$repo" worktree add --no-checkout ".worktrees/$name" "$name"
+        fi
+        git -C "$wt" sparse-checkout init --cone
+        # shellcheck disable=SC2086  — dirs are intentionally word-split
+        git -C "$wt" sparse-checkout set $sparse_dirs
+        git -C "$wt" reset --hard --quiet
+        # one-time huge-repo perf tuning on the shared repo config
+        if [ -z "$(git -C "$repo" config core.fsmonitor || true)" ]; then
+            git -C "$repo" config core.fsmonitor true
+            git -C "$repo" config core.untrackedCache true
+            echo "service-repo-project: enabled core.fsmonitor + untrackedCache on $repo (faster status)"
+        fi
+    else
+        echo "service-repo-project: creating worktree .worktrees/$name (branch '$name' off origin/master)"
+        if ! git -C "$repo" worktree add -b "$name" ".worktrees/$name" origin/master; then
+            echo "service-repo-project: branch '$name' already exists, checking it out instead"
+            git -C "$repo" worktree add ".worktrees/$name" "$name"
+        fi
     fi
 fi
 
