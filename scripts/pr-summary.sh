@@ -172,12 +172,15 @@ else
       *)                  appr="" ;;
     esac
 
-    # New comments: issue comments + review comments + review bodies, not mine
-    # A failed fetch is NOT treated as "no new comments": it sets the run
-    # error flag and the global baseline stays put (see persist section).
-    if ! c1=$(gh_fetch "repos/$repo/issues/$num/comments?since=$LAST_GH&per_page=100") \
-       || ! c2=$(gh_fetch "repos/$repo/pulls/$num/comments?since=$LAST_GH&per_page=100") \
-       || ! c3=$(gh_fetch "repos/$repo/pulls/$num/reviews?per_page=100"); then
+    # New comments: issue comments + review comments + review bodies, not mine.
+    # Each fetch is INDEPENDENT: a failure must not skip later fetches — the
+    # old `! c1=… || ! c2=…` short-circuit could leave c2/c3 unset and trip
+    # `set -u`. gh_fetch prints '[]' on failure (so counts stay safe) and
+    # returns non-zero; the error flag freezes the baseline later.
+    c1=$(gh_fetch "repos/$repo/issues/$num/comments?since=$LAST_GH&per_page=100"); rc1=$?
+    c2=$(gh_fetch "repos/$repo/pulls/$num/comments?since=$LAST_GH&per_page=100"); rc2=$?
+    c3=$(gh_fetch "repos/$repo/pulls/$num/reviews?per_page=100"); rc3=$?
+    if [ "$rc1" -ne 0 ] || [ "$rc2" -ne 0 ] || [ "$rc3" -ne 0 ]; then
       GH_FETCH_ERR=1
       echo "  ${YEL}warning: comment fetch failed for ${repo}#${num} — retried next run${RST}" >&2
     fi
@@ -276,7 +279,8 @@ if [ "$GL_FETCH_OK" = 1 ] && [ -n "${GL_TAGS:-}" ]; then
     tag=$(printf '%s' "$tag" | sed 's/^ *//;s/ *$//')
     [ -z "$tag" ] && continue
     enc=$(printf '%s' "$tag" | jq -sRr @uri)
-    TAGGED=$(glab api "merge_requests?scope=all&state=opened&labels=$enc&per_page=100&order_by=updated_at&sort=desc" 2>/dev/null || echo '[]')
+    TAGGED=$(gl_fetch "merge_requests?scope=all&state=opened&labels=$enc&per_page=100&order_by=updated_at&sort=desc")
+    if [ $? -ne 0 ]; then GL_FETCH_ERR=1; fi
     cnt=$(printf '%s' "$TAGGED" | jq 'length' 2>/dev/null || echo 0)
     if [ "$cnt" -eq 0 ]; then
       echo "${DIM}  [$tag] — no open MRs${RST}"

@@ -7,8 +7,22 @@
 -- gitignored local/projects.env (scripts/dotfiles-init.sh) — not from git.
 local M = {}
 
-local SCRIPT = vim.fn.expand("~/dotfiles/scripts/sql-db.sh")
-local ENV_FILE = vim.fn.expand("~/dotfiles/local/projects.env")
+-- Repo root resolved from the live config dir (stdpath("config") is the
+-- symlinked nvim/ inside the repo when installed via install.sh, so its
+-- parent IS the repo root) — no hardcoded ~/dotfiles. DOTFILES_DIR env
+-- overrides when running that config from elsewhere.
+local function repo_root()
+  local cfg = vim.fn.fnamemodify(vim.fn.stdpath("config"), ":p"):gsub("/+$", "")
+  local parent = vim.fn.fnamemodify(cfg, ":h")
+  if vim.fn.filereadable(parent .. "/local/projects.env") == 1 then
+    return parent
+  end
+  return vim.env.DOTFILES_DIR or vim.fn.expand("~/dotfiles")
+end
+
+local ROOT = repo_root()
+local SCRIPT = ROOT .. "/scripts/sql-db.sh"
+local ENV_FILE = ROOT .. "/local/projects.env"
 
 local function load_env_file()
   local out = {}
@@ -65,9 +79,12 @@ function M.seed()
       return
     end
     for _, envname in ipairs(ENVS) do
+      -- encode the FULL DB_USER (no hardcoded domain): IAM login uses the
+      -- principal's own email as the username
+      local user_enc = DB_USER:gsub("@", "%%40")
       dbs[envname] = string.format(
-        "postgres://%s%%40cast.ai:%s@127.0.0.1:%d/%s?sslmode=require",
-        DB_USER:gsub("@.*", ""), token, port_by_env[envname], DB_NAME
+        "postgres://%s:%s@127.0.0.1:%d/%s?sslmode=require",
+        user_enc, token, port_by_env[envname], DB_NAME
       )
     end
     vim.g.dbs = dbs

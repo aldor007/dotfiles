@@ -21,9 +21,12 @@ map("n", "<C-H>", "<C-W>h<C-W>_")
 map("n", "j", "gj")
 map("n", "k", "gk")
 
--- Tabs with shift: <S-H> previous, <S-L> next
-map("n", "<S-H>", "gT")
-map("n", "<S-L>", "gt")
+-- Tabs/buffers with shift: <S-H> previous, <S-L> next.
+-- NOTE: nvim coalesces <S-H> == H (terminals deliver 'H'), so this also
+-- replaces the default H='top of screen' / L. Switches the barbar buffer
+-- bar (gt/gT stay available for real tabpages).
+map("n", "<S-H>", ":BufferPrevious<CR>")
+map("n", "<S-L>", ":BufferNext<CR>")
 
 -- Y yanks to end of line (consistent with C/D)
 map("n", "Y", "y$")

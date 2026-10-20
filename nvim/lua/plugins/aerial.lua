@@ -4,6 +4,10 @@
 return {
   {
     "stevearc/aerial.nvim",
+    -- both key-based (',o') AND command-based loading: typing :AerialToggle
+    -- must work before the key is ever pressed (lazy needs cmd triggers for
+    -- commands to auto-load the plugin)
+    cmd = { "AerialToggle", "AerialNavToggle" },
     keys = {
       { "<leader>o", "<cmd>AerialToggle!<cr>", desc = "code: symbol outline" },
       { "<leader>on", "<cmd>AerialNavToggle<cr>", desc = "code: outline nav" },

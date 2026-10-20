@@ -358,22 +358,79 @@ check("kubeconform command + binary", function()
 end)
 
 check("db: all envs seeded in g:dbs", function()
+  -- Stub gcloud so this check needs NO real cloud credentials: config.db.seed()
+  -- shells out to `gcloud auth print-access-token`. The stub answers with a
+  -- fake token AND writes a marker file proving the stub (not a real gcloud)
+  -- served the request — the plugin also auto-seeds at startup with whatever
+  -- gcloud resolves, so we assert structure, never token content.
+  local stub = vim.fn.stdpath("cache") .. "/smoke-gcloud-stub"
+  vim.fn.mkdir(stub, "p")
+  vim.fn.writefile({
+    "#!/bin/sh",
+    'echo called >> "' .. stub .. '/called"',
+    'case "$*" in',
+    '  "auth print-access-token") echo "fake-token-0000-fake";;',
+    '  "auth application-default print-access-token") echo "fake-adc";;',
+    "esac",
+  }, stub .. "/gcloud")
+  vim.fn.setfperm(stub .. "/gcloud", "rwxr-xr-x") -- symbolic mode (E475 without)
+  vim.fn.delete(stub .. "/called") -- no stale marker from previous runs
+  local old_path = vim.env.PATH
+  vim.env.PATH = stub .. ":" .. vim.env.PATH
+
   require("config.db").seed()
-  vim.wait(8000, function()
-    return vim.g.dbs and next(vim.g.dbs) ~= nil
-  end)
+  -- wait specifically for the STUB to serve the token, not for the plugin's
+  -- startup seed (async — it can race this check)
+  assert(
+    vim.wait(10000, function()
+      return vim.fn.filereadable(stub .. "/called") == 1
+    end),
+    "gcloud stub was not invoked"
+  )
   local keys = vim.g.dbs and vim.tbl_keys(vim.g.dbs) or {}
   assert(#keys >= 4, "expected 4 env connections, got " .. vim.inspect(keys))
-  -- each URL must use the port of its env (and an encoded user)
+  -- structural asserts only (encoded user, sslmode, port): no username,
+  -- account or token-content assumptions (startup seed may race/replace)
   for env, url in pairs(vim.g.dbs) do
-    assert(url:find("marcin%%40cast.ai"), env .. " url lacks encoded user")
+    assert(url:match("%%40"), env .. " url lacks encoded user separator")
+    assert(url:match("@127%.0%.0%.1:(%d+)/"), env .. " url lacks localhost:port")
+    assert(url:find("sslmode=require", 1, true), env .. " url lacks sslmode")
   end
+  vim.env.PATH = old_path
+  vim.fn.delete(stub, "rf")
+end)
+
+check("aerial: module + :AerialToggle", function()
+  assert(require("aerial"), "aerial module failed to load")
+  assert(vim.fn.exists(":AerialToggle") == 2, ":AerialToggle not defined")
+end)
+
+check("trouble: module + :Trouble", function()
+  assert(require("trouble"), "trouble module failed to load")
+  assert(vim.fn.exists(":Trouble") == 2, ":Trouble not defined")
+end)
+
+check("treesitter-context: module loads", function()
+  assert(require("treesitter-context"), "treesitter-context failed to load")
+end)
+
+check("herdr-nvim: module + annotation API", function()
+  local h = require("herdr-nvim")
+  assert(type(h.comment_line) == "function", "comment_line API missing")
+  assert(type(h.send_all) == "function", "send_all API missing")
+end)
+
+check("telescope file_browser extension", function()
+  local t = require("telescope")
+  local ok, ext = pcall(function() return t.extensions.file_browser end)
+  assert(ok and ext, "file_browser extension not registered")
 end)
 
 print(string.format("\n%d/%d checks passed", checks - #failures, checks))
 if #failures > 0 then
   print("VALIDATION FAILED")
-  vim.cmd("qa!")
+  -- MUST exit non-zero BEFORE qa: vim.cmd("qa!") exits 0 and would mask the
+  -- failure from validate.sh / CI (os.exit kills nvim directly)
   os.exit(1)
 end
 print("VALIDATION OK")

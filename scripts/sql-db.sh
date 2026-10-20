@@ -115,20 +115,23 @@ if [ "$mode" = stop ]; then
   for f in "$PID_DIR"/px-*.pid; do
     [ -e "$f" ] || continue
     tag=$(basename "$f" .pid); pid=$(cat "$f" 2>/dev/null || true)
-    rm -f "$f"
+    # validate the process BEFORE touching metadata: a foreign pid keeps its
+    # pidfile so a later --stop can still reason about it
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
       cmd=$(ps -p "$pid" -o command= 2>/dev/null || true)
       case "$cmd" in
         *"px glass"*)
           kill "$pid" 2>/dev/null || true
+          rm -f "$f"
           echo "sql-db: stopped $tag (pid $pid)"
           stopped=$((stopped + 1)) ;;
         *)
-          echo "sql-db: pid $pid ($tag) is NOT a px glass process — left running"
+          echo "sql-db: pid $pid ($tag) is NOT a px glass process — left running, pidfile kept"
           skipped=$((skipped + 1)) ;;
       esac
     else
       echo "sql-db: stale pidfile $tag (pid ${pid:-?} not running) — removed"
+      rm -f "$f"
       stale=$((stale + 1))
     fi
   done
@@ -187,12 +190,12 @@ if [ "$mode" = foreground ]; then
   # token never enters argv or the tunnel; px uses ADC on its own
   echo "sql-db: tunnel ${ENV} (${instance}) on 127.0.0.1:${PORT} — Ctrl-C stops it"
   echo "sql-db: nvim: press ,dD / ,dk (DSN via: sql-db.sh --env ${ENV} --dsn)"
-  trap 'rm -f "$pidfile"' INT TERM EXIT
+  # exec: this shell's pid (already written above) BECOMES the px process, so
+  # --stop's `ps` check sees the "px glass" cmdline and can stop it. After a
+  # Ctrl-C the pidfile is left behind; stale files are reaped by --stop and by
+  # the live-check above on the next --fg.
   # shellcheck disable=SC2086
-  px glass proxy --backend psql --project "$PROJECT" --local-port "$PORT" $px_extra
-  rc=$?
-  rm -f "$pidfile"
-  exit $rc
+  exec px glass proxy --backend psql --project "$PROJECT" --local-port "$PORT" $px_extra
 fi
 
 # ---- connect modes: tunnel must be up ----------------------------------------

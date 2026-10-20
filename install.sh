@@ -45,16 +45,20 @@ run() { # run <cmd...> — executes, or prints under --dry-run
   fi
 }
 
-backup_now() { # backup_now <path> -> backup dir; moves path there
-  local p="$1"
+backup_now() { # backup_now <path> — collision-resistant move into BACKUP_ROOT
+  local p="$1" ts dst
   [ -e "$p" ] || [ -L "$p" ] || return 0
-  local ts
+  if [ "$DRY" = 1 ]; then
+    echo "install: [dry-run] would back up $p into $BACKUP_ROOT/"
+    return
+  fi
   ts=$(date +%Y%m%d-%H%M%S)
-  local dst
-  dst="$BACKUP_ROOT/$ts/$(basename "$p")"
-  echo "install: backing up $p -> $dst"
-  run mkdir -p "$(dirname "$dst")"
-  run mv "$p" "$dst"
+  mkdir -p "$BACKUP_ROOT"
+  # mktemp -d guarantees a unique target even for same-second re-runs —
+  # existing backups are never overwritten
+  dst=$(mktemp -d "$BACKUP_ROOT/$ts.XXXXXX") || { echo "install: backup failed for $p" >&2; return 1; }
+  echo "install: backing up $p -> $dst/$(basename "$p")"
+  run mv "$p" "$dst/"
 }
 
 # link_or_backup <target> <link> — idempotent symlink with backup of anything
@@ -64,9 +68,9 @@ link_or_backup() {
   if [ -L "$link" ]; then
     local cur
     cur=$(readlink "$link" 2>/dev/null || true)
-    [ "$cur" = "$target" ] && return 0
-    echo "install: $link is a symlink to $cur (not $target) — replacing"
-    run rm -f "$link"
+    [ "$cur" = "$target" ] && return 0 # already correct — never re-backup
+    echo "install: $link points to $cur (not $target) — preserving it via backup"
+    backup_now "$link"
   elif [ -e "$link" ]; then
     backup_now "$link"
   fi
@@ -91,6 +95,10 @@ function install_common {
 
 function install_fonts {
   command -v apt-get >/dev/null 2>&1 || { echo "install_fonts: skipping (Debian/Ubuntu only)"; return; }
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] install_fonts: would download powerline fonts into ~/.fonts + ~/.config/fontconfig"
+    return
+  fi
   local td
   td=$(mktemp -d)
   ( cd "$td"
@@ -129,7 +137,9 @@ function install_tmux {
     link_or_backup "${BASE_DIR}.tmux" "$HOME/.tmux"
     link_or_backup "${BASE_DIR}.config/powerline/" "$HOME/.config/powerline"
     [ -d "$HOME/.tmux/powerline2" ] || run git clone https://github.com/Lokaltog/powerline "$HOME/.tmux/powerline2"
-    ( cd "$HOME/.tmux/powerline2" && run sudo python setup.py install )
+    if [ -d "$HOME/.tmux/powerline2" ]; then
+      ( cd "$HOME/.tmux/powerline2" && run sudo python setup.py install )
+    fi
     link_or_backup "${BASE_DIR}.tmux/tmux.conf" "$HOME/.tmux.conf"
 }
 
@@ -199,7 +209,12 @@ function install_nvim {
             echo "install_nvim: nvim not found — install it (brew install nvim) then re-run"
         fi
     else
-        echo "install_nvim: nvim present ($(nvim --version | head -1)) — config linked to $HOME/.config/nvim"
+        # nvim --version creates its state dir — never probe it under --dry-run
+        if [ "$DRY" = 1 ]; then
+            echo "install_nvim: [dry-run] nvim present — config would be linked + printed version/validation"
+        else
+            echo "install_nvim: nvim present ($(nvim --version | head -1)) — config linked to $HOME/.config/nvim"
+        fi
     fi
     echo "install_nvim: validate with: $REPO_DIR/nvim/scripts/validate.sh"
 }
@@ -219,7 +234,9 @@ function install_gitconf {
     run sudo apt-get install libncurses5-dev libncursesw5-dev -y
     link_or_backup "${BASE_DIR}.gitconfig" "$HOME/.gitconfig"
     [ -d /tmp/tig/.git ] || run git clone https://github.com/jonas/tig /tmp/tig
-    ( cd /tmp/tig && run sudo make prefix=/usr/local && run sudo make install prefix=/usr/local )
+    if [ -d /tmp/tig/.git ]; then
+      ( cd /tmp/tig && run sudo make prefix=/usr/local && run sudo make install prefix=/usr/local )
+    fi
 }
 
 function install_bin {
@@ -372,9 +389,6 @@ if [ "${CLEAN:-0}" = 1 ]; then
 fi
 
 if [ -n "$install_typ" ]; then
-  # Always ensure the base toolchain (apt-only; no-op on macOS). Matches the
-  # original script, which ran install_common before every target dispatch.
-  install_common
   case "$install_typ" in
     herdr)      install_herdr ;;
     fd)         install_fd ;;
@@ -391,6 +405,7 @@ if [ -n "$install_typ" ]; then
     bin)        install_bin ;;
     programing) install_programing ;;
     all)
+        install_common
         install_herdr
         install_programing
         install_fd

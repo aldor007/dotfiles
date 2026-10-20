@@ -63,6 +63,9 @@ source $ZSH/oh-my-zsh.sh
 export LANG=en_US.UTF-8
 
 export PATH=$HOME/bin:/usr/local/bin:$PATH
+# Dotfiles repo location — overridable for worktrees/fresh machines; every
+# script reference below uses this instead of a hardcoded ~/dotfiles.
+export DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
 # export MANPATH="/usr/local/man:$MANPATH"
 
 # # TERM is set by the terminal emulator; only override inside tmux
@@ -227,13 +230,13 @@ fi
 # Once/day per machine: prints cached summary, kicks a background refresh.
 # Skipped inside herdr panes (HERDR_ENV=1) so restored/hosted panes stay quiet.
 # Kill-switch: PR_SUMMARY_AUTO=0. Fresh run on demand: `prs`.
-alias prs='$HOME/dotfiles/scripts/pr-summary.sh'
-alias prsa='$HOME/dotfiles/scripts/pr-summary.sh --analyze'
+alias prs="$DOTFILES_DIR/scripts/pr-summary.sh"
+alias prsa="$DOTFILES_DIR/scripts/pr-summary.sh --analyze"
 _pr_summary_morning() {
   [ -n "${HERDR_ENV:-}" ] && return 0
   [ "${PR_SUMMARY_AUTO:-1}" = "0" ] && return 0
   local cache="$HOME/.cache/pr-summary"
-  local script="$HOME/dotfiles/scripts/pr-summary.sh"
+  local script="$DOTFILES_DIR/scripts/pr-summary.sh"
   [ -x "$script" ] || return 0
   mkdir -p "$cache"
   local stamp="$cache/stamp-$(date +%F)"

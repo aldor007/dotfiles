@@ -51,7 +51,7 @@ return {
         "  <C-w>v vertical split · <C-w>s horizontal split · <C-w>c close split",
         "  <C-w>o close all others · <C-w>= rebalance equal sizes · <C-w>x swap two splits",
         "  <C-w>+ / <C-w>- grow-shrink height · <C-w>> / <C-w>< resize width (count first: 10<C-w>>)",
-        "  <S-h>/<S-l> switch tab pages · :tabnew new tab · ,kh this cheatsheet",
+        "  <S-h>/<S-l> switch buffers (barbar bar) · gt/gT tabpages · :tabnew new tab · ,kh this cheatsheet",
         "",
         "-- Git",
         "  fugitive: :Git (status, blame, merge) · :Gblame",
