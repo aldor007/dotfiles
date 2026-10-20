@@ -56,7 +56,12 @@ return {
         "-- Git",
         "  fugitive: :Git (status, blame, merge) · :Gblame",
         "  diffview: ,go working tree · ,gl file history · ,gH repo history · ,gc close",
-        "  gitsigns: ]h [h hunk jump · ,hs stage · ,hr reset · ,hp preview · ,gb ,gB blame",
+        "  gitsigns: ]h [h hunk jump · ,hs stage · ,hr reset · ,hp preview",
+        "",
+        "-- Git blame (three ways)",
+        "  ,gb — popup blame for the CURRENT line (Esc/q closes; j/k scroll)",
+        "  ,gt — pin blame inline on the current line (press again to toggle off)",
+        "  ,gB or :Gblame — full-file blame window; Enter on a line opens that commit",
         "",
       }
     end

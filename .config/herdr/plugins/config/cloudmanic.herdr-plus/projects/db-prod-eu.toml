@@ -9,10 +9,10 @@ name = "db"
 
 [[tabs.panes]]
 label = "tunnel"
-command = "~/dotfiles/scripts/sql-db.sh --env prod-eu --fg"
+command = "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/sql-db.sh --env prod-eu --fg"
 
 [[tabs.panes]]
 label = "vi-sql"
-command = "~/dotfiles/scripts/sql-db.sh --env prod-eu --visql"
+command = "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/sql-db.sh --env prod-eu --visql"
 split = "right"
 ratio = 0.75

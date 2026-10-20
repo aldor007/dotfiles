@@ -8,9 +8,74 @@ return {
       { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
     },
     keys = {
-      { "<C-p>", "<cmd>Telescope find_files<cr>", desc = "Find files" },
+      -- <C-p>: files in the CURRENT FILE'S DIRECTORY (monorepo-friendly);
+      -- ,F for the whole worktree
+      {
+        "<C-p>",
+        function()
+          local ctx = require("config.context")
+          local dir = ctx.source_dir()
+          require("telescope.builtin").find_files({
+            search_dirs = { dir },
+            prompt_title = "Files [" .. dir .. "]",
+          })
+        end,
+        desc = "Find files (context dir)",
+      },
       { "<C-b>", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
-      { "<space>/", "<cmd>Telescope live_grep<cr>", desc = "Grep project" },
+      -- <space>/: greps within the current file's directory (was project-wide
+      -- before the monorepo scoping; ,G for the whole worktree)
+      {
+        "<space>/",
+        function()
+          local ctx = require("config.context")
+          local dir = ctx.source_dir()
+          require("telescope.builtin").live_grep({
+            search_dirs = { dir },
+            prompt_title = "Grep [" .. dir .. "]",
+          })
+        end,
+        desc = "Grep (context dir)",
+      },
+      -- whole-worktree scopes (root = git worktree, .git dir or file)
+      {
+        "<leader>F",
+        function()
+          local root = require("config.context").worktree_root()
+          require("telescope.builtin").find_files({
+            search_dirs = { root },
+            prompt_title = "Files (worktree) [" .. root .. "]",
+          })
+        end,
+        desc = "Find files (worktree)",
+      },
+      {
+        "<leader>G",
+        function()
+          local root = require("config.context").worktree_root()
+          require("telescope.builtin").live_grep({
+            search_dirs = { root },
+            prompt_title = "Grep (worktree) [" .. root .. "]",
+          })
+        end,
+        desc = "Grep (worktree)",
+      },
+      -- optional Go-module scope: nearest ancestor containing go.mod
+      {
+        "<leader>m",
+        function()
+          local dir = require("config.context").go_module_dir()
+          if not dir then
+            vim.notify("no go.mod near the current file", vim.log.levels.WARN)
+            return
+          end
+          require("telescope.builtin").find_files({
+            search_dirs = { dir },
+            prompt_title = "Files (go module) [" .. dir .. "]",
+          })
+        end,
+        desc = "Find files (go module)",
+      },
       -- <space>g: fuzzy-pick a directory first, then live_grep inside it
       {
         "<space>g",

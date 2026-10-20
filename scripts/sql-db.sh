@@ -45,7 +45,7 @@ set -eu
 
 # Real names/IDs live in local/projects.env (gitignored; rendered/edited via
 # scripts/dotfiles-init.sh) — nothing infra-specific is tracked in git.
-LOCAL_ENV="${DOTFILES_LOCAL_FILE:-$HOME/dotfiles/local/projects.env}"
+LOCAL_ENV="${DOTFILES_LOCAL_FILE:-${DOTFILES_DIR:-$HOME/dotfiles}/local/projects.env}"
 [ -f "$LOCAL_ENV" ] || { echo "sql-db: missing $LOCAL_ENV — run scripts/dotfiles-init.sh" >&2; exit 1; }
 . "$LOCAL_ENV"
 
@@ -61,6 +61,7 @@ project_for_env() { env_lookup "$1" project; }
 port_for_env() { env_lookup "$1" port; }
 
 ENV="dev-master"
+env_given=0
 NAME=""
 DB=""
 USER=""
@@ -71,7 +72,7 @@ px_extra=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --env)      ENV="$2"; shift 2 ;;
+    --env)      ENV="$2"; env_given=1; shift 2 ;;
     --name)     NAME="$2"; shift 2 ;;
     --db)       DB="$2"; shift 2 ;;
     --user)     USER="$2"; shift 2 ;;
@@ -112,7 +113,18 @@ pidfile_for() { printf '%s/px-%s-%s.pid' "$PID_DIR" "$1" "$2"; }
 if [ "$mode" = stop ]; then
   mkdir -p "$PID_DIR"
   stopped=0; stale=0; skipped=0
-  for f in "$PID_DIR"/px-*.pid; do
+  # per-env stop (--stop --env X) touches only that tunnel; plain --stop
+  # touches every pidfile this script ever recorded
+  if [ "$env_given" = 1 ]; then
+    candidates="$(pidfile_for "$ENV" "$PORT")"
+    # also scan ports for the untracked-warning below
+    scan_ports="$ENV"
+  else
+    # shellcheck disable=SC2125 # glob is intentional: expands in the loop below
+    candidates="$PID_DIR"/px-*.pid
+    scan_ports="dev-master prod-master prod-eu prod-india"
+  fi
+  for f in $candidates; do
     [ -e "$f" ] || continue
     tag=$(basename "$f" .pid); pid=$(cat "$f" 2>/dev/null || true)
     # validate the process BEFORE touching metadata: a foreign pid keeps its
@@ -137,7 +149,7 @@ if [ "$mode" = stop ]; then
   done
   # ports that are open but were never recorded by this script (e.g. started
   # before pidfiles existed, or by another session) — never touch them
-  for e in dev-master prod-master prod-eu prod-india; do
+  for e in $scan_ports; do
     p=$(port_for_env "$e")
     [ -n "$p" ] || continue
     [ -e "$(pidfile_for "$e" "$p")" ] && continue
@@ -187,15 +199,28 @@ if [ "$mode" = foreground ]; then
     echo "sql-db: tunnel for ${ENV} already starting/running (pidfile $pidfile) — try again or --stop" >&2
     exit 1
   fi
+  command -v px >/dev/null 2>&1 || {
+    echo "sql-db: px (CAST CLI) not found on PATH" >&2
+    rm -f "$pidfile"
+    exit 127
+  }
   # token never enters argv or the tunnel; px uses ADC on its own
   echo "sql-db: tunnel ${ENV} (${instance}) on 127.0.0.1:${PORT} — Ctrl-C stops it"
   echo "sql-db: nvim: press ,dD / ,dk (DSN via: sql-db.sh --env ${ENV} --dsn)"
-  # exec: this shell's pid (already written above) BECOMES the px process, so
-  # --stop's `ps` check sees the "px glass" cmdline and can stop it. After a
-  # Ctrl-C the pidfile is left behind; stale files are reaped by --stop and by
-  # the live-check above on the next --fg.
+  cleanup() { rm -f "$pidfile"; }
+  trap cleanup INT TERM EXIT
+  # Run px as our CHILD (not exec): we record its real pid ($!, which IS the
+  # px glass process --stop validates against), Ctrl-C/TERM hit our trap so
+  # the pidfile is cleaned immediately, and `wait` propagates the exit code.
+  # A --stop racing the rewrite below sees "$$" = the shell (not px glass)
+  # and correctly refuses to kill it.
   # shellcheck disable=SC2086
-  exec px glass proxy --backend psql --project "$PROJECT" --local-port "$PORT" $px_extra
+  px glass proxy --backend psql --project "$PROJECT" --local-port "$PORT" $px_extra &
+  echo "$!" > "$pidfile"
+  wait "$!"
+  rc=$?
+  cleanup
+  exit $rc
 fi
 
 # ---- connect modes: tunnel must be up ----------------------------------------

@@ -61,6 +61,23 @@ if [ "$ISOLATED" = 1 ]; then
 fi
 NV=("${ENV_SETUP[@]}" nvim)
 
+# gcloud stub: config/db.lua seeds an IAM token at startup (VeryLazy) and
+# smoke_test also calls seed(); every nvim invocation below must hit this
+# stub, never a real gcloud. Markers prove the stub served the requests.
+STUB_DIR="${ISO_ROOT:-/tmp}/gcloud-stub-validate"
+mkdir -p "$STUB_DIR"
+rm -f "$STUB_DIR/markers" "$STUB_DIR/called"
+cat > "$STUB_DIR/gcloud" <<GSEOF
+#!/bin/sh
+echo called >> "$STUB_DIR/markers"
+case "\$*" in
+  "auth print-access-token") echo "fake-token-validate-000";;
+  "auth application-default print-access-token") echo "fake-adc";;
+esac
+GSEOF
+chmod +x "$STUB_DIR/gcloud"
+export PATH="$STUB_DIR:$PATH"
+
 step "1/6 Lua syntax check"
 for f in init.lua lua/config/*.lua lua/plugins/*.lua scripts/smoke_test.lua; do
   if "${ENV_SETUP[@]}" nvim -l /dev/stdin <<< "assert(loadfile('$NVIM_DIR/$f'))" >/dev/null 2>&1; then
@@ -79,9 +96,21 @@ fi
 
 step "3/6 Plugin dependency check (specs vs nvim/lazy-lock.json)"
 LOCK="$NVIM_DIR/lazy-lock.json"
+if [ ! -f "$LOCK" ]; then
+  echo "FAIL  lazy-lock.json missing at $LOCK"; fail=1
+else
+  if ! ( jq -e . "$LOCK" >/dev/null 2>&1 \
+      || python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$LOCK" >/dev/null 2>&1 ); then
+    echo "FAIL  $LOCK is not valid JSON"; fail=1
+  else
+    echo "OK    lazy-lock.json present + valid JSON"
+  fi
+fi
 missing=0
+specs=0
 for spec in "$NVIM_DIR"/lua/plugins/*.lua; do
   [ -e "$spec" ] || continue
+  specs=$((specs+1))
   repo=$(grep -oE '\{\s*"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"' "$spec" | head -1 | sed 's/[{" ]//g')
   [ -z "$repo" ] && continue
   base=${repo#*/}
@@ -90,8 +119,11 @@ for spec in "$NVIM_DIR"/lua/plugins/*.lua; do
     missing=$((missing+1))
   fi
 done
-if [ "$missing" -eq 0 ]; then
-  echo "OK    all spec repos present in lazy-lock.json"
+if [ "$specs" -eq 0 ]; then
+  echo "FAIL  no plugin specifications found under $NVIM_DIR/lua/plugins"
+  fail=1
+elif [ "$missing" -eq 0 ]; then
+  echo "OK    all $specs spec repos present in lazy-lock.json"
 else
   echo "      ($missing spec(s) not locked — install order: --sync, then re-run)"
   fail=1

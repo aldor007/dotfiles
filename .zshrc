@@ -134,14 +134,17 @@ test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell
 # Resolves the docker binary explicitly (Rancher Desktop ships it under
 # ~/.rd/bin; /usr/local/bin is the Intel-era location) so the wrapper never
 # recurses into itself and works regardless of which install is present.
-# docker: passthrough, native architecture. (The old wrapper forced
-# `--platform linux/amd64` on every run/build under Apple Silicon; use the
-# explicit `docker-amd64` helper when you really need amd64.)
+# docker: passthrough, native architecture. `command -v docker` would return
+# THIS function, so discovery scans PATH dirs ($path) first, then falls back
+# to common macOS locations (Homebrew, Rancher Desktop). `command docker …`
+# inside the wrappers bypasses the function, avoiding recursion.
 _resolve_docker() {
-    local d=/usr/local/bin/docker
-    [ -x "$d" ] || d="$HOME/.rd/bin/docker"
-    [ -x "$d" ] || { echo "docker: no binary found (/usr/local/bin or \$HOME/.rd/bin)" >&2; return 127; }
-    printf '%s\n' "$d"
+    local d
+    for d in $path /opt/homebrew/bin /usr/local/bin "$HOME/.rd/bin"; do
+        [ -e "$d/docker" ] && [ -x "$d/docker" ] && { printf '%s\n' "$d/docker"; return 0; }
+    done
+    echo "docker: no binary found (PATH, /opt/homebrew/bin, /usr/local/bin, \$HOME/.rd/bin)" >&2
+    return 127
 }
 docker() {
     local d; d=$(_resolve_docker) || return $?
@@ -178,9 +181,17 @@ export PATH="$HOME/.opencode/bin:$PATH"
 # -- Go module proxy -----------------------------------------------------------
 # The internal mirror URL embeds a GCP project ID, so it is NOT tracked here:
 # set CASTAI_GOPROXY in ~/.secrets.zsh (gitignored); public proxy is the
-# portable fallback. Placed after the secrets source so the override wins.
+# portable fallback. Commas are normalized so a missing/extra trailing comma
+# in CASTAI_GOPROXY cannot produce an invalid GOPROXY.
 # export GOPRIVATE=gitlab.com/castai,github.com/castai  (optional, uncomment)
-export GOPROXY="${CASTAI_GOPROXY:-}https://proxy.golang.org,direct"
+if [ -n "${CASTAI_GOPROXY:-}" ]; then
+  case "$CASTAI_GOPROXY" in
+    *,) export GOPROXY="${CASTAI_GOPROXY}https://proxy.golang.org,direct" ;;
+    *)  export GOPROXY="${CASTAI_GOPROXY},https://proxy.golang.org,direct" ;;
+  esac
+else
+  export GOPROXY="https://proxy.golang.org,direct"
+fi
 export GONOSUMDB=github.com/castai/*,gitlab.com/castai/*
 
 # herdr-projects board reads pi transcripts from $PI_CODING_AGENT_DIR/sessions

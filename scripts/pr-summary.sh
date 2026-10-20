@@ -104,9 +104,13 @@ count_new() {
 # A FAILED gh/glab fetch must never look like "no new comments": emit '[]'
 # but return non-zero so the caller can flag the run; the baseline is then
 # NOT advanced and the failed items are re-fetched next run.
-gh_fetch() { # gh_fetch <api args…>
+gh_fetch() { # gh_fetch <api args…> — array endpoints only
+  # `gh api --paginate` can emit ONE array PER PAGE; jq -s 'add' merges them
+  # into a single array (single-page responses pass through unchanged), so
+  # count_new always sees ONE array and returns ONE integer. gh's own exit
+  # status (PIPESTATUS[0]) governs success; jq trouble degrades to '[]'.
   local out rc
-  out=$(gh api --paginate "$@" 2>/dev/null); rc=$?
+  out=$(gh api --paginate "$@" 2>/dev/null | jq -s 'add // empty' 2>/dev/null); rc=${PIPESTATUS[0]}
   if [ "$rc" -eq 0 ]; then printf '%s\n' "$out"; else printf '[]\n'; fi
   return "$rc"
 }
@@ -115,6 +119,27 @@ gl_fetch() { # gl_fetch <api args…>
   out=$(glab api "$@" 2>/dev/null); rc=$?
   if [ "$rc" -eq 0 ]; then printf '%s\n' "$out"; else printf '[]\n'; fi
   return "$rc"
+}
+# GitLab has no client-side pagination; a notes/MR list longer than per_page
+# would permanently lose items once the baseline advances. Page until a short
+# page (per_page=100 in every caller), merging arrays with jq -s.
+gl_fetch_all() { # gl_fetch_all <path> (path may carry a query string)
+  local base="$1" sep page out n all='[]'
+  case "$base" in *"?") sep="&";; *) sep="?";; esac
+  page=1
+  while [ "$page" -le 20 ]; do
+    if ! out=$(glab api "${base}${sep}page=$page" 2>/dev/null); then
+      GL_FETCH_ERR=1
+      printf '[]\n'
+      return 1
+    fi
+    n=$(printf '%s' "$out" | jq 'length' 2>/dev/null || echo 0)
+    all=$(printf '%s' "$all" "$out" | jq -s 'add // empty' 2>/dev/null || echo '[]')
+    [ "$n" -lt 100 ] && break
+    page=$((page+1))
+  done
+  printf '%s\n' "$all"
+  return 0
 }
 
 GH_FETCH_ERR=0; GL_FETCH_ERR=0
@@ -229,7 +254,7 @@ render_mr() {
          | jq -r 'if .approved then "yes" else "no" end' 2>/dev/null || echo '?')
   if [ "$appr" = "yes" ]; then appr="${GRN}✔approved${RST} "; else appr=""; fi
 
-  notes=$(gl_fetch "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at")
+  notes=$(gl_fetch_all "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at")
   if [ $? -ne 0 ]; then GL_FETCH_ERR=1; fi
   n=$(count_new "$notes" "$LAST_GL" "$GL_ME" updated_at)
   TOTAL_NEW=$((TOTAL_NEW+n))
@@ -279,7 +304,7 @@ if [ "$GL_FETCH_OK" = 1 ] && [ -n "${GL_TAGS:-}" ]; then
     tag=$(printf '%s' "$tag" | sed 's/^ *//;s/ *$//')
     [ -z "$tag" ] && continue
     enc=$(printf '%s' "$tag" | jq -sRr @uri)
-    TAGGED=$(gl_fetch "merge_requests?scope=all&state=opened&labels=$enc&per_page=100&order_by=updated_at&sort=desc")
+    TAGGED=$(gl_fetch_all "merge_requests?scope=all&state=opened&labels=$enc&per_page=100&order_by=updated_at&sort=desc")
     if [ $? -ne 0 ]; then GL_FETCH_ERR=1; fi
     cnt=$(printf '%s' "$TAGGED" | jq 'length' 2>/dev/null || echo 0)
     if [ "$cnt" -eq 0 ]; then

@@ -1,36 +1,50 @@
--- nvim-tree: file explorer (replaces mini.files, classic NERDTree-style tree)
+-- neo-tree: GoLand-style file explorer — the ONE file tree (replaces nvim-tree).
+-- Default fs mappings (verified vs v3.x): a=create file, A=create dir,
+-- r=rename, m=move, d=delete, y/x/p copy-cut-paste, <cr> open, ?=help,
+-- /=fuzzy find, H=toggle hidden, f=filter on submit.
+-- Icons come from mini.icons via a custom provider (no nvim-web-devicons).
 return {
   {
-    "nvim-tree/nvim-tree.lua",
-    cmd = { "NvimTreeToggle", "NvimTreeFindFile", "NvimTreeOpen" },
+    "nvim-neo-tree/neo-tree.nvim",
+    branch = "v3.x",
+    dependencies = { "nvim-lua/plenary.nvim", "MunifTanjim/nui.nvim" },
+    cmd = { "Neotree" },
     keys = {
-      { "<C-n>", "<cmd>NvimTreeToggle<cr>", desc = "Toggle file tree" },
-      { "<leader>e", "<cmd>NvimTreeFindFile<cr>", desc = "Reveal file in tree" },
-      { "<leader>nt", "<cmd>NvimTreeFindFile<cr>", desc = "Reveal file in tree" },
+      { "<leader>e", function() require("config.explorer").toggle_local() end, desc = "explorer: file context" },
+      { "<leader>E", function() require("config.explorer").toggle_worktree() end, desc = "explorer: worktree root" },
     },
-    dependencies = { "echasnovski/mini.icons" },
     opts = {
-      -- NERDTree-style 't' = open in a new tab (keeps all default mappings)
-      on_attach = function(bufnr)
-        local api = require("nvim-tree.api")
-        local function opts(desc)
-          return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
-        end
-        api.map.on_attach.default(bufnr)
-        vim.keymap.set("n", "t", api.node.open.tab, opts("Open: New Tab"))
-      end,
-      -- Perf: disable filesystem + git watchers & per-project git status (major
-      -- lag source in large repos). Signs/icons per file are dropped.
-      git = { enable = false },
-      filesystem_watchers = { enable = false },
-      sync_root_with_cwd = true,
-      filters = {
-        dotfiles = false,
-        custom = { "\\.pyc$", "\\.swo$", "\\.swp$" },
+      close_if_last_window = true,
+      enable_git_status = true,      -- per-node git symbols in the tree
+      enable_diagnostics = false,    -- diagnostics live in trouble
+      window = { position = "left", width = 36 },
+      default_component_configs = {
+        icon = {
+          -- provider using the already-installed mini.icons (no duplicate
+          -- icon dependencies); falls back to neo-tree defaults
+          provider = function(icon, node)
+            local ok, mini = pcall(require, "mini.icons")
+            if not ok then return end
+            local kind = node.type == "directory" and "directory" or "file"
+            local text, hl = mini.icons.get(kind, node.name)
+            if text then icon.text = text end
+            if hl then icon.highlight = hl end
+          end,
+        },
       },
-      view = { side = "left", width = 32 },
-      renderer = { group_empty = true },
-      update_focused_file = { enable = true },
+      filesystem = {
+        hijack_netrw_behavior = "open_default", -- :e dir opens neo-tree
+        follow_current_file = {                 -- auto-reveal on buffer change
+          enabled = true,
+          leave_dirs_open = true,               -- keep expanded dirs expanded
+        },
+        use_libuv_file_watcher = true,          -- agent-created/changed files
+        filtered_items = {
+          hide_dotfiles = false,   -- visible by default; H toggles
+          hide_gitignored = true,  -- respect .gitignore
+          hide_ignored = true,
+        },
+      },
     },
   },
 }

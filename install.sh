@@ -309,14 +309,40 @@ function install_rainfrog {
     echo "rainfrog installed; config linked -> $conf/rainfrog_config.toml"
 }
 
-# clean: move the home-dir config paths to backup so the install targets
-# re-create them from the repo. Moves only — nothing is deleted.
-function clean_install {
-    echo "Clean install (backing up existing configs to $BACKUP_ROOT)"
-    for p in "$HOME/.vim" "$HOME/.oh-my-zsh" "$HOME/.zshrc" "$HOME/.vimrc" \
-             "$HOME/.tmux" "$HOME/.tmux.conf" "$HOME/.screenrc" "$HOME/.config/nvim"; do
-        backup_now "$p"
-    done
+# target -> the home-dir paths the target manages (what --clean backs up).
+# clean NEVER touches anything outside this mapping.
+path_map() { # path_map <target>
+  case "$1" in
+    herdr) echo "$HOME/.config/herdr" ;;
+    nvim)  echo "$HOME/.config/nvim" ;;
+    zsh)   echo "$HOME/.zshrc"; echo "$HOME/.oh-my-zsh" ;;
+    tmux)  echo "$HOME/.tmux"; echo "$HOME/.tmux.conf"; echo "$HOME/.screenrc" ;;
+    vim)   echo "$HOME/.vim"; echo "$HOME/.vimrc"; echo "$HOME/.jshintrc"; \
+           echo "$HOME/.eslintrc.json"; echo "$HOME/.pylintrc" ;;
+    all)   for t in herdr nvim zsh tmux vim; do path_map "$t"; done ;;
+    *)     return 1 ;;
+  esac
+}
+
+# clean: back up ONLY the paths belonging to the selected target, so
+# `-c -i nvim` never unplugs zsh/tmux/herdr configs. Moves only, never deletes.
+clean_install() { # clean_install <target>
+  local p paths
+  paths=$(path_map "$1") || {
+    echo "install: cannot clean unknown target '$1'" >&2; return 1
+  }
+  echo "Clean install for '$1' (backing up to $BACKUP_ROOT)"
+  for p in $paths; do
+    # a link already pointing into this repo is the install-managed link: the
+    # install target re-creates it byte-identical, so backing it up would grow
+    # the backup tree on every repeat clean for nothing
+    if [ -L "$p" ]; then
+      case "$(readlink "$p" 2>/dev/null || true)" in
+        "$REPO_DIR"/*) echo "install: $p is an install-managed link — skipping backup"; continue ;;
+      esac
+    fi
+    backup_now "$p"
+  done
 }
 
 # herdr: install the CLI + plugins; plugin config dirs are symlinked into the
@@ -377,19 +403,29 @@ for arg in "$@"; do
 done
 
 [ "${NEEDS_VALUE:-0}" = 1 ] && { echo "install: -i requires a target" >&2; usage >&2; exit 2; }
-[ -z "$install_typ" ] && [ "${CLEAN:-0}" != 1 ] && { usage; exit 0; }
 
 if [ "${CLEAN:-0}" = 1 ]; then
+  # a clean with no scope would leave configs unlinked AND installed nothing —
+  # reject it outright (fail before touching anything)
+  if [ -z "$install_typ" ]; then
+    echo "install: -c/--clean requires a scope: -i <target> (herdr nvim zsh tmux vim) or -i all" >&2
+    usage >&2
+    exit 2
+  fi
   if [ "$FORCE" != 1 ]; then
-    echo "install: -c/--clean moves your current configs to $BACKUP_ROOT before re-linking." >&2
+    echo "install: -c/--clean moves the SELECTED target's current configs to $BACKUP_ROOT before re-linking." >&2
     echo "install: this is destructive-ish — re-run with --force to confirm." >&2
     exit 1
   fi
-  clean_install
+  clean_install "$install_typ"
 fi
 
-if [ -n "$install_typ" ]; then
-  case "$install_typ" in
+if [ -z "$install_typ" ]; then
+  usage
+  exit 0
+fi
+
+case "$install_typ" in
     herdr)      install_herdr ;;
     fd)         install_fd ;;
     formatters) install_formatters ;;
@@ -423,5 +459,5 @@ if [ -n "$install_typ" ]; then
     ;;
     *) echo "install: unknown target: $install_typ" >&2; usage >&2; exit 2 ;;
   esac
-fi
+
 exit 0
