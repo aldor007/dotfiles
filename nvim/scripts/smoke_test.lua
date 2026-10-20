@@ -105,8 +105,10 @@ check("explorer: ,e toggles a tree rooted at the file dir (open+close)", functio
   assert(vim.fn.exists(":Neotree") == 2, ":Neotree not defined")
   local e = vim.fn.maparg(",e", "n", false, true)
   local E = vim.fn.maparg(",E", "n", false, true)
+  local cn = vim.fn.maparg("<C-n>", "n", false, true)
   assert(type(e) == "table" and not vim.tbl_isempty(e), ",e keymap missing")
   assert(type(E) == "table" and not vim.tbl_isempty(E), ",E keymap missing")
+  assert(type(cn) == "table" and not vim.tbl_isempty(cn), "<C-n> keymap missing")
   -- exercise the real toggle path (local mode, rooted at the file's dir)
   local tmp = vim.fn.stdpath("cache") .. "/expl-test-" .. vim.fn.getpid() .. ".go"
   vim.fn.writefile({ "package x" }, tmp)
@@ -489,6 +491,32 @@ check("neo-tree: opens in a window and closes (toggle)", function()
   end
   assert(found, "neo-tree window did not open")
   cmd.execute({ action = "close", position = "left" })
+end)
+
+check("neo-tree: renders dirs containing a newline-named file without crashing", function()
+  -- regression: nui's set_lines refuses multi-line items; the name sanitizer
+  -- in files.lua (before_render) must keep the tree renderable.
+  local base = vim.fn.stdpath("cache") .. "/neo-nl-" .. vim.fn.getpid()
+  vim.fn.mkdir(base, "p")
+  vim.fn.writefile({ "junk" }, base .. "/bad\nname.txt")
+  local ok = pcall(function()
+    require("neo-tree.command").execute({ action = "focus", position = "left", dir = base })
+    vim.wait(1500)
+    local lines = 0
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      local ft = vim.bo[vim.api.nvim_win_get_buf(w)].filetype or ""
+      if ft:match("^neo%-tree") then
+        lines = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(w))
+        break
+      end
+    end
+    if lines == 0 then
+      error("neo-tree rendered no lines (nui set_lines crashed on the newline name)")
+    end
+    require("neo-tree.command").execute({ action = "close", position = "left" })
+  end)
+  vim.fn.delete(base, "rf")
+  assert(ok, "renderer crashed on newline filename")
 end)
 
 check("aerial: module + :AerialToggle", function()
