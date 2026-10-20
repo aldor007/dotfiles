@@ -1,0 +1,338 @@
+#!/bin/sh
+# worktree-clean — list and remove inactive git worktrees (safe defaults)
+#
+# A worktree is a removal candidate only when all of the following hold:
+#   - it is not the main checkout
+#   - its basename is not in the --keep list
+#   - it is on a branch (detached HEAD checkouts are never touched)
+#   - its working tree is clean
+#   - its HEAD commit is older than --days N (default 7)
+#   - it has no open herdr workspace
+# After removing a worktree its branch is deleted with `git branch -d`
+# (the safe form: git refuses to delete branches that are not fully merged).
+#
+# Usage:
+#   worktree-clean [--repo PATH] [--days N] [--keep NAME]... [--dry-run|-n] [--yes|-y] [--help]
+#
+#     --repo PATH   repository to inspect (default: git root of the current directory)
+#     --days N      removal candidate only if the HEAD commit is older than N days
+#     --keep NAME   never touch worktrees whose basename matches NAME (repeatable)
+#     --dry-run     print the plan, remove nothing
+#     --yes         remove without prompting (for automation)
+
+set -eu
+
+repo=""
+days=7
+keep_list=""
+dry_run=0
+assume_yes=0
+tab=$(printf '\t')
+
+usage() {
+    echo "usage: worktree-clean [--repo PATH] [--days N] [--keep NAME]... [--dry-run|-n] [--yes|-y] [--help]" >&2
+    exit 2
+}
+
+show_help() {
+    cat <<'EOF'
+worktree-clean — list and remove inactive git worktrees (safe defaults)
+
+usage: worktree-clean [--repo PATH] [--days N] [--keep NAME]... [--dry-run|-n] [--yes|-y] [--help]
+
+  --repo PATH   repository to inspect (default: git root of the current directory)
+  --days N      a worktree is a removal candidate only if its HEAD commit is
+                older than N days (default 7)
+  --keep NAME   never touch worktrees whose basename matches NAME (repeatable)
+  --dry-run, -n print the plan, remove nothing
+  --yes, -y     remove without prompting (for automation)
+  --help        show this help
+
+A worktree is only removed when it is not the main checkout, is not kept,
+is on a branch, has a clean working tree, has had no commit in N days and
+has no open herdr workspace. Confirmation is required unless --yes is given.
+EOF
+    exit 0
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --repo)
+            [ $# -ge 2 ] || usage
+            repo=$2
+            shift 2
+            ;;
+        --days)
+            [ $# -ge 2 ] || usage
+            days=$2
+            shift 2
+            ;;
+        --keep)
+            [ $# -ge 2 ] || usage
+            keep_list="$keep_list$2
+"
+            shift 2
+            ;;
+        -n|--dry-run)
+            dry_run=1
+            shift
+            ;;
+        -y|--yes)
+            assume_yes=1
+            shift
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            echo "worktree-clean: unknown option: $1" >&2
+            usage
+            ;;
+    esac
+done
+
+case "$days" in
+    ''|*[!0-9]*)
+        echo "worktree-clean: --days must be a non-negative integer (got '$days')" >&2
+        exit 2
+        ;;
+esac
+
+if [ -z "$repo" ]; then
+    if ! repo=$(git rev-parse --show-toplevel 2>/dev/null); then
+        echo "worktree-clean: not inside a git repository (pass --repo PATH)" >&2
+        exit 1
+    fi
+else
+    # tolerate a literal ~/... in case the caller did not expand it
+    case "$repo" in
+        '~'|'~/'*) repo=$HOME${repo#\~} ;;   # shellcheck disable=SC2088 # tilde is expanded manually
+    esac
+fi
+
+# --- herdr open-workspace lookup (queried once, cached) ----------------------
+
+herdr_checked=0
+herdr_ok=0
+herdr_open_list=""
+herdr_ws=""
+
+herdr_load() {
+    if [ "$herdr_checked" -eq 0 ]; then
+        herdr_checked=1
+        if json=$(herdr worktree list --cwd "$repo" 2>/dev/null); then
+            if herdr_open_list=$(printf '%s\n' "$json" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+wts = data.get("worktrees") or (data.get("result") or {}).get("worktrees") or []
+for wt in wts:
+    ws = wt.get("open_workspace_id")
+    if ws:
+        sys.stdout.write("%s\t%s\n" % (wt.get("path", ""), ws))
+' 2>/dev/null); then
+                herdr_ok=1
+            fi
+        fi
+        if [ "$herdr_ok" -ne 1 ]; then
+            echo "worktree-clean: herdr unreachable (server down or not installed); assuming no open workspaces" >&2
+        fi
+    fi
+}
+
+herdr_workspace_of() {
+    # sets herdr_ws to the id of the open workspace using worktree path $1, or ""
+    herdr_ws=""
+    herdr_load
+    if [ "$herdr_ok" -eq 1 ] && [ -n "$herdr_open_list" ]; then
+        herdr_ws=$(printf '%s\n' "$herdr_open_list" | awk -F'\t' -v p="$1" '$1 == p { print $2; exit }')
+    fi
+    return 0
+}
+
+# --- helpers ------------------------------------------------------------------
+
+sq() {
+    # print $1 as a single-quoted shell word (for displaying commands)
+    printf '%s' "$1" | sed -e "s/'/'\\\\''/g" -e "s/^/'/" -e "s/$/'/"
+}
+
+keep_it() {
+    printf '%s  %s  -> KEEP (%s)\n' "$base" "$disp" "$1"
+}
+
+# --- evaluate every worktree --------------------------------------------------
+
+count=0
+removable=0
+cand=""
+
+evaluate_worktree() {
+    wt=$1
+    branch=$2
+    is_main=$3
+    count=$((count + 1))
+    base=${wt##*/}
+    if [ -n "$branch" ]; then
+        disp="$branch"
+    else
+        disp="(detached)"
+    fi
+
+    if [ "$is_main" -eq 1 ] || [ "$wt" = "$repo" ]; then
+        keep_it "main checkout"
+        return 0
+    fi
+    if printf '%s\n' "$keep_list" | grep -qxF -- "$base"; then
+        keep_it "persistent (kept)"
+        return 0
+    fi
+    if [ -z "$branch" ]; then
+        keep_it "detached HEAD"
+        return 0
+    fi
+    if ! status_out=$(git -C "$wt" status --porcelain 2>/dev/null); then
+        keep_it "status unavailable"
+        return 0
+    fi
+    if [ -n "$status_out" ]; then
+        keep_it "dirty working tree"
+        return 0
+    fi
+    if ! commit_ct=$(git -C "$wt" log -1 --format=%ct HEAD 2>/dev/null); then
+        keep_it "no HEAD commit"
+        return 0
+    fi
+    case "$commit_ct" in
+        ''|*[!0-9]*)
+            keep_it "no HEAD commit"
+            return 0
+            ;;
+    esac
+    if [ $((now - commit_ct)) -lt $((days * 86400)) ]; then
+        when=$(git -C "$wt" log -1 --format=%cd --date=short HEAD 2>/dev/null || printf '?')
+        keep_it "recent activity ($when)"
+        return 0
+    fi
+    herdr_workspace_of "$wt"
+    if [ -n "$herdr_ws" ]; then
+        keep_it "open herdr workspace $herdr_ws"
+        return 0
+    fi
+
+    printf '%s  %s  -> REMOVE\n' "$base" "$disp"
+    removable=$((removable + 1))
+    cand="$cand$wt$tab$branch
+"
+    return 0
+}
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/worktree-clean.XXXXXX") || exit 1
+trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp"; exit 130' INT
+trap 'rm -f "$tmp"; exit 143' TERM
+
+if ! git -C "$repo" worktree list --porcelain >"$tmp"; then
+    echo "worktree-clean: failed to list worktrees of $repo" >&2
+    exit 1
+fi
+
+now=$(date +%s)
+
+wt_cur=""
+branch_cur=""
+is_main=0
+is_first=1
+
+while IFS= read -r line; do
+    case "$line" in
+        'worktree '*)
+            if [ -n "$wt_cur" ]; then
+                evaluate_worktree "$wt_cur" "$branch_cur" "$is_main"
+            fi
+            wt_cur=${line#'worktree '}
+            branch_cur=""
+            if [ "$is_first" -eq 1 ]; then
+                is_main=1
+                is_first=0
+            else
+                is_main=0
+            fi
+            ;;
+        'branch refs/heads/'*)
+            branch_cur=${line#'branch refs/heads/'}
+            ;;
+    esac
+done <"$tmp"
+
+if [ -n "$wt_cur" ]; then
+    evaluate_worktree "$wt_cur" "$branch_cur" "$is_main"
+fi
+
+printf '%s removable of %s worktrees\n' "$removable" "$count"
+
+if [ "$removable" -eq 0 ]; then
+    exit 0
+fi
+
+# --- act -----------------------------------------------------------------------
+
+print_plan() {
+    echo
+    echo "would run:"
+    printf '%s\n' "$cand" | while IFS="$tab" read -r wt_c branch_c; do
+        [ -n "$wt_c" ] || continue
+        printf '  git -C %s worktree remove %s\n' "$(sq "$repo")" "$(sq "$wt_c")"
+        if [ -n "$branch_c" ]; then
+            printf '  git -C %s branch -d %s\n' "$(sq "$repo")" "$(sq "$branch_c")"
+        fi
+    done
+    return 0
+}
+
+remove_worktrees() {
+    # per-worktree failures are reported, never fatal
+    printf '%s\n' "$cand" | while IFS="$tab" read -r wt_c branch_c; do
+        [ -n "$wt_c" ] || continue
+        if git -C "$repo" worktree remove "$wt_c"; then
+            printf 'removed %s\n' "$wt_c"
+            if [ -n "$branch_c" ]; then
+                if git -C "$repo" branch -d "$branch_c"; then
+                    printf '  deleted branch %s\n' "$branch_c"
+                else
+                    printf '  kept branch %s (not fully merged or checked out elsewhere)\n' "$branch_c" >&2
+                fi
+            fi
+        else
+            printf '  failed to remove %s, continuing\n' "$wt_c" >&2
+        fi
+    done
+    return 0
+}
+
+if [ "$dry_run" -eq 1 ]; then
+    print_plan
+    exit 0
+fi
+
+if [ "$assume_yes" -eq 0 ] && [ ! -t 1 ]; then
+    echo "worktree-clean: no terminal and no --yes given; showing plan only (pass --yes to remove)" >&2
+    print_plan
+    exit 0
+fi
+
+if [ "$assume_yes" -eq 0 ]; then
+    print_plan
+    echo
+    printf 'Remove these %s worktrees? [y/N] ' "$removable" >&2
+    if read -r ans </dev/tty 2>/dev/null && { [ "$ans" = y ] || [ "$ans" = Y ]; }; then
+        remove_worktrees
+    else
+        echo "aborted - nothing removed"
+    fi
+    exit 0
+fi
+
+remove_worktrees

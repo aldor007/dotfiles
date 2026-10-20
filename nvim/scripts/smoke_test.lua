@@ -258,7 +258,7 @@ check("cheatsheet popup (:Cheatsheet / ,kh)", function()
   local n = vim.api.nvim_buf_line_count(bufnr)
   assert(n > 80, "cheatsheet too thin: " .. n .. " lines")
   local txt = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-  for _, needle in ipairs({ "Environment (live)", "Hints", "Plugin keys", "Keymaps", "Plugins", "Leader", "barbar" }) do
+  for _, needle in ipairs({ "Quick start", "Splits & windows", "Environment (live)", "Plugin keys", "Keymaps", "Plugins", "Leader", "barbar" }) do
     assert(txt:find(needle, 1, true), "cheatsheet missing section: " .. needle)
   end
   vim.cmd("Cheatsheet") -- toggle closed

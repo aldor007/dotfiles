@@ -101,10 +101,14 @@ export PSZSH=$PS1
 export GPG_TTY=$(tty)    
 export PATH="$HOME/.bin":$PATH
 
-# Lazy nvm: node/npm/npx work immediately via the default version's PATH;
-# full nvm only loads the first time you call `nvm` (saves ~1.2s startup)
+# Lazy nvm: node/npm/npx work immediately via the installed default's PATH;
+# full nvm only loads the first time you call `nvm` (saves ~1.2s startup).
+# The version is resolved dynamically (newest installed) — no hardcoded
+# v24.x path, so node upgrades don't strand the PATH entry.
 export NVM_DIR="$HOME/.nvm"
-export PATH="$NVM_DIR/versions/node/v24.16.0/bin:$PATH"
+_nvm_newest=$(ls -d "$NVM_DIR"/versions/node/v* 2>/dev/null | sort -V | tail -1)
+[ -n "$_nvm_newest" ] && [ -d "$_nvm_newest/bin" ] && export PATH="$_nvm_newest/bin:$PATH"
+unset _nvm_newest
 nvm() {
     unset -f nvm
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
@@ -127,11 +131,22 @@ test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell
 # Resolves the docker binary explicitly (Rancher Desktop ships it under
 # ~/.rd/bin; /usr/local/bin is the Intel-era location) so the wrapper never
 # recurses into itself and works regardless of which install is present.
-docker() {
+# docker: passthrough, native architecture. (The old wrapper forced
+# `--platform linux/amd64` on every run/build under Apple Silicon; use the
+# explicit `docker-amd64` helper when you really need amd64.)
+_resolve_docker() {
     local d=/usr/local/bin/docker
     [ -x "$d" ] || d="$HOME/.rd/bin/docker"
     [ -x "$d" ] || { echo "docker: no binary found (/usr/local/bin or \$HOME/.rd/bin)" >&2; return 127; }
-    if [[ `uname -m` == "arm64" ]] && [[ "$1" == "run" || "$1" == "build" ]]; then
+    printf '%s\n' "$d"
+}
+docker() {
+    local d; d=$(_resolve_docker) || return $?
+    "$d" "$@"
+}
+docker-amd64() {
+    local d; d=$(_resolve_docker) || return $?
+    if [[ "$1" == "run" || "$1" == "build" ]]; then
         "$d" "$1" --platform linux/amd64 "${@:2}"
     else
         "$d" "$@"
@@ -140,22 +155,34 @@ docker() {
 
 export PATH="$HOME/.poetry/bin:$PATH"
 export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
+if command -v pyenv >/dev/null 2>&1 || [ -x "$PYENV_ROOT/bin/pyenv" ]; then
+  command -v pyenv >/dev/null 2>&1 || export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+else
+  unset PYENV_ROOT
+fi
 export PATH="$HOME/.local/bin:$PATH"
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
 export PATH="/Users/mkaciuba/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
-#
-export GOPROXY=https://us-central1-go.pkg.dev/cicd-master-oxk5/go-modules,https://proxy.golang.org,direct
-export GONOSUMDB=github.com/castai/*,gitlab.com/castai/*
-# export GOPRIVATE=gitlab.com/castai,github.com/castai
 # opencode
-export PATH=/Users/mkaciuba/.opencode/bin:$PATH
+export PATH="$HOME/.opencode/bin:$PATH"
 
 # Secrets live outside the repo (gitignored dotfiles shouldn't contain them)
 [ -f ~/.secrets.zsh ] && source ~/.secrets.zsh
+
+# -- Go module proxy -----------------------------------------------------------
+# The internal mirror URL embeds a GCP project ID, so it is NOT tracked here:
+# set CASTAI_GOPROXY in ~/.secrets.zsh (gitignored); public proxy is the
+# portable fallback. Placed after the secrets source so the override wins.
+# export GOPRIVATE=gitlab.com/castai,github.com/castai  (optional, uncomment)
+export GOPROXY="${CASTAI_GOPROXY:-}https://proxy.golang.org,direct"
+export GONOSUMDB=github.com/castai/*,gitlab.com/castai/*
+
+# herdr-projects board reads pi transcripts from $PI_CODING_AGENT_DIR/sessions
+# (scripts/pi adapter writes kimchi sessions there)
+export PI_CODING_AGENT_DIR="$HOME/.pi/agent"
 
 alias vim=nvim
 # Override git-svn alias from oh-my-zsh git plugin
@@ -179,6 +206,13 @@ kimchi() {
 }
 
 alias pi=kimchi
+
+# --- Kimchi LLM gateway key ----------------------------------------------------
+# kimchi's own gateway (llm.kimchi.dev/openai/v1) is OpenAI-compatible; minuet
+# (inline completion) reads this env var. Source it from kimchi's config.json.
+if [[ -z "$KIMCHI_API_KEY" && -r "$HOME/.config/kimchi/config.json" ]]; then
+  export KIMCHI_API_KEY=$(jq -r '.apiKey // empty' ~/.config/kimchi/config.json 2>/dev/null)
+fi
 
 # --- morning monitor: PR/MR digest --------------------------------------------
 # macOS ships no `timeout` (coreutils' gtimeout); fall back so the refresh

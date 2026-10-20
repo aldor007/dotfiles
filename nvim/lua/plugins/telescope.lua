@@ -159,4 +159,19 @@ return {
       pcall(require("telescope").load_extension, "notify")
     end,
   },
+
+  -- telescope-file-browser: fuzzy file manager — create/delete/rename/move
+  -- files+folders from a telescope picker (complements nvim-tree's tree;
+  -- this is the fuzzy/rename workflow). Dep on telescope loads + setups
+  -- first, then this config registers the extension.
+  {
+    "nvim-telescope/telescope-file-browser.nvim",
+    dependencies = { "nvim-telescope/telescope.nvim", "nvim-lua/plenary.nvim" },
+    keys = {
+      { "<space>fb", "<cmd>Telescope file_browser<cr>", desc = "File browser (fuzzy)" },
+    },
+    config = function()
+      require("telescope").load_extension("file_browser")
+    end,
+  },
 }

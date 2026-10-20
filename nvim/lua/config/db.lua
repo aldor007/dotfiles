@@ -1,6 +1,7 @@
 -- DB helpers: connect to CAST AI Cloud SQL via scripts/sql-db.sh.
--- Runs the script (starts the px IAP tunnel on demand), parses the printed
--- DSN, sets g:db for vim-dadbod, and opens the interactive console.
+-- Runs the script (starts the px IAP tunnel on demand), reads the raw DSN
+-- from its machine mode (--dsn), sets g:db for vim-dadbod, and opens the
+-- interactive console.
 -- Note: IAM tokens rotate ~hourly — a failing query means re-run the keybind.
 -- Real names/IDs (GCP projects, DB/instance names, ports) are read from the
 -- gitignored local/projects.env (scripts/dotfiles-init.sh) — not from git.
@@ -32,13 +33,6 @@ local function port_for_env(envname)
   local k = "env_" .. envname:gsub("-", "_") .. "_port"
   local v = env[k]
   return v and tonumber(v) or nil
-end
-
----Parse the DSN out of sql-db.sh output ("sql-db: dsn    postgres://...")
----@param out string
----@return string?
-local function parse_dsn(out)
-  return out:match("dsn%s+(%S+)")
 end
 
 ---Mint ONE gcloud IAM token and register a connection for every env in
@@ -111,15 +105,16 @@ end
 ---@param env string
 function M.use_env(env)
   dbs[env] = nil -- force a fresh resolve; re-added on success below
-  local job = vim.system({ SCRIPT, "--env", env }, { text = true }, function(obj)
+  local job = vim.system({ SCRIPT, "--env", env, "--dsn" }, { text = true }, function(obj)
     local out = (obj.stdout or "") .. (obj.stderr or "")
     if obj.code ~= 0 then
       vim.notify("sql-db: " .. out:gsub("%s+", " "):sub(1, 300), vim.log.levels.ERROR)
       return
     end
-    local dsn = parse_dsn(out)
-    if not dsn then
-      vim.notify("sql-db: no DSN in output: " .. out:gsub("%s+", " "):sub(1, 200), vim.log.levels.ERROR)
+    -- --dsn prints ONLY the raw DSN (never echoed to a terminal by the script)
+    local dsn = (obj.stdout or ""):gsub("%s+", "")
+    if dsn == "" then
+      vim.notify("sql-db: empty --dsn output", vim.log.levels.ERROR)
       return
     end
     vim.g.db = dsn
@@ -131,10 +126,11 @@ function M.use_env(env)
   return job
 end
 
----Tunnel teardown helper: scripts/sql-db.sh --stop
+---Tunnel teardown helper: scripts/sql-db.sh --stop (PID-file based, only
+---kills tunnels this script started).
 function M.stop()
   vim.system({ SCRIPT, "--stop" })
-  vim.notify("db: tunnel stopped", vim.log.levels.INFO)
+  vim.notify("db: tunnels stopped", vim.log.levels.INFO)
 end
 
 return M

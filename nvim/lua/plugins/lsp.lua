@@ -110,7 +110,13 @@ return {
     opts = {
       keymap = { preset = "default" },
       completion = {
-        documentation = { auto_show = true },
+        documentation = {
+          auto_show = true,
+          -- docs are rendered with the CURRENT buffer's treesitter parser;
+          -- bash/terraform snippet bodies (with ${1:...} placeholders) parse
+          -- into red @error noise — render plain text instead
+          treesitter_highlighting = false,
+        },
         accept = { auto_brackets = { enabled = true } },
       },
       signature = { enabled = true },

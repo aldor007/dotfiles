@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck shell=sh disable=SC1090,SC3043,SC2154  # dynamic sources; `local`; eval-indirection for ports
 # dotfiles-init.sh — render LOCAL (gitignored) dotfiles from templates.
 #
 # Real infrastructure names and IDs (herdr projects for each service,
@@ -31,23 +32,32 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOCALS="$REPO_DIR/local"
 ENV_FILE="$LOCALS/projects.env"
 TEMPLATES="$REPO_DIR/scripts/templates"
-HERDR_SRC="$REPO_DIR/.config/herdr/plugins/config/cloudmanic.herdr-plus"
 
 show=""
 install_deps=""
+example=0
+force=0
 for arg in "$@"; do
   case "$arg" in
     --deps) install_deps=1 ;;
-    --example)
-      mkdir -p "$LOCALS"
-      cp "$REPO_DIR/scripts/projects.env.example" "$ENV_FILE"
-      echo "dotfiles-init: created $ENV_FILE from example — edit it, then re-run"
-      exit 0 ;;
+    --force) force=1 ;;
+    --example) example=1 ;;
     --show) show=1 ;;
     --help) sed -n '1,28p' "$0"; exit 0 ;;
     *) echo "dotfiles-init: unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+if [ "$example" = 1 ]; then
+  if [ -e "$ENV_FILE" ] && [ "$force" != 1 ]; then
+    echo "dotfiles-init: $ENV_FILE already exists — NOT overwriting (use --force to replace)" >&2
+    exit 1
+  fi
+  mkdir -p "$LOCALS"
+  cp "$REPO_DIR/scripts/projects.env.example" "$ENV_FILE"
+  echo "dotfiles-init: created $ENV_FILE from example — edit it, then re-run"
+  exit 0
+fi
 
 if [ -n "$install_deps" ]; then
   echo "dotfiles-init: installing DB TUIs (rainfrog, vi-sql)..."
@@ -89,10 +99,10 @@ done
 
 REPO_BASENAME=$(basename "$KUBECAST_REPO")
 
-render() { # render <template> <out> [service]
-  local t="$1" o="$2" svc="${3:-}"
+render() { # render <template> <out> [service] [env]
+  local t="$1" o="$2" svc="${3:-}" envname="${4:-}"
   local d
-  d="s|@@REPO@@|${KUBECAST_REPO}|g; s|@@REPO_BASENAME@@|${REPO_BASENAME}|g; s|@@GROUP@@|${KUBECAST_GROUP}|g; s|@@DB_NAME@@|${DB_NAME}|g; s|@@SERVICE@@|${svc}|g; s|@@USER@@|${DB_USER}|g"
+  d="s|@@REPO@@|${KUBECAST_REPO}|g; s|@@REPO_BASENAME@@|${REPO_BASENAME}|g; s|@@GROUP@@|${KUBECAST_GROUP}|g; s|@@DB_NAME@@|${DB_NAME}|g; s|@@SERVICE@@|${svc}|g; s|@@USER@@|${DB_USER}|g; s|@@ENV@@|${envname}|g"
   mkdir -p "$(dirname "$o")"
   sed -e "$d" "$t" >"$o"
 }
@@ -108,6 +118,12 @@ done
 render "$TEMPLATES/herdr-project-root.toml" "$herdr_out/projects/$REPO_BASENAME.toml"
 render "$TEMPLATES/herdr-root-action.toml" "$herdr_out/quick-actions/$REPO_BASENAME-project.toml"
 render "$TEMPLATES/herdr-repo-worktree.toml" "$herdr_out/worktrees/$REPO_BASENAME.toml"
+
+# --- DB workspaces: one project + quick action per env (kent) ---
+for envname in dev-master prod-master prod-eu prod-india; do
+  render "$TEMPLATES/herdr-db-project.toml" "$herdr_out/projects/db-$envname.toml" "" "$envname"
+  render "$TEMPLATES/herdr-db-action.toml" "$herdr_out/quick-actions/db-$envname.toml" "" "$envname"
+done
 
 # --- rainfrog: base settings + [db] per env ---
 rainfrog_out="$herdr_out/../rainfrog/rainfrog_config.toml"

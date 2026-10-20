@@ -1,297 +1,403 @@
 #!/bin/bash
-base_dir=~/dotfiles/
+# dotfiles installer — idempotent, non-destructive by default.
+#
+# Safety model:
+#   * Nothing existing is ever deleted: before a config file/dir is replaced
+#     with a symlink into this repo, the original is moved to a timestamped
+#     backup under ${DOTFILES_BACKUP_DIR:-~/.dotfiles-backup}.
+#   * Destructive operations (the -c/--clean mode, which clears the home-dir
+#     config paths BEFORE re-linking) require an explicit `--force`.
+#   * --dry-run prints every command that would run, without executing it.
+#   * Re-runs are idempotent: links already pointing at this repo are kept,
+#     clones are skipped when the target dir exists, tool installs are
+#     skipped when the tool is already present where possible.
+#
+# Usage:
+#   install.sh [-h] [-d|--dry-run] [-f|--force] [-i|--install <target>]
+#              [-c|--clean]
+#
+#   -i, --install <target>   run one install target (see list below)
+#   -c, --clean              before linking, move existing home-dir configs
+#                            to backup (REQUIRES --force; moves, never deletes)
+#   -d, --dry-run            print what would run; change nothing
+#   -f, --force              allow destructive pre-clean
+#   -h, --help               this text
+#
+# Targets: herdr nvim vim zsh tmux fzf repo formatters rainfrog vi-sql
+#          fonts bin programing all
+set -euo pipefail
+
+# The repo is wherever this script lives — no hardcoded ~/dotfiles.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$REPO_DIR/"
+BACKUP_ROOT="${DOTFILES_BACKUP_DIR:-$HOME/.dotfiles-backup}"
+DRY=0
+FORCE=0
+install_typ=""
+
+usage() { sed -n '1,30p' "$0"; }
+
+run() { # run <cmd...> — executes, or prints under --dry-run
+  if [ "$DRY" = 1 ]; then
+    printf '[dry-run] %s\n' "$*"
+  else
+    "$@"
+  fi
+}
+
+backup_now() { # backup_now <path> -> backup dir; moves path there
+  local p="$1"
+  [ -e "$p" ] || [ -L "$p" ] || return 0
+  local ts
+  ts=$(date +%Y%m%d-%H%M%S)
+  local dst
+  dst="$BACKUP_ROOT/$ts/$(basename "$p")"
+  echo "install: backing up $p -> $dst"
+  run mkdir -p "$(dirname "$dst")"
+  run mv "$p" "$dst"
+}
+
+# link_or_backup <target> <link> — idempotent symlink with backup of anything
+# that currently occupies <link> and is NOT already a symlink to <target>.
+link_or_backup() {
+  local target="$1" link="$2"
+  if [ -L "$link" ]; then
+    local cur
+    cur=$(readlink "$link" 2>/dev/null || true)
+    [ "$cur" = "$target" ] && return 0
+    echo "install: $link is a symlink to $cur (not $target) — replacing"
+    run rm -f "$link"
+  elif [ -e "$link" ]; then
+    backup_now "$link"
+  fi
+  local parent
+  parent=$(dirname "$link")
+  [ -d "$parent" ] || run mkdir -p "$parent"
+  run ln -s "$target" "$link"
+}
 
 function install_common {
     command -v apt-get >/dev/null 2>&1 || { echo "install_common: apt-get not found — skipping (Debian/Ubuntu only)"; return; }
-    sudo apt-get install git -y 
-    sudo apt-get install zip -y 
-    sudo apt-get install unzip -y 
-    sudo apt-get install subversion -y 
-    sudo apt-get install mercurial -y 
-    sudo apt-get install build-essential -y 
-    sudo apt-get install python-pip -y 
-
-    sudo apt-get install screen -y  
-    ln -s  ${base_dir}.screenrc ~/.screenrc
+    run sudo apt-get install git -y
+    run sudo apt-get install zip -y
+    run sudo apt-get install unzip -y
+    run sudo apt-get install subversion -y
+    run sudo apt-get install mercurial -y
+    run sudo apt-get install build-essential -y
+    run sudo apt-get install python-pip -y
+    run sudo apt-get install screen -y
+    link_or_backup "${BASE_DIR}.screenrc" "$HOME/.screenrc"
 }
 
 function install_fonts {
   command -v apt-get >/dev/null 2>&1 || { echo "install_fonts: skipping (Debian/Ubuntu only)"; return; }
-  wget https://github.com/Lokaltog/powerline/raw/develop/font/PowerlineSymbols.otf
-  wget https://github.com/Lokaltog/powerline/raw/develop/font/10-powerline-symbols.conf
-  mkdir -p ~/.fonts
-  mv PowerlineSymbols.otf ~/.fonts/
-  mkdir -p ~/.config/fontconfig/conf.d
-  mv 10-powerline-symbols.conf ~/.config/fontconfig/conf.d/
-  fc-cache -vf ~/.fonts/
+  local td
+  td=$(mktemp -d)
+  ( cd "$td"
+    run curl -fLO https://github.com/Lokaltog/powerline/raw/develop/font/PowerlineSymbols.otf
+    run curl -fLO https://github.com/Lokaltog/powerline/raw/develop/font/10-powerline-symbols.conf
+    run mkdir -p "$HOME/.fonts" "$HOME/.config/fontconfig/conf.d"
+    run mv -f PowerlineSymbols.otf "$HOME/.fonts/"
+    run mv -f 10-powerline-symbols.conf "$HOME/.config/fontconfig/conf.d/"
+    run fc-cache -vf "$HOME/.fonts/"
+  )
+  run rm -rf "$td"
 }
 
 function install_zsh {
     command -v apt-get >/dev/null 2>&1 || { echo "install_zsh: skipping (Debian/Ubuntu only)"; return; }
-    sudo apt-get install zsh -y
-    sudo chsh -s /bin/zsh  $USER
-    # cp -r ${base_dir}.oh-my-zsh/ ~g
-    git clone https://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
-    ln -s  ${base_dir}.zshrc ~/.zshrc
-    git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/plugins/zsh-autosuggestions
-    ln -s ${base_dir}zsh-themes/birav1.zsh-theme ~/.oh-my-zsh/themes
+    run sudo apt-get install zsh -y
+    run sudo chsh -s /bin/zsh "${USER:-$(whoami)}"
+    [ -d "$HOME/.oh-my-zsh" ] || run git clone --depth 1 https://github.com/robbyrussell/oh-my-zsh "$HOME/.oh-my-zsh"
+    link_or_backup "${BASE_DIR}.zshrc" "$HOME/.zshrc"
+    [ -d "$HOME/.oh-my-zsh/plugins/zsh-autosuggestions" ] || \
+      run git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME/.oh-my-zsh/plugins/zsh-autosuggestions"
+    run mkdir -p "$HOME/.oh-my-zsh/themes"
+    link_or_backup "${BASE_DIR}zsh-themes/birav1.zsh-theme" "$HOME/.oh-my-zsh/themes/birav1.zsh-theme"
 }
 
 function install_tmux {
     command -v apt-get >/dev/null 2>&1 || { echo "install_tmux: skipping (Debian/Ubuntu only)"; return; }
-    sudo apt-get install python-fontforge -y 
-    ubuntu=$(cat /etc/issue | grep -i ubuntu)
-    if [ $? -eq 0 ]; then
-        sudo apt-get install -y python-software-properties software-properties-common
-        sudo add-apt-repository -y ppa:pi-rho/dev
-        sudo apt-get update
+    run sudo apt-get install python-fontforge -y
+    if cat /etc/issue 2>/dev/null | grep -qi ubuntu; then
+        run sudo apt-get install -y python-software-properties software-properties-common
+        run sudo add-apt-repository -y ppa:pi-rho/dev
+        run sudo apt-get update
     fi
-    sudo apt-get install tmux -y
-    sudo apt-get install python-netifaces -y
-    ln -s ${base_dir}.tmux ~/.tmux
-    ln -s ${base_dir}.config/powerline/ ~/.config/powerline
-    git clone https://github.com/Lokaltog/powerline   ~/.tmux/powerline2
-    cd ~/.tmux/powerline2; sudo python setup.py install
-    ln -s ${base_dir}.tmux/tmux.conf ~/.tmux.conf
+    run sudo apt-get install tmux -y
+    run sudo apt-get install python-netifaces -y
+    link_or_backup "${BASE_DIR}.tmux" "$HOME/.tmux"
+    link_or_backup "${BASE_DIR}.config/powerline/" "$HOME/.config/powerline"
+    [ -d "$HOME/.tmux/powerline2" ] || run git clone https://github.com/Lokaltog/powerline "$HOME/.tmux/powerline2"
+    ( cd "$HOME/.tmux/powerline2" && run sudo python setup.py install )
+    link_or_backup "${BASE_DIR}.tmux/tmux.conf" "$HOME/.tmux.conf"
 }
 
 function install_programing {
-    sudo apt-get install python -y 2>/dev/null || true
-    sudo apt-get install python-pip -y 2>/dev/null || true
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+    command -v apt-get >/dev/null 2>&1 && {
+        run sudo apt-get install python -y || true
+        run sudo apt-get install python-pip -y || true
+    }
+    [ -d "$HOME/.nvm" ] || run bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash'
 
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
-    nvm install stable
-    nvm use stable
-    npm install -g jslint
-    npm install -g eslint
-    mkdir -p ~/.bin
+    run nvm install stable
+    run nvm use stable
+    run npm install -g jslint
+    run npm install -g eslint
+    run mkdir -p "$HOME/.bin"
     if [ "$(uname -s)" = "Linux" ]; then
-        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && mv kubectl ~/.bin/kubectl && chmod a+x ~/.bin/kubectl
+        run bash -c 'cd "$HOME/.bin" && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod a+x kubectl'
     else
         echo "kubectl: skipping (linux/amd64 binary only; use brew install kubectl instead)"
     fi
-    curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash 
-    curl -sL https://istio.io/downloadIstioctl | sh -
-    git clone https://github.com/cunymatthieu/tgenv.git ~/.tgenv
+    [ -x "$HOME/.bin/helm" ] || run bash -c 'curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash'
+    run bash -c 'curl -sL https://istio.io/downloadIstioctl | sh -'
+    [ -d "$HOME/.tgenv" ] || run git clone https://github.com/cunymatthieu/tgenv.git "$HOME/.tgenv"
     if [ "$(uname -s)" = "Linux" ]; then
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash 
-        cd /tmp && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"  && unzip awscliv2.zip &&     sudo ./aws/install 
+        run bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash'
+        run bash -c 'cd /tmp && curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip && unzip -o awscliv2.zip && sudo ./aws/install'
     else
         echo "awscli/azure: skipping (Linux installers; use brew install awscli azure-cli)"
     fi
-    git clone https://github.com/tfutils/tfenv.git ~/.tfenv
-    # krew (repeatable, idempotent-ish block — one copy; was duplicated here)
-    (
-  set -x; cd "$(mktemp -d)" &&
-  OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
-  ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
+    [ -d "$HOME/.tfenv" ] || run git clone https://github.com/tfutils/tfenv.git "$HOME/.tfenv"
+    # krew (repeatable, idempotent block)
+    [ -x "$HOME/.krew/bin/kubectl-krew" ] || run bash -c '
+  cd "$(mktemp -d)" &&
+  OS="$(uname | tr "[:upper:]" "[:lower:]")" &&
+  ARCH="$(uname -m | sed -e "s/x86_64/amd64/" -e "s/\(arm\)\(64\)\?.*/\1\2/" -e "s/aarch64$/arm64/")" &&
   KREW="krew-${OS}_${ARCH}" &&
   curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz" &&
   tar zxvf "${KREW}.tar.gz" &&
-  ./"${KREW}" install krew
-)
+  ./"${KREW}" install krew'
 }
 
 function install_vim {
     command -v apt-get >/dev/null 2>&1 || { echo "install_vim: skipping (Debian/Ubuntu only)"; return; }
-    sudo apt-get install fontforge --yes
-    sudo apt-get install vim-nox --yes
-    sudo apt-get install ctags --yes
-    sudo pip install jedi -i http://pypi.python.org/simple/
-    sudo pip install pylint -i http://pypi.python.org/simple/
-    rm -f ~/.vimrc
-    ln -s ${base_dir}.jshintrc ~/.jshintrc
-    ln -s ${base_dir}.eslintrc.json  ~/.eslintrc.json
-    ln -s  ${base_dir}.vim ~/.vim
-    git clone https://github.com/gmarik/Vundle.vim  ~/.vim/bundle/Vundle.vim
-    ln -s ${base_dir}.pylintrc ~/.pylintrc
-    ln -s ${base_dir}.vimrc ~/.vimrc
-    echo | vim -c 'BundleInstall' -c qa
+    run sudo apt-get install fontforge --yes
+    run sudo apt-get install vim-nox --yes
+    run sudo apt-get install ctags --yes
+    run sudo pip install jedi || true
+    run sudo pip install pylint || true
+    link_or_backup "${BASE_DIR}.jshintrc" "$HOME/.jshintrc"
+    link_or_backup "${BASE_DIR}.eslintrc.json" "$HOME/.eslintrc.json"
+    link_or_backup "${BASE_DIR}.vim" "$HOME/.vim"
+    [ -d "$HOME/.vim/bundle/Vundle.vim" ] || run git clone https://github.com/gmarik/Vundle.vim "$HOME/.vim/bundle/Vundle.vim"
+    link_or_backup "${BASE_DIR}.pylintrc" "$HOME/.pylintrc"
+    link_or_backup "${BASE_DIR}.vimrc" "$HOME/.vimrc"
+    [ "$DRY" = 1 ] || echo | vim -c 'BundleInstall' -c qa
 }
+
+# nvim: link the repo config in and make sure a recent nvim exists.
+function install_nvim {
+    link_or_backup "$REPO_DIR/nvim" "$HOME/.config/nvim"
+    if ! command -v nvim >/dev/null 2>&1; then
+        if command -v brew >/dev/null 2>&1; then
+            run brew install nvim
+        else
+            echo "install_nvim: nvim not found — install it (brew install nvim) then re-run"
+        fi
+    else
+        echo "install_nvim: nvim present ($(nvim --version | head -1)) — config linked to $HOME/.config/nvim"
+    fi
+    echo "install_nvim: validate with: $REPO_DIR/nvim/scripts/validate.sh"
+}
+
 function install_fzf {
-    git clone https://github.com/junegunn/fzf.git ~/.fzf
-    ~/.fzf/install --all
+    if [ -d "$HOME/.fzf" ]; then
+        # upgrade-aware: pull the existing clone, then re-run the installer
+        ( cd "$HOME/.fzf" && run git pull --ff-only )
+    else
+        run git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
+    fi
+    run "$HOME/.fzf/install" --all </dev/null
 }
 
 function install_gitconf {
     command -v apt-get >/dev/null 2>&1 || { echo "install_gitconf: skipping (Debian/Ubuntu only)"; return; }
-    sudo apt-get install libncurses5-dev libncursesw5-dev -y
-    ln -s  ${base_dir}.gitconfig ~/.gitconfig
-    git clone https://github.com/jonas/tig /tmp/tig
-    cd /tmp/tig; sudo make prefix=/usr/local
-    cd /tmp/tig; sudo make install prefix=/usr/local
+    run sudo apt-get install libncurses5-dev libncursesw5-dev -y
+    link_or_backup "${BASE_DIR}.gitconfig" "$HOME/.gitconfig"
+    [ -d /tmp/tig/.git ] || run git clone https://github.com/jonas/tig /tmp/tig
+    ( cd /tmp/tig && run sudo make prefix=/usr/local && run sudo make install prefix=/usr/local )
 }
 
 function install_bin {
-    mkdir -p ~/.bin/
-    cp -r ${base_dir}/scripts/* ~/.bin
+    run mkdir -p "$HOME/.bin/"
+    run cp -R "$REPO_DIR/scripts/." "$HOME/.bin/"
+}
+
+# fd: fast, friendly file finder — used by telescope (find_files/<space>g)
+# and fzf-lua-style workflows. macOS: brew. Debian/Ubuntu: fd-find package
+# installs the binary as `fdfind`; cargo fallback gives `fd` everywhere.
+function install_fd {
+    if command -v brew >/dev/null 2>&1; then
+        if command -v fd >/dev/null 2>&1; then
+            echo "install_fd: fd present ($(fd --version | head -1)) — skipping"
+        else
+            run brew install fd
+        fi
+    elif command -v apt-get >/dev/null 2>&1; then
+        run sudo apt-get install -y fd-find
+        echo "install_fd: Debian installs fd-find — binary name is fdfind (alias fd=fdfind if needed)"
+    elif command -v cargo >/dev/null 2>&1; then
+        run cargo install fd-find --locked
+    else
+        echo "install_fd: no brew/apt/cargo found — install manually (brew install fd)"
+    fi
 }
 
 # Formatters/linters used by conform.nvim + nvim-lint (nvim/lua/plugins/format.lua).
-# macOS: everything via brew. Debian/Ubuntu: apt only ships shellcheck; the
-# rest come from their own toolchains (cargo install stylua, pipx install
-# ruff, npm -g prettier). Missing binaries are skipped gracefully by conform.
 function install_formatters {
     if command -v brew >/dev/null 2>&1; then
-        brew install stylua ruff prettier shellcheck
+        run brew install stylua ruff prettier shellcheck
         echo "formatters installed: stylua ruff prettier shellcheck"
     elif command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get install -y shellcheck
+        run sudo apt-get install -y shellcheck
         echo "apt: shellcheck installed; install stylua (cargo), ruff (pipx), prettier (npm) separately"
     else
         echo "install_formatters: no brew/apt found — install stylua, ruff, prettier, shellcheck manually"
     fi
 }
 
-# vi-sql: vim-mode SQL TUI (schema browser, grid editing, EXPLAIN, MCP
-# server for AI). brew on macOS; pinned curl installer elsewhere.
+# vi-sql: vim-mode SQL TUI (schema browser, grid editing, EXPLAIN, MCP).
 function install_vi_sql {
     if command -v brew >/dev/null 2>&1; then
-        brew install vi-sql
+        command -v vi-sql >/dev/null 2>&1 || run brew install vi-sql
     else
-        VI_SQL_VERSION="${VI_SQL_VERSION:-v0.6.0}" sh -c "$(curl -fsSL https://vi-sql.com/install.sh)"
+        command -v vi-sql >/dev/null 2>&1 || run bash -c 'VI_SQL_VERSION="${VI_SQL_VERSION:-v0.6.0}" sh -c "$(curl -fsSL https://vi-sql.com/install.sh)"'
     fi
     echo "vi-sql installed: vi-sql --connect <dsn> (or sql-db.sh --visql)"
 }
 
-# rainfrog: spreadsheet-style DB TUI (Postgres/MySQL/SQLite).
-# macOS via brew; elsewhere via cargo. Config is repo-managed (no secrets;
-# connections come from sql-db.sh --rainfrog with a fresh IAM DSN).
+# rainfrog: spreadsheet-style DB TUI. Config is symlinked — LOCAL generated
+# config (dotfiles-init.sh) wins; tracked base is the fallback.
 function install_rainfrog {
     if command -v brew >/dev/null 2>&1; then
-        brew install rainfrog
+        command -v rainfrog >/dev/null 2>&1 || run brew install rainfrog
     elif command -v cargo >/dev/null 2>&1; then
-        cargo install rainfrog --locked
+        command -v rainfrog >/dev/null 2>&1 || run cargo install rainfrog --locked
     else
         echo "install_rainfrog: no brew/cargo found — install manually (brew install rainfrog)"
         return
     fi
+    local conf
     case "$(uname -s)" in
         Darwin) conf="$HOME/Library/Application Support/dev.rainfrog.rainfrog" ;;
         *)      conf="$HOME/.config/rainfrog" ;;
     esac
-    mkdir -p "$conf"
-    # local generated config (dotfiles-init.sh) wins; tracked base is fallback
-    src=${base_dir}local/rainfrog/rainfrog_config.toml
-    [ -f "$src" ] || src=${base_dir}.config/rainfrog/rainfrog_config.toml
-    ln -sf "$src" "$conf/rainfrog_config.toml"
+    local src="$REPO_DIR/local/rainfrog/rainfrog_config.toml"
+    [ -f "$src" ] || src="$REPO_DIR/.config/rainfrog/rainfrog_config.toml"
+    link_or_backup "$src" "$conf/rainfrog_config.toml"
     echo "rainfrog installed; config linked -> $conf/rainfrog_config.toml"
 }
 
+# clean: move the home-dir config paths to backup so the install targets
+# re-create them from the repo. Moves only — nothing is deleted.
 function clean_install {
-    echo "Clean install"
-    rm -rf ~/.vim
-    rm -rf ~/.oh-my-zsh
-    rm -rf ~/.zshrc
-    rm -rf ~/.vimrc
-    rm -rf ~/.tmux
-    rm -rf ~/.tmux.conf
-    rm -rf ~/.screenrc
+    echo "Clean install (backing up existing configs to $BACKUP_ROOT)"
+    for p in "$HOME/.vim" "$HOME/.oh-my-zsh" "$HOME/.zshrc" "$HOME/.vimrc" \
+             "$HOME/.tmux" "$HOME/.tmux.conf" "$HOME/.screenrc" "$HOME/.config/nvim"; do
+        backup_now "$p"
+    done
 }
 
-install_typ='all'
-key="$1"
-
-case $key in
-    -c|--clean)
-        clean_install
-        shift
-    ;;
-    -i|--install)
-        install_typ="$2"
-        shift
-    ;;
-    *)
-        echo "usage:
-                -c|--clean  - remove dotfiles before install
-                -i|--install [type] copy dotfiles
-        "
-        ;;
-    esac
-install_common
-[ -d "${base_dir}" ] || git clone --recursive https://github.com/Aldor007/dotfiles ${base_dir}
+# herdr: install the CLI + plugins; plugin config dirs are symlinked into the
+# repo (or into local/ for generated configs).
 function install_herdr {
-    curl -fsSL https://herdr.dev/install.sh | sh
-    # All herdr plugins are installed from this list; their configs live in
-    # this repo and get symlinked in below, so the repo stays the single
-    # source of truth for every plugin install + config.
-    herdr plugin install cloudmanic/herdr-plus
-    herdr plugin install --yes speardragon/herdr-command-center
-    herdr plugin install --yes ChmaraX/herdr-nvim
-    herdr plugin install --yes Davidcreador/herdr-token-dashboard
-    herdr plugin install --yes jpwallace22/herdr-glab-status
-    herdr plugin install --yes a2u/herdr-jira
-    herdr plugin install --yes robbyrussell/herdr-ohmyzsh
-    herdr plugin install --yes persiyanov/herdr-reviewr
-    # herdr-bar: Cmd+K fuzzy jump (takes over auto tab titles now that
-    # herdr-automatic-rename is removed; prefix+k binding in config.toml)
-    herdr plugin install --yes jeffarese/herdr-bar
-    mkdir -p ~/.config/herdr
-    ln -sf ${base_dir}.config/herdr/config.toml ~/.config/herdr/config.toml
+    command -v herdr >/dev/null 2>&1 || run bash -c 'curl -fsSL https://herdr.dev/install.sh | sh'
+    run herdr plugin install --yes cloudmanic/herdr-plus
+    run herdr plugin install --yes speardragon/herdr-command-center
+    run herdr plugin install --yes ChmaraX/herdr-nvim
+    run herdr plugin install --yes Davidcreador/herdr-token-dashboard
+    run herdr plugin install --yes jpwallace22/herdr-glab-status
+    run herdr plugin install --yes a2u/herdr-jira
+    run herdr plugin install --yes robbyrussell/herdr-ohmyzsh
+    run herdr plugin install --yes persiyanov/herdr-reviewr
+    # herdr-bar: fuzzy jump (prefix+space binding in config.toml)
+    run herdr plugin install --yes jeffarese/herdr-bar
+    # herdr-projects: multi-agent board (prefix+o binding in config.toml).
+    # Configured to run pi (= the kimchi shim on ~/.local/bin/pi) for
+    # worker/reviewer/coordinator/watcher — settings live locally in
+    # ~/.herdr-projects/settings/config.json.
+    run herdr plugin install --yes eliasstravik/herdr-projects
+    run mkdir -p "$HOME/.config/herdr"
+    link_or_backup "$REPO_DIR/.config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
     # herdr-plus plugin config: projects / quick-actions / worktrees are
     # symlinked in, so the LOCAL generated dir (dotfiles-init.sh) wins; the
     # tracked dir is only the template fallback.
-    mkdir -p ~/.config/herdr/plugins/config/cloudmanic.herdr-plus
+    run mkdir -p "$HOME/.config/herdr/plugins/config/cloudmanic.herdr-plus"
     for d in projects quick-actions worktrees; do
-        dst=~/.config/herdr/plugins/config/cloudmanic.herdr-plus/$d
-        src=${base_dir}local/herdr/$d
-        [ -d "$src" ] || src=${base_dir}.config/herdr/plugins/config/cloudmanic.herdr-plus/$d
-        rm -rf "$dst"
-        ln -s "$src" "$dst"
+        local dst="$HOME/.config/herdr/plugins/config/cloudmanic.herdr-plus/$d"
+        local src="$REPO_DIR/local/herdr/$d"
+        [ -d "$src" ] || src="$REPO_DIR/.config/herdr/plugins/config/cloudmanic.herdr-plus/$d"
+        link_or_backup "$src" "$dst"
     done
     # cdragon.command-center / glab-status / herdr-jira plugin configs are
-    # fully repo-managed: each config dir is replaced with a symlink into this repo.
+    # fully repo-managed: each config dir is replaced with a symlink.
     for p in cdragon.command-center glab-status herdr-jira; do
-        dst=~/.config/herdr/plugins/config/$p
-        rm -rf "$dst"
-        ln -s ${base_dir}.config/herdr/plugins/config/$p "$dst"
+        link_or_backup "$REPO_DIR/.config/herdr/plugins/config/$p" "$HOME/.config/herdr/plugins/config/$p"
     done
-    # service-repo-project helper script (worktree-aware project opener)
-    mkdir -p ~/.local/bin
-    ln -sf ${base_dir}scripts/service-repo-project ~/.local/bin/service-repo-project
-    # worktree-clean helper script (inactive worktree cleanup)
-    ln -sf ${base_dir}scripts/worktree-clean ~/.local/bin/worktree-clean
-    # pi -> kimchi shim so herdr's pi integration can resume sessions
-    # (herdr runs canonical `pi --session <path>`; there is no pi binary)
-    ln -sf ${base_dir}scripts/pi ~/.local/bin/pi
+    # helper scripts (worktree-aware project opener, worktree-clean, pi shim)
+    run mkdir -p "$HOME/.local/bin"
+    link_or_backup "$REPO_DIR/scripts/service-repo-project" "$HOME/.local/bin/service-repo-project"
+    link_or_backup "$REPO_DIR/scripts/worktree-clean" "$HOME/.local/bin/worktree-clean"
+    link_or_backup "$REPO_DIR/scripts/pi" "$HOME/.local/bin/pi"
 }
 
-case $install_typ in
-    herdr)
-        install_herdr
-    ;;
-    formatters)
-        install_formatters
-    ;;
-    rainfrog)
-        install_rainfrog
-    ;;
-    vi-sql)
-        install_vi_sql
-    ;;
-    zsh)
-        install_zsh
-    ;;
-    vim)
-        install_vim
-    ;;
-    tmux)
-        install_tmux
-    ;;
-    fzf)
-        install_fzf
-    ;;
-    repo)
-        install_gitconf
-    ;;
+# ---- arg parsing ---------------------------------------------------------------
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+    -d|--dry-run) DRY=1 ;;
+    -f|--force) FORCE=1 ;;
+    -c|--clean) CLEAN=1 ;;
+    -i|--install) NEEDS_VALUE=1 ;;
+    *)
+      if [ "${NEEDS_VALUE:-0}" = 1 ]; then install_typ="$arg"; NEEDS_VALUE=0
+      else echo "install: unknown argument: $arg" >&2; usage >&2; exit 2; fi ;;
+  esac
+done
+
+[ "${NEEDS_VALUE:-0}" = 1 ] && { echo "install: -i requires a target" >&2; usage >&2; exit 2; }
+[ -z "$install_typ" ] && [ "${CLEAN:-0}" != 1 ] && { usage; exit 0; }
+
+if [ "${CLEAN:-0}" = 1 ]; then
+  if [ "$FORCE" != 1 ]; then
+    echo "install: -c/--clean moves your current configs to $BACKUP_ROOT before re-linking." >&2
+    echo "install: this is destructive-ish — re-run with --force to confirm." >&2
+    exit 1
+  fi
+  clean_install
+fi
+
+if [ -n "$install_typ" ]; then
+  # Always ensure the base toolchain (apt-only; no-op on macOS). Matches the
+  # original script, which ran install_common before every target dispatch.
+  install_common
+  case "$install_typ" in
+    herdr)      install_herdr ;;
+    fd)         install_fd ;;
+    formatters) install_formatters ;;
+    rainfrog)   install_rainfrog ;;
+    vi-sql)     install_vi_sql ;;
+    nvim)       install_nvim ;;
+    zsh)        install_zsh ;;
+    vim)        install_vim ;;
+    tmux)       install_tmux ;;
+    fzf)        install_fzf ;;
+    repo)       install_gitconf ;;
+    fonts)      install_fonts ;;
+    bin)        install_bin ;;
+    programing) install_programing ;;
     all)
         install_herdr
         install_programing
+        install_fd
         install_zsh
         install_tmux
         install_vim
+        install_nvim
         install_formatters
         install_rainfrog
         install_vi_sql
@@ -300,6 +406,7 @@ case $install_typ in
         install_fzf
         install_bin
     ;;
-    *)
-        echo "Unknow"
-    esac
+    *) echo "install: unknown target: $install_typ" >&2; usage >&2; exit 2 ;;
+  esac
+fi
+exit 0

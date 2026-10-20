@@ -1,0 +1,47 @@
+name: validate
+
+# Credential-free validation: shell hygiene + TOML parse + headless Neovim
+# config test in an isolated XDG dir. No real credentials, Cloud SQL access
+# or live clusters are ever used.
+on: [push, pull_request]
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: ShellCheck
+        run: shellcheck -S warning install.sh scripts/*.sh scripts/pi
+      - name: Bash syntax
+        run: bash -n install.sh scripts/*.sh && sh -n scripts/pi scripts/kubecast-project
+      - name: TOML parse (herdr configs + templates + rainfrog)
+        run: |
+          python3 - <<'EOF'
+          import tomllib, glob, sys
+          files = glob.glob('.config/herdr/**/*.toml', recursive=True) \
+                + glob.glob('scripts/templates/*.toml') \
+                + glob.glob('.config/rainfrog/*.toml')
+          bad = []
+          for f in files:
+              try:
+                  tomllib.load(open(f, 'rb'))
+              except Exception as e:
+                  bad.append(f"{f}: {e}")
+          if bad:
+              print("\n".join(bad)); sys.exit(1)
+          print(f"TOML OK ({len(files)} files)")
+          EOF
+
+  nvim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Neovim 0.12
+        run: |
+          curl -fsSL https://github.com/neovim/neovim/releases/download/v0.12.5/nvim-linux-x86_64.tar.gz -o /tmp/nvim.tar.gz
+          tar -xzf /tmp/nvim.tar.gz -C /tmp
+          echo "/tmp/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+      - name: Validate (isolated install + smoke)
+        run: bash nvim/scripts/validate.sh --isolated --sync

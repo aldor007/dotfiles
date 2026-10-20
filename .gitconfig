@@ -1,6 +1,6 @@
 [user]
 	name = "Marcin Kaciuba"
-    email = "marcin.kaciuba@gmail.com"
+    email = "marcin@cast.ai"
 	signingkey = C2728BC86FEAB4C8
 [diff]
     tool = vimdiff
@@ -29,3 +29,8 @@
 	autocrlf = input
 [diff "sopsdiffer"]
 	textconv = sops -d
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true

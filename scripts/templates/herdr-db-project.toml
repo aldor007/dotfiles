@@ -1,0 +1,19 @@
+# DB workspace: @@ENV@@ (kent) — tunnel pane + vi-sql pane (rendered by
+# dotfiles-init.sh; names from local/projects.env).
+name = "db-@@ENV@@"
+description = "@@ENV@@ kent DB — px IAP tunnel + vi-sql"
+group = "DB"
+working_dir = "~"
+
+[[tabs]]
+name = "db"
+
+[[tabs.panes]]
+label = "tunnel"
+command = "~/dotfiles/scripts/sql-db.sh --env @@ENV@@ --fg"
+
+[[tabs.panes]]
+label = "vi-sql"
+command = "~/dotfiles/scripts/sql-db.sh --env @@ENV@@ --visql"
+split = "right"
+ratio = 0.75

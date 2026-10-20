@@ -100,12 +100,29 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
--- Highlight trailing whitespace
+-- Highlight trailing whitespace (real editable buffers only).
+-- GUARD: this must NOT apply to float popups — blink.cmp's menu pads every
+-- line with trailing spaces to the full column width, so `\s\+$` matched the
+-- entire padding and painted solid red rows over the completion menu.
 vim.cmd([[highlight ExtraWhitespace ctermbg=red guibg=red]])
 vim.api.nvim_create_autocmd("BufWinEnter", {
   pattern = "*",
-  callback = function()
+  callback = function(args)
+    if vim.bo[args.buf].buftype ~= "" then return end -- skip floats/scratch/help
+    if vim.bo[args.buf].filetype:find("^blink%-cmp") then return end
     vim.fn.matchadd("ExtraWhitespace", [[\s\+$]])
+  end,
+})
+-- Float windows inherit matches when a normal buffer's window opens them
+-- (blink/nui reuse windows); strip them defensively on any float that appears.
+vim.api.nvim_create_autocmd("WinEnter", {
+  callback = function()
+    local cfg = vim.api.nvim_win_get_config(0)
+    if cfg.relative ~= "" then
+      for _, m in ipairs(vim.fn.getmatches(0)) do
+        if m.group == "ExtraWhitespace" then vim.fn.matchdelete(m.id, 0) end
+      end
+    end
   end,
 })
 

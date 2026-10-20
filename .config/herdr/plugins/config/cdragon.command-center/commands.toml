@@ -1,0 +1,29 @@
+schema_version = 1
+editor = ["code", "cursor", "zed", "subl", "nvim", "vim", "hx", "nano"]
+
+[[commands]]
+id = "open-in-vs-code"
+slot = "1"
+label = "Open in VS Code"
+type = "shell"
+command = "code ."
+cwd = "focused"
+description = "Open the focused pane's directory in VS Code"
+
+[[commands]]
+id = "open-repo-on-github"
+slot = "2"
+label = "Open repo on GitHub"
+type = "shell"
+command = "gh browse"
+cwd = "focused"
+description = "Open the current repository in the browser"
+
+[[commands]]
+id = "open-pull-request"
+slot = "3"
+label = "Open pull request"
+type = "shell"
+command = "gh pr view --web"
+cwd = "focused"
+description = "Open this branch's pull request in the browser"

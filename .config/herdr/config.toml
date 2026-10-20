@@ -123,11 +123,35 @@ description = "Jira (tab)"
 
 # herdr-bar: fuzzy jump to any tab/agent/workspace/repo/branch (Cmd+K style).
 # Auto tab titles for unnamed Claude/Codex tabs are enabled by default.
+# NOTE: prefix+k was taken by focus_pane_up — the bar lives on prefix+space;
+# optionally mirror ⌘K later via a ctrl+alt+k chord (see herdr-bar README).
 [[keys.command]]
-key = "prefix+k"
+key = "prefix+space"
 type = "plugin_action"
 command = "herdr-bar.open"
 description = "command bar (jump to tab/agent)"
+
+# herdr-nvim: persistent nvim sidebar — prefix+e toggles the sidebar,
+# prefix+f opens the agent-touched file picker. (prefix+o stays herdr-projects.)
+[[keys.command]]
+key = "prefix+e"
+type = "plugin_action"
+command = "chmarax.herdr-nvim.toggle"
+description = "nvim sidebar: toggle"
+
+[[keys.command]]
+key = "prefix+f"
+type = "plugin_action"
+command = "chmarax.herdr-nvim.pick-file"
+description = "nvim sidebar: open file from agent output"
+
+# herdr-projects: multi-agent board (each agent on its own branch + reviewer).
+# State lives in ~/.herdr-projects (not repo-managed).
+[[keys.command]]
+key = "prefix+o"
+type = "plugin_action"
+command = "herdr-projects.open"
+description = "projects: agent mission board"
 
 [ui.toast]
 delivery = "terminal"

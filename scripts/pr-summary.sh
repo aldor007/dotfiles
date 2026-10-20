@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090  # config/state files are dynamic by design
 # pr-summary.sh — summary of open PRs (GitHub) + MRs (GitLab):
 #   per item: title, repo#number, pipeline/CI state, merge-conflict flag,
 #   and NEW comments (comments, review comments, review bodies) since the
@@ -68,6 +69,7 @@ if [ -z "$LAST_GH" ] && [ -z "$LAST_GL" ]; then
   FIRST_RUN=1
   LAST_GH="$TODAY"; LAST_GL="$TODAY"
 fi
+LAST_GH_OLD="$LAST_GH"; LAST_GL_OLD="$LAST_GL"
 # BSD/macOS date uses -v-3d; GNU/Linux uses -d '-3 days'.
 date_ago() { # date_ago <n> <unit: d|h>
   if date -u -v-1d +%F >/dev/null 2>&1; then
@@ -99,6 +101,24 @@ count_new() {
                     and (.system // false | not)) ] | length' 2>/dev/null || echo 0
 }
 
+# A FAILED gh/glab fetch must never look like "no new comments": emit '[]'
+# but return non-zero so the caller can flag the run; the baseline is then
+# NOT advanced and the failed items are re-fetched next run.
+gh_fetch() { # gh_fetch <api args…>
+  local out rc
+  out=$(gh api --paginate "$@" 2>/dev/null); rc=$?
+  if [ "$rc" -eq 0 ]; then printf '%s\n' "$out"; else printf '[]\n'; fi
+  return "$rc"
+}
+gl_fetch() { # gl_fetch <api args…>
+  local out rc
+  out=$(glab api "$@" 2>/dev/null); rc=$?
+  if [ "$rc" -eq 0 ]; then printf '%s\n' "$out"; else printf '[]\n'; fi
+  return "$rc"
+}
+
+GH_FETCH_ERR=0; GL_FETCH_ERR=0
+
 # ---- GitHub -----------------------------------------------------------------
 GH_FETCH_OK=1
 if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
@@ -111,7 +131,7 @@ else
   GH_FETCH_OK=0
 fi
 
-TOTAL_NEW=0; TOTAL_PR=0; TOTAL_MR=0; GH_WARN=""
+TOTAL_NEW=0; TOTAL_PR=0; TOTAL_MR=0
 
 echo "${BLD}=== GITHUB (github.com · @${GH_ME:-?}) ===${RST}"
 if [ "$GH_FETCH_OK" != 1 ]; then
@@ -153,9 +173,14 @@ else
     esac
 
     # New comments: issue comments + review comments + review bodies, not mine
-    c1=$(gh api "repos/$repo/issues/$num/comments?since=$LAST_GH&per_page=100" 2>/dev/null || echo '[]')
-    c2=$(gh api "repos/$repo/pulls/$num/comments?since=$LAST_GH&per_page=100" 2>/dev/null || echo '[]')
-    c3=$(gh api "repos/$repo/pulls/$num/reviews?per_page=100" 2>/dev/null || echo '[]')
+    # A failed fetch is NOT treated as "no new comments": it sets the run
+    # error flag and the global baseline stays put (see persist section).
+    if ! c1=$(gh_fetch "repos/$repo/issues/$num/comments?since=$LAST_GH&per_page=100") \
+       || ! c2=$(gh_fetch "repos/$repo/pulls/$num/comments?since=$LAST_GH&per_page=100") \
+       || ! c3=$(gh_fetch "repos/$repo/pulls/$num/reviews?per_page=100"); then
+      GH_FETCH_ERR=1
+      echo "  ${YEL}warning: comment fetch failed for ${repo}#${num} — retried next run${RST}" >&2
+    fi
     n1=$(count_new "$c1" "$LAST_GH" "$GH_ME" created_at)
     n2=$(count_new "$c2" "$LAST_GH" "$GH_ME" created_at)
     n3=$(printf '%s' "$c3" | jq --arg ts "$LAST_GH" --arg me "$GH_ME" \
@@ -201,7 +226,8 @@ render_mr() {
          | jq -r 'if .approved then "yes" else "no" end' 2>/dev/null || echo '?')
   if [ "$appr" = "yes" ]; then appr="${GRN}✔approved${RST} "; else appr=""; fi
 
-  notes=$(glab api "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at" 2>/dev/null || echo '[]')
+  notes=$(gl_fetch "projects/$pid/merge_requests/$iid/notes?per_page=100&sort=asc&order_by=updated_at")
+  if [ $? -ne 0 ]; then GL_FETCH_ERR=1; fi
   n=$(count_new "$notes" "$LAST_GL" "$GL_ME" updated_at)
   TOTAL_NEW=$((TOTAL_NEW+n))
   if [ "$n" -gt 0 ]; then cmm="${BLD}${BLU}+$n new${RST}"; else cmm="${DIM}no new${RST}"; fi
@@ -268,10 +294,23 @@ if [ "$GL_FETCH_OK" = 1 ] && [ -n "${GL_TAGS:-}" ]; then
 fi
 
 # ---- persist baselines ------------------------------------------------------
+# Baselines advance ONLY when the whole run fetched cleanly; a failed fetch
+# keeps the previous baseline so nothing is silently skipped.
+if [ "$GH_FETCH_ERR" = 1 ] || [ "$GL_FETCH_ERR" = 1 ]; then
+  echo "${YEL}WARNING: some comment fetches failed — baselines NOT advanced (rerun to pick them up)${RST}" >&2
+fi
 mkdir -p "$STATE_DIR"
 {
-  [ "$GH_FETCH_OK" = 1 ] && echo "LAST_GH=$TODAY" || echo "LAST_GH=${LAST_GH}"
-  [ "$GL_FETCH_OK" = 1 ] && echo "LAST_GL=$TODAY" || echo "LAST_GL=${LAST_GL}"
+  if [ "$GH_FETCH_OK" = 1 ] && [ "$GH_FETCH_ERR" != 1 ]; then
+    echo "LAST_GH=$TODAY"
+  else
+    echo "LAST_GH=${LAST_GH_OLD:-$LAST_GH}"
+  fi
+  if [ "$GL_FETCH_OK" = 1 ] && [ "$GL_FETCH_ERR" != 1 ]; then
+    echo "LAST_GL=$TODAY"
+  else
+    echo "LAST_GL=${LAST_GL_OLD:-$LAST_GL}"
+  fi
 } > "$STATE_FILE"
 
 echo
