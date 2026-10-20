@@ -1,0 +1,4 @@
+name = "Clean worktrees"
+description = "List and remove inactive kubecast worktrees (idle >7 days, clean, no open herdr workspace; keeps kent/kentroller/kubecast and asks for confirmation)"
+type = "command"
+command = "worktree-clean --repo ~/work/kubecast --keep kent --keep kentroller --keep kubecast || read -t 10 _ </dev/tty || true"
