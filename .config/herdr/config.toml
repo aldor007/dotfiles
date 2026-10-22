@@ -100,6 +100,15 @@ type = "plugin_action"
 command = "persiyanov.reviewr.toggle"
 description = "reviewr: toggle pane"
 
+# mr-review: GitLab MR AI review launcher in a session-modal popup
+# (prefix+shift+v is free: reviewr owns prefix+v, resize owns shift+h/j/k/l).
+# Publishing lives in mr-review-publish and always asks for confirmation.
+[[keys.command]]
+key = "prefix+shift+v"
+type = "popup"
+command = "mr-review"
+description = "MR review: GitLab AI review"
+
 # token-dashboard plugin: live token spend across agent panes
 [[keys.command]]
 key = "prefix+$"

@@ -386,6 +386,14 @@ function install_herdr {
     link_or_backup "$REPO_DIR/scripts/service-repo-project" "$HOME/.local/bin/service-repo-project"
     link_or_backup "$REPO_DIR/scripts/worktree-clean" "$HOME/.local/bin/worktree-clean"
     link_or_backup "$REPO_DIR/scripts/pi" "$HOME/.local/bin/pi"
+    # mr-review: GitLab MR AI review workflow (prefix+shift+v popup in
+    # config.toml). Compiled from tools/mr-review — the ONLY remote-writing
+    # component (mr-review-publish) is a separate binary.
+    if command -v go >/dev/null 2>&1; then
+        run bash -c "cd '$REPO_DIR/tools/mr-review' && go build -o '$HOME/.local/bin/mr-review' ./cmd/mr-review && go build -o '$HOME/.local/bin/mr-review-publish' ./cmd/mr-review-publish"
+    else
+        echo "install_herdr: go not found — skipping mr-review build (install Go, then run: cd $REPO_DIR/tools/mr-review && go build -o $HOME/.local/bin/mr-review ./cmd/mr-review && go build -o $HOME/.local/bin/mr-review-publish ./cmd/mr-review-publish)"
+    fi
 }
 
 # ---- arg parsing ---------------------------------------------------------------

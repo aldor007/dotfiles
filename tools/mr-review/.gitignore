@@ -1,0 +1,4 @@
+# Compiled binaries — build via install.sh: it places outputs in
+# ~/.local/bin/mr-review and ~/.local/bin/mr-review-publish.
+mr-review
+mr-review-publish

@@ -1,0 +1,19 @@
+[1m!55868 · REVIEW-810 Regional Spot Predictions[m  [2mfixed0sh[m  [2mAI idle[m  [38;5;39mfeat/x → master[m  [38;5;39m✓ 0 / ⏳ 2[m
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│[1mACTIONS[m                                                                                   │
+│[38;5;245m──────────────────────────────────────────────────────────────────────────────────────────[m│
+│[7m  Approve finding                  approve the selected AI finding (loca… a             [m  │
+│  Reject finding                   reject the selected AI finding (local… r               │
+│  Undo decision                    return the finding to pending          u               │
+│  Next pending finding             jump to the next pending finding       gp              │
+│  Previous pending finding         jump to the previous pending finding   gP              │
+│  Discuss with AI                  ask the AI agent about this finding    d               │
+│  Edit suggested comment           edit the comment text of the selected… e               │
+│  Open location in full diff       browse the continuous diff at the fin… gd              │
+│  Cycle sort                       severity → file → decision             o               │
+│  Filter findings                  menu: status + severity (f)            f               │
+│  Filter: pending findings         show only findings awaiting a decision                 │
+│  Filter: approved findings        show only findings you approved                        │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+[1;38;5;63m[38;5;214mCOMMAND[m[m[2m · [m[38;5;39mFINDINGS[m[2m · [m2 findings[2m  [m[2m? help · : commands · q quit[m[2m                                         [m[38;5;214mStatus: command p[m
+[38;5;245m┃ type to filter · ↑/↓ · enter run · esc close[m

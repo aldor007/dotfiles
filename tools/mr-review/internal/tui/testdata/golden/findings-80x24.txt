@@ -1,0 +1,22 @@
+[1m!55868[m [2mfixed0sh[m REVIEW-810 Regional Spot Predictions
+[2mAI idle[m  [38;5;39mfeat/x → master[m  [38;5;39m✓ 0 / ⏳ 2[m
+[38;5;245m╭──────────────────────────────────────────────────────────────────────────────╮[m
+│┌────────────[38;5;39m┬[m─────────[38;5;39m┬[m───────[38;5;39m┬[m─────────────────────────────────────────────[38;5;39m┐[m│
+││[1;38;5;235;48;5;39mFINDINGS    [m│[2mFILES    [m│[2m───    [m│[2mCOMMENTS                                     [m││
+│└────────────[38;5;39m┬[m─────────[38;5;39m┬[m───────[38;5;39m┬[m─────────────────────────────────────────────[38;5;39m┘[m│
+│[38;5;39m● FINDINGS 2/2[m                                                                │
+│[38;5;39m▌[m[7mP2 F001 · services/x/handler.go: 173                                         [m│
+│[38;5;39m▌[m[7mFinding number 1 with a reasonably long title  ● pending                     [m│
+│[38;5;250mP3[m [2mF002[m · [2mservices/y/service.go: 174[m                                          │
+│[2m─[mFinding number 2 with a reasonably long title  [38;5;185m● pending[m                     │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+[38;5;245m╰──────────────────────────────────────────────────────────────────────────────╯[m
+[1;38;5;63m[38;5;78mNORMAL[m[m[2m · [m[38;5;39mLIST[m[2m · [m2 findings[2m  [m[2m? help · : commands · q quit[m[2m             [m[2mStatus: re[m
+[38;5;245m┃ j/k findings · a approve · r reject · e edit · d discuss · gd full diff · : [m
