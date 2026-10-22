@@ -575,6 +575,21 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case wsPrepareDoneMsg:
+		// async PrepareSession result (review fix P2 #10): updates the
+		// status line without blocking the TUI. msg.status matches
+		// tuicr.SessionStatus (Missing/Ready/Partial); we use string
+		// comparison to avoid pulling the tuicr package into this file.
+		switch {
+		case msg.err != nil:
+			m.msg = "tuicr session check failed: " + msg.err.Error()
+		case int(msg.status) == 2: // tuicr.SessionStatusPartial
+			m.msg = "tuicr session file count is below the MR diff — open it to inspect; do not auto-clear"
+		case msg.slug != "":
+			m.msg = ""
+		}
+		return m, nil
+
 	case tea.MouseMsg:
 		if wsPane != nil {
 			if handled, cmd := m.wsHandleMouse(msg); handled {

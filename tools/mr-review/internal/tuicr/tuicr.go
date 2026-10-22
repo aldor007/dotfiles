@@ -130,18 +130,27 @@ func (c *CLI) ListSessionsAll(ctx context.Context) ([]Session, error) {
 	return parseSessions(out)
 }
 
-// ResolveSessionSmart finds the session to stage into, with fallbacks:
-//  1. `review list --repo <worktree>` (the normal path),
-//  2. `review list --all` + client-side resolution (worktree path matching
-//     can fail for monorepo worktrees),
-//  3. tuicr's active_sessions.json — the session a running tuicr pane has
-//     open right now (most reliable when the pane is live).
+// ResolveSessionSmart finds the tuicr session to stage AI findings into.
+//
+// SECURITY (review finding P1 #2): fail closed. The previous implementation
+// fell through to "active local session" and "live pane's session" when no
+// PR session existed for the requested MR, which could land AI comments
+// into an unrelated review (or, in the live-pane case, into whatever the
+// user happens to have open). This routine now REQUIRES an exact match on
+// project + MR IID (a PR session whose slug ends with "/pr/<iid>" and whose
+// repo coordinate contains the project). When no such session exists,
+// return "" with an actionable error — the human must open tuicr on the
+// MR explicitly before AI staging can proceed.
 func (c *CLI) ResolveSessionSmart(ctx context.Context, repo, project string, iid int) (string, error) {
+	// 1. `review list --repo <worktree>` — the normal path
 	if sessions, err := c.ListSessions(ctx, repo); err == nil {
 		if s := ResolveSession(sessions, project, iid); s != nil {
 			return s.Slug, nil
 		}
 	}
+	// 2. `review list --all` — worktree path mismatch (monorepo worktrees
+	// can fail the local coordinate lookup). Still requires an exact
+	// (project, IID) PR match — no fallback to active/live local sessions.
 	all, err := c.ListSessionsAll(ctx)
 	if err != nil {
 		return "", err
@@ -149,19 +158,7 @@ func (c *CLI) ResolveSessionSmart(ctx context.Context, repo, project string, iid
 	if s := ResolveSession(all, project, iid); s != nil {
 		return s.Slug, nil
 	}
-	// last resort: the live pane's session from active_sessions.json
-	for i := len(all) - 1; i >= 0; i-- {
-		if all[i].Path == "" {
-			continue
-		}
-		if acts, _ := c.ActiveSessions(all[i].Path); len(acts) > 0 {
-			latest := acts[len(acts)-1]
-			if latest.Slug != "" {
-				return latest.Slug, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("no tuicr session found — open tuicr first (tuicr pr <MR-URL> or tuicr -r <base>..<head> in the worktree)")
+	return "", fmt.Errorf("no exact-match PR session found for project=%q iid=%d — open tuicr for the MR first (tuicr pr <MR-URL> or tuicr -r <base>..<head> in the worktree) and try again", project, iid)
 }
 
 func parseSessions(out string) ([]Session, error) {
@@ -194,6 +191,12 @@ func (c *CLI) Comments(ctx context.Context, session, repo string) ([]Comment, er
 // with the explicit-flag form (some versions validate the two paths
 // differently). The stderr of both attempts is surfaced on failure so the
 // real reason (file not in diff, bad line, unknown type, …) is visible.
+//
+// Idempotency: a retry is ONLY attempted when attempt 1's exit code was
+// non-zero (so we know nothing was stored). The previous implementation
+// retried whenever parseStoredComment failed, which double-inserted the
+// same comment whenever the JSON parse path failed after a successful
+// insert. Both attempts must be safe to call from concurrent callers.
 func (c *CLI) AddComment(ctx context.Context, session, repo string, in CommentInput) (*Comment, error) {
 	payload, err := json.Marshal(in)
 	if err != nil {
@@ -208,13 +211,18 @@ func (c *CLI) AddComment(ctx context.Context, session, repo string, in CommentIn
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err == nil {
-		if stored, perr := parseStoredComment(ctx, c, session, repo, stdout.String(), in); perr == nil {
+		// exit 0 → tuicr accepted the input. The comment IS in the session.
+		// Whether or not we can parse the response, we must NOT retry.
+		if stored, perr := c.parseStoredComment(ctx, session, repo, stdout.String(), in); perr == nil {
 			return stored, nil
+		} else {
+			return nil, fmt.Errorf("tuicr review add (json) accepted but parse failed: %w — comment IS stored; verify with: tuicr review comments --session %s", perr, session)
 		}
 	}
-	firstErr := fmt.Errorf("%w — tuicr said: %s", err, strings.TrimSpace(stderr.String()))
+	firstErr := fmt.Errorf("json: %w — tuicr said: %s", err, strings.TrimSpace(stderr.String()))
 
-	// attempt 2: explicit flags (positional comment text)
+	// attempt 2: explicit flags (positional comment text). Only reached
+	// when attempt 1 exited non-zero, so we know nothing was stored.
 	args := []string{"review", "add", "--session", session, "--repo", repo, "--username", in.Username}
 	if in.Type != "" {
 		args = append(args, "--type", in.Type)
@@ -240,17 +248,23 @@ func (c *CLI) AddComment(ctx context.Context, session, repo string, in CommentIn
 		return nil, fmt.Errorf("tuicr review add failed twice: json: %v; flags: %w — tuicr said: %s",
 			firstErr, err2, strings.TrimSpace(stderr2.String()))
 	}
-	stored, perr := parseStoredComment(ctx, c, session, repo, stdout2.String(), in)
+	stored, perr := c.parseStoredComment(ctx, session, repo, stdout2.String(), in)
 	if perr != nil {
-		// flags form prints a confirmation instead of JSON: read back
-		return nil, perr
+		return nil, fmt.Errorf("tuicr review add (flags) accepted but parse failed: %w — comment IS stored; verify with: tuicr review comments --session %s", perr, session)
 	}
 	return stored, nil
 }
 
 // parseStoredComment parses an add response, falling back to a read-back
-// match by content when the binary prints something else.
-func parseStoredComment(ctx context.Context, c *CLI, session, repo, out string, in CommentInput) (*Comment, error) {
+// match when the binary prints something other than JSON.
+//
+// Read-back reconcile (review finding P1 #3): when the JSON parse fails,
+// match by (file, side, line-range, content) — NOT just (file, content) —
+// so two distinct comments with identical text on different lines are not
+// confused. If exactly one stored comment matches, return it. Zero or many
+// matches is an error (zero: nothing was inserted; many: ambiguous — the
+// caller should investigate before retrying).
+func (c *CLI) parseStoredComment(ctx context.Context, session, repo, out string, in CommentInput) (*Comment, error) {
 	trimmed := strings.TrimSpace(out)
 	var stored Comment
 	if trimmed != "" && json.Unmarshal([]byte(trimmed), &stored) == nil && stored.ID != "" {
@@ -260,12 +274,44 @@ func parseStoredComment(ctx context.Context, c *CLI, session, repo, out string, 
 	if err != nil {
 		return nil, err
 	}
-	for i := range cs {
-		if normalizeText(cs[i].Content) == normalizeText(in.Content) && (in.File == "" || cs[i].Path == in.File) {
-			return &cs[i], nil
-		}
+	want := normalizeText(in.Content)
+	wantPath := in.File
+	wantSide := in.Side
+	wantStart, wantEnd := in.Line, in.EndLine
+	if wantEnd == 0 || wantEnd < wantStart {
+		wantEnd = wantStart
 	}
-	return nil, fmt.Errorf("tuicr review add: comment not found after insert (output: %q)", trimmed)
+	var hit *Comment
+	for i := range cs {
+		cand := &cs[i]
+		if wantPath != "" && cand.Path != wantPath {
+			continue
+		}
+		if wantSide != "" && cand.Side != wantSide {
+			continue
+		}
+		// when the input pins a line, the stored comment must overlap that line
+		if wantStart > 0 {
+			cstart, cend := cand.StartLine, cand.EndLine
+			if cend == 0 || cend < cstart {
+				cend = cstart
+			}
+			if wantStart > cend || wantEnd < cstart {
+				continue
+			}
+		}
+		if normalizeText(cand.Content) != want {
+			continue
+		}
+		if hit != nil {
+			return nil, fmt.Errorf("tuicr review add: ambiguous read-back match (%d+ candidates share file/side/line/content) — will not silently pick one; reconcile manually", 2)
+		}
+		hit = cand
+	}
+	if hit == nil {
+		return nil, fmt.Errorf("tuicr review add: comment not found after insert (output: %q)", trimmed)
+	}
+	return hit, nil
 }
 
 // DeleteComment removes one comment by id.
@@ -311,35 +357,32 @@ func (c *CLI) Clear(ctx context.Context, session, repo string) error {
 	return err
 }
 
-// ResolveSession picks the tuicr session for a GitLab MR review:
-//  1. a PR session whose slug ends with "/pr/<iid>" and whose repo
-//     coordinate contains the project path,
-//  2. otherwise the active local session for the checkout,
-//  3. otherwise the most recently updated local session.
+// ResolveSession picks the tuicr session for a GitLab MR review.
 //
-// Returns "" when no session exists (the human has not opened tuicr yet).
+// SECURITY (review finding P1 #2): fail closed. The only session that
+// satisfies the "review this MR" requirement is a PR session whose slug
+// ends with "/pr/<iid>" and whose repo coordinate contains the project
+// path. Local sessions (worktree/branch-bound reviews) NEVER satisfy an
+// MR IID requirement — returning one would risk staging findings into a
+// different review the human has open.
+//
+// Returns nil when no such PR session exists.
 func ResolveSession(sessions []Session, project string, iid int) *Session {
 	wantSuffix := fmt.Sprintf("/pr/%d", iid)
-	var active, newest *Session
 	for i := range sessions {
 		s := &sessions[i]
-		if s.Kind == "pr" && strings.HasSuffix(s.Slug, wantSuffix) && slugHasProject(s.Slug, project) {
-			return s
+		if s.Kind != "pr" {
+			continue // local/branch sessions can never match an MR IID
 		}
-		if s.Kind != "local" {
+		if !strings.HasSuffix(s.Slug, wantSuffix) {
 			continue
 		}
-		if s.Active && active == nil {
-			active = s
+		if !slugHasProject(s.Slug, project) {
+			continue
 		}
-		if newest == nil || s.UpdatedAt > newest.UpdatedAt {
-			newest = s
-		}
+		return s
 	}
-	if active != nil {
-		return active
-	}
-	return newest
+	return nil
 }
 
 // SessionStatus describes how a session matches the MR the caller asked for.

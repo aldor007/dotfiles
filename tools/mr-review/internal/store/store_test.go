@@ -1,9 +1,11 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -118,11 +120,184 @@ func TestReviewSaveLoad(t *testing.T) {
 
 func TestSlugAndReviewDir(t *testing.T) {
 	t.Setenv(EnvHome, t.TempDir())
-	d := ReviewDir("group/sub/proj", 12)
-	if !strings.HasSuffix(d, filepath.Join("group_sub_proj", "mr12")) {
+	// host and project segments that aren't [A-Za-z0-9-_] are hex-escaped:
+	// '.' -> '_2e', '/' -> '_2f', etc.
+	d := ReviewDir(DefaultHost, "group/sub/proj", 12)
+	if !strings.HasSuffix(d, filepath.Join("gitlab_2ecom_group_2fsub_2fproj", "mr12")) {
 		t.Fatalf("unexpected dir %s", d)
 	}
-	if s := Slug("a/../../b"); strings.ContainsAny(s, "/\\") {
+	if s := Slug(DefaultHost, "a/../../b"); strings.ContainsAny(s, "/\\") {
 		t.Fatal("slug must not contain path separators")
+	}
+}
+
+// TestSlugCollisions — review finding P1 #7: distinct projects must NOT
+// map to the same review dir. Pre-fix, the Slug collapsed '.', '-' and
+// '_' to the same separator, so the OLD single-arg Slug merged
+// "group/sub" and "group_sub" (and others). The new (host, project)
+// Slug also keeps host distinct from project — two GitLab instances
+// pointing at the same project name land in different directories.
+func TestSlugCollisions(t *testing.T) {
+	t.Setenv(EnvHome, t.TempDir())
+	cases := []struct {
+		host, project string
+	}{
+		{"gitlab.com", "group/sub/proj"},
+		{"gitlab.cast.ai", "group/sub/proj"}, // different host, same project
+		{"gitlab.com", "group/sub-proj"},     // '-_' collision that the OLD Slug failed
+		{"gitlab.com", "group.sub.proj"},     // '.' also folds to '_' in old code
+		{"gitlab.com", "group_sub/proj"},     // '_' host/project boundary preserved by new layout
+	}
+	seen := map[string]string{}
+	for _, c := range cases {
+		dir := ReviewDir(c.host, c.project, 1)
+		if prev, dup := seen[dir]; dup {
+			t.Fatalf("collision: %q+%q and %q+%q both map to %s", prev, dir, c.host, c.project, dir)
+		}
+		seen[dir] = c.host + "|" + c.project
+	}
+	if ReviewDir("", "kent", 1) != ReviewDir(DefaultHost, "kent", 1) {
+		t.Fatal("empty host must default to DefaultHost (by design)")
+	}
+}
+
+// TestSaveFindingsConcurrency — review finding P1 #8. The AI worker and
+// the interactive reviewer can both call SaveFindings simultaneously.
+// Without locking or fsync-before-rename, a concurrent reader could
+// observe a half-written or empty file at the moment of rename, and a
+// second writer could clobber a first writer's data without ever seeing
+// its changes. The fix:
+//   - per-pid temp filename (no two writers ever share a temp),
+//   - fsync BEFORE rename (data on disk before the dir-entry change),
+//   - flock on "<path>.lock" with a 5s timeout (serializes writers).
+//
+// This test asserts the contract: N concurrent SaveFindings calls all
+// succeed, and the final file is the complete findings set from exactly
+// ONE of the writers (not a corrupted mix, not a partial file). A
+// concurrent reader (running LoadFindings throughout) must never observe
+// a truncated or unparseable state.
+func TestSaveFindingsConcurrency(t *testing.T) {
+	dir := t.TempDir()
+	const N = 20
+	var wg sync.WaitGroup
+	errs := make(chan error, N)
+	// Each writer writes a SET with a unique count so we can identify
+	// which writer's data won.
+	for w := 0; w < N; w++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			var fs []Finding
+			count := id + 1 // 1..N
+			for k := 0; k < count; k++ {
+				fs = append(fs, Finding{
+					ID: fmt.Sprintf("W%d-F%d", id, k),
+					File: fmt.Sprintf("a%d.go", k), Line: 10 + k, Side: "new",
+					Severity: "P1", Title: "t", Explanation: "e", Evidence: "v", Comment: "c",
+					Confidence: "high",
+				})
+			}
+			if err := SaveFindings(dir, fs); err != nil {
+				errs <- err
+			}
+		}(w)
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Fatalf("concurrent SaveFindings: %v", e)
+	}
+	got, err := LoadFindings(dir)
+	if err != nil {
+		t.Fatalf("final load (must be a complete set, not partial): %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("final file must not be empty (one of the writers must have won)")
+	}
+	// All surviving findings must share the same writer prefix.
+	winner := got[0].ID
+	// Verify each surviving finding's writer prefix matches the winner's
+	// first prefix (e.g. W3-F* means writer 3 won). No mixed prefixes are
+	// allowed — that would mean two writers' temp files clobbered each
+	// other or the rename wasn't atomic.
+	for _, f := range got {
+		prefix := f.ID[:2] // "W3" of "W3-F7"
+		winPrefix := winner[:2]
+		if prefix != winPrefix {
+			t.Fatalf("mixed writers in final file — found %q alongside %q (no flock atomicity)", f.ID, winner)
+		}
+	}
+	// No duplicates.
+	seen := map[string]bool{}
+	for _, f := range got {
+		if seen[f.ID] {
+			t.Fatalf("duplicate ID %s (race)", f.ID)
+		}
+		seen[f.ID] = true
+	}
+}
+
+// TestAtomicWriteConcurrentReaders — while a writer is mid-flight,
+// concurrent LoadFindings calls must never observe a truncated or empty
+// file. Without fsync-before-rename (the OLD atomicWrite), a rename can
+// expose readers to an empty target briefly. With the fix, every Load
+// either returns the old complete set OR fails with a clean os error.
+func TestAtomicWriteConcurrentReaders(t *testing.T) {
+	dir := t.TempDir()
+	// Seed the file with one finding.
+	seed := []Finding{func() Finding { f := validFinding(); f.ID = "SEED"; return f }()}
+	if err := SaveFindings(dir, seed); err != nil {
+		t.Fatal(err)
+	}
+
+	const N = 50
+	var wg sync.WaitGroup
+	errs := make(chan error, N)
+	stop := make(chan struct{})
+
+	// Writer: continuously replace with an empty set.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				if err := SaveFindings(dir, nil); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}
+	}()
+
+	// Readers: each must observe a valid state (seed file or empty file
+	// after a successful clear) — never a partial file (bufio.ErrTooLong,
+	// unexpected EOF, etc.).
+	for r := 0; r < N; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				got, err := LoadFindings(dir)
+				if err != nil {
+					errs <- err
+					return
+				}
+				for _, f := range got {
+					if f.ID != "SEED" {
+						errs <- fmt.Errorf("invalid finding ID observed: %q", f.ID)
+						return
+					}
+				}
+			}
+		}()
+	}
+	close(stop)
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Fatal(e)
 	}
 }

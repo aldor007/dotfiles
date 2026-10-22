@@ -31,10 +31,11 @@ const (
 //
 // wsPane != nil ⇔ the split workspace is open.
 var (
-	wsPane   *plex.Pane
-	wsFocus  int
-	wsExited bool
-	wsErr    error
+	wsPane        *plex.Pane
+	wsPaneCancel  context.CancelFunc // cancellable context for the pane lifecycle (P1 #9)
+	wsFocus       int
+	wsExited      bool
+	wsErr         error
 	// wsDetail shows the selected finding's details inside the cockpit
 	// strip (instead of the list) — opening details must not take over
 	// the whole screen.
@@ -44,6 +45,20 @@ var (
 )
 
 // openTuicrPane spawns tuicr in a PTY pane (registry action W).
+//
+// REVIEW FIXES (P1 #9 + P2 #10):
+//   - PTY lifecycle: the embedded pane is now model-owned. A cancellable
+//     context (wsPaneCancel) is created alongside the pane and is always
+//     invoked from closeTuicrPane — which is now reached from every
+//     exit path (tea.Quit, wsPaneExitMsg, model teardown). The previous
+//     implementation used context.Background() for the pane and never
+//     cancelled it on non-error exits, so the tuicr subprocess could
+//     outlive the host UI.
+//   - Async PrepareSession: the synchronous 30s-timeout PrepareSession
+//     call blocked the TUI (P2 #10). Now we launch the pane immediately
+//     and run PrepareSession in the background as a tea.Cmd; the model
+//     receives a wsPrepareDoneMsg and updates m.msg accordingly. Manual
+//     review can start immediately, status messages catch up.
 func (m *model) openTuicrPane() tea.Cmd {
 	if wsPane != nil {
 		wsFocus = wsFocusTuicr
@@ -53,47 +68,53 @@ func (m *model) openTuicrPane() tea.Cmd {
 		m.msg = "no worktree — prepare the review first"
 		return nil
 	}
-	// Detect a stale/partial tuicr session (file count below the GitLab
-	// diff size). PrepareSession never clears — clearing erases human
-	// review work, and the count can legitimately disagree between tuicr
-	// and GitLab (tuicr filters or omits some files). Surface the status
-	// to the user; they decide whether to clear via tuicr itself.
-	expected := m.expectedDiffFiles()
-	if expected > 0 {
-		if slug, status, err := m.tuicrClient().PrepareSession(
-			context.Background(), m.rev.Worktree, m.rev.Project, m.rev.IID, expected); err != nil {
-			m.msg = "tuicr session check failed: " + err.Error()
-		} else if status == tuicr.SessionStatusPartial {
-			m.msg = "tuicr session file count is below the MR diff — open it to inspect; do not auto-clear"
-		} else if slug != "" {
-			m.msg = ""
-		}
-	}
 
 	w, h := m.wsPaneSize()
 	args := m.tuicrPaneArgs()
-	p, err := plex.Start(context.Background(), m.rev.Worktree, w, h, nil, tuicrBin(), args...)
+	// model-owned cancellable context for the pane: closed by
+	// closeTuicrPane on every exit path (tea.Quit, wsPaneExitMsg).
+	paneCtx, paneCancel := context.WithCancel(context.Background())
+	p, err := plex.Start(paneCtx, m.rev.Worktree, w, h, nil, tuicrBin(), args...)
 	if err != nil {
+		paneCancel()
 		m.msg = "tuicr pane failed: " + err.Error()
 		return nil
 	}
 	wsPane = p
+	wsPaneCancel = paneCancel
 	wsExited = false
 	wsErr = nil
 	wsFocus = wsFocusTuicr
 	m.msg = "tuicr opened — Ctrl+O/Ctrl+G toggles focus · W closes"
-	return tea.Batch(waitPaneExit(p), wsBootTick())
+
+	// Kick off the async session check (P2 #10); the model updates the
+	// status message when wsPrepareDoneMsg arrives.
+	expected := m.expectedDiffFiles()
+	if expected == 0 {
+		return tea.Batch(waitPaneExit(p), wsBootTick())
+	}
+	return tea.Batch(waitPaneExit(p), wsBootTick(), wsPrepareSessionCmd(m.tuicrClient(),
+		m.rev.Worktree, m.rev.Project, m.rev.IID, expected))
 }
 
-// closeTuicrPane kills the embedded tuicr (W in workspace mode).
+// closeTuicrPane kills the embedded tuicr (W in workspace mode) and
+// releases the model-owned cancellable context. Safe to call multiple
+// times (REVIEW FIX P1 #9). Reached from every exit path so the tuicr
+// subprocess cannot outlive the host UI.
 func (m *model) closeTuicrPane() {
 	if wsPane == nil {
 		return
 	}
+	if wsPaneCancel != nil {
+		wsPaneCancel() // unblock any context-aware cleanup in plex
+		wsPaneCancel = nil
+	}
 	wsPane.Kill()
 	wsPane = nil
 	wsFocus = wsFocusCockpit
-	m.msg = "tuicr pane closed"
+	if m.msg == "" {
+		m.msg = "tuicr pane closed"
+	}
 }
 
 func waitPaneExit(p *plex.Pane) tea.Cmd {
@@ -101,6 +122,24 @@ func waitPaneExit(p *plex.Pane) tea.Cmd {
 		<-p.Exited()
 		return wsPaneExitMsg{}
 	}
+}
+
+// wsPrepareSessionCmd runs PrepareSession in the background so manual
+// review can start without waiting on the 30s-per-call tuicr CLI. The
+// status it reports becomes a model message via wsPrepareDoneMsg.
+func wsPrepareSessionCmd(cli *tuicr.CLI, worktree, project string, iid, expected int) tea.Cmd {
+	return func() tea.Msg {
+		slug, status, err := cli.PrepareSession(context.Background(), worktree, project, iid, expected)
+		return wsPrepareDoneMsg{slug: slug, status: status, err: err}
+	}
+}
+
+// wsPrepareDoneMsg is delivered when the async PrepareSession resolves.
+// The Update loop merges it into the model msg WITHOUT blocking the TUI.
+type wsPrepareDoneMsg struct {
+	slug   string
+	status tuicr.SessionStatus
+	err    error
 }
 
 // wsPaneExitMsg fires when the embedded tuicr process ends.

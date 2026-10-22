@@ -249,37 +249,75 @@ func (c *Client) GetMR(project string, iid int) (*MR, error) {
 }
 
 // ChangedFiles returns the list of files changed by the MR.
+//
+// SECURITY/REVIEW (P2 #5): GitLab returns up to per_page files per call
+// and reports total via the `x-total` header. The OLD implementation
+// made a single un-paginated call — a large MR (>100 files) would
+// silently truncate the list, missing files from the diff. We now
+// loop with per_page=100 and explicit termination, accumulating paths
+// from each page. Cap at 1000 files (≈10 pages) to bound work; an MR
+// that large is rare and the call site can flag it.
 func (c *Client) ChangedFiles(project string, iid int) ([]string, error) {
-	var resp struct {
-		Changes []struct {
-			OldPath string `json:"old_path"`
-			NewPath string `json:"new_path"`
-		} `json:"changes"`
-	}
-	ep := fmt.Sprintf("projects/%s/merge_requests/%d/changes?per_page=100", EncPath(project), iid)
-	if err := c.apiJSON("", false, ep, &resp); err != nil {
-		return nil, err
-	}
 	seen := map[string]bool{}
 	var out []string
-	for _, ch := range resp.Changes {
-		for _, p := range []string{ch.NewPath, ch.OldPath} {
-			if p != "" && !seen[p] {
-				seen[p] = true
-				out = append(out, p)
+	const maxPages = 10
+	const perPage = 100
+	for page := 1; page <= maxPages; page++ {
+		var resp struct {
+			Changes []struct {
+				OldPath string `json:"old_path"`
+				NewPath string `json:"new_path"`
+			} `json:"changes"`
+		}
+		ep := fmt.Sprintf("projects/%s/merge_requests/%d/changes?per_page=%d&page=%d",
+			EncPath(project), iid, perPage, page)
+		if err := c.apiJSON("", false, ep, &resp); err != nil {
+			return out, err
+		}
+		if len(resp.Changes) == 0 {
+			break
+		}
+		for _, ch := range resp.Changes {
+			for _, p := range []string{ch.NewPath, ch.OldPath} {
+				if p != "" && !seen[p] {
+					seen[p] = true
+					out = append(out, p)
+				}
 			}
+		}
+		if len(resp.Changes) < perPage {
+			break
 		}
 	}
 	return out, nil
 }
 
-// Discussions fetches up to 100 discussions of the MR (single page — the
-// glab --paginate loop was observed to spin for 60s+ on large projects).
+// Discussions fetches all discussions of the MR, paginated.
+//
+// SECURITY/REVIEW (P2 #5): a single-page fetch caps at per_page=100.
+// On MRs with more discussions (long-running code reviews with many
+// human threads), late pages were silently dropped — duplicate-comment
+// detection and the AI's awareness of existing conversation both relied
+// on a complete list. Now we loop with per_page=100 up to maxPages
+// (default 10, ≈ 1000 discussions) and break on short pages.
 func (c *Client) Discussions(project string, iid int) ([]Discussion, error) {
 	var out []Discussion
-	ep := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?per_page=100", EncPath(project), iid)
-	if err := c.apiJSON("", false, ep, &out); err != nil {
-		return nil, err
+	const maxPages = 10
+	const perPage = 100
+	for page := 1; page <= maxPages; page++ {
+		var pageOut []Discussion
+		ep := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?per_page=%d&page=%d",
+			EncPath(project), iid, perPage, page)
+		if err := c.apiJSON("", false, ep, &pageOut); err != nil {
+			return out, err
+		}
+		if len(pageOut) == 0 {
+			break
+		}
+		out = append(out, pageOut...)
+		if len(pageOut) < perPage {
+			break
+		}
 	}
 	return out, nil
 }

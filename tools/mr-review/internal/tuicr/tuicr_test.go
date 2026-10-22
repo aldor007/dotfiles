@@ -8,6 +8,7 @@ import (
 	"mr-review/internal/store"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -62,7 +63,22 @@ elif args[0:2] == ["review", "comments"]:
     d = load()
     out(d["comments"])
 elif args[0:3] == ["review", "add", "--session"]:
+    # Count every invocation atomically — regression tests verify exactly
+    # one call per AddComment, never two.
+    counter = state + ".add_count"
+    n = 0
+    if os.path.exists(counter):
+        try:
+            n = int(open(counter).read())
+        except Exception:
+            n = 0
+    open(counter, "w").write(str(n + 1))
     payload = json.loads(sys.stdin.read())
+    # Even when BAD_JSON is set the fake still stores the comment (exit 0
+    # means the comment IS stored — that's the new contract). It just
+    # emits a non-JSON body so the read-back path is exercised.
+    if os.environ.get("FAKE_TUICR_REVIEW_COUNT") == "1":
+        pass  # used by the read-back tests that pre-seed state directly
     d = load()
     c = {
         "id": "comment-%04d" % d["next"],
@@ -80,6 +96,15 @@ elif args[0:3] == ["review", "add", "--session"]:
     d["comments"].append(c)
     d["next"] += 1
     save(d)
+    # FAKE_TUICR_BAD_JSON forces attempt 1 to succeed (exit 0) but emit a
+    # non-JSON body — the original bug: parseStoredComment fails, then the
+    # code falls through to attempt 2 and double-inserts. After the fix,
+    # the second attempt must NOT run. The comment IS stored (above), only
+    # the response shape is wrong.
+    if os.environ.get("FAKE_TUICR_BAD_JSON") == "1":
+        sys.stdout.write("not-json\n")
+        sys.stdout.flush()
+        sys.exit(0)
     out(c)
 elif args[0:2] == ["review", "delete"]:
     i = args.index("--comment-id")
@@ -239,7 +264,7 @@ func TestStageNoSession(t *testing.T) {
 	dir := t.TempDir()
 	writeFindings(t, dir, baseFindings())
 	_, err := StageApproved(context.Background(), StageOptions{Dir: dir, RepoPath: "/tmp/x"}, NewCLI())
-	if err == nil || !strings.Contains(err.Error(), "open tuicr first") {
+	if err == nil || !strings.Contains(err.Error(), "open tuicr") {
 		t.Fatalf("expected actionable no-session error, got %v", err)
 	}
 	if _, err := LoadMappings(dir); err != nil {
@@ -247,8 +272,10 @@ func TestStageNoSession(t *testing.T) {
 	}
 }
 
-// TestResolveSessionPriority — PR session for the MR wins; the active local
-// session is the fallback; no session at all resolves to nil.
+// TestResolveSessionPriority — PR session for the MR wins; no local or
+// "newest" session may substitute (review finding P1 #2: a local session
+// is bound to a worktree/branch, not to an MR IID, so returning one for an
+// MR review risks landing findings into an unrelated review).
 func TestResolveSessionPriority(t *testing.T) {
 	sessions := []Session{
 		{Slug: "gl:grp/proj/pr/41", Kind: "pr", UpdatedAt: "2026-10-20T00:00:00Z"},
@@ -259,11 +286,39 @@ func TestResolveSessionPriority(t *testing.T) {
 	if s := ResolveSession(sessions, "grp/proj", 42); s == nil || s.Slug != "gl:grp/proj/pr/42" {
 		t.Fatalf("PR session for the MR must win: %+v", s)
 	}
-	if s := ResolveSession(sessions, "grp/proj", 99); s == nil || !s.Active {
-		t.Fatalf("active local session must be the fallback: %+v", s)
+	// No PR session for MR 99 → must resolve to nil, NOT the active local
+	// session (the previous implementation fell through to active/newest
+	// local, which was a P1 cross-review contamination risk).
+	if s := ResolveSession(sessions, "grp/proj", 99); s != nil {
+		t.Fatalf("no PR session for MR 99 must NOT fall through to a local session, got %+v", s)
 	}
 	if s := ResolveSession(nil, "grp/proj", 42); s != nil {
 		t.Fatalf("empty list must resolve to nil, got %+v", s)
+	}
+}
+
+// TestResolveSessionSmartFailsClosed — the smart resolver must reject a
+// request for MR 99 when no exact-match PR session exists. The previous
+// fallback chain returned "active local session" / "live pane's session",
+// which could land AI comments in an unrelated review. The new contract:
+// fail closed with an actionable error naming the missing project + IID.
+func TestResolveSessionSmartFailsClosed(t *testing.T) {
+	fakeTuicr(t)
+	t.Setenv("FAKE_TUICR_FILES", "3")
+	cli := NewCLI()
+	ctx := context.Background()
+
+	// No exact-match PR session for MR 99 — the only session the fake
+	// exposes is gl:grp/proj/pr/42.
+	_, err := cli.ResolveSessionSmart(ctx, "/tmp/repo", "grp/proj", 99)
+	if err == nil {
+		t.Fatal("ResolveSessionSmart must fail closed when no exact-match PR session exists")
+	}
+	if !strings.Contains(err.Error(), `project="grp/proj"`) || !strings.Contains(err.Error(), `iid=99`) {
+		t.Fatalf("error must name the missing project + IID for actionable debugging, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "exact-match") {
+		t.Fatalf("error must explain the contract (exact match required), got: %v", err)
 	}
 }
 
@@ -361,5 +416,158 @@ func TestStageApprovedRepoListEmptyFallsBackToAll(t *testing.T) {
 	}
 	if mp, ok := mappings.Get("F001"); !ok || mp.CommentID == "" {
 		t.Fatal("F001 must be mapped after fallback staging")
+	}
+}
+
+// addCount reads the FAKE_TUICR_STATE.add_count counter file — every call
+// to the fake `review add` increments it. Tests use it to prove a single
+// AddComment invocation produces exactly one underlying call (no retry
+// double-insert).
+func addCount(t *testing.T) int {
+	t.Helper()
+	path := os.Getenv("FAKE_TUICR_STATE") + ".add_count"
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatalf("add_count file corrupt: %v", err)
+	}
+	return n
+}
+
+// TestAddCommentNoDoubleInsert — reproduces the P1 #3 bug. The fake exits
+// 0 with a non-JSON body (FAKE_TUICR_BAD_JSON=1) on attempt 1; the OLD
+// code would fall through to attempt 2 and double-insert. The fixed code
+// must NOT retry after exit 0 — the comment is already stored. We assert
+// exactly one underlying call, that parseStoredComment succeeds (via
+// read-back on the stored comment), and that exactly one stored comment
+// exists.
+func TestAddCommentNoDoubleInsert(t *testing.T) {
+	fakeTuicr(t)
+	t.Setenv("FAKE_TUICR_BAD_JSON", "1")
+	cli := NewCLI()
+	ctx := context.Background()
+
+	in := CommentInput{
+		Content: "double-insert probe",
+		Type:    "issue",
+		File:    "a.go",
+		Line:    10,
+		Side:    "new",
+		Username: "test",
+	}
+
+	// The fake's BAD_JSON path stores the comment (exit 0 → contract:
+	// comment IS stored) but emits a non-JSON body. parseStoredComment
+	// must succeed via read-back. The important assertion is the add
+	// counter is exactly 1 — no retry attempt 2.
+	got, err := cli.AddComment(ctx, "gl:grp/proj/pr/42", "/tmp/repo", in)
+	if err != nil {
+		t.Fatalf("read-back must succeed even when the response body is bad JSON, got: %v", err)
+	}
+	if got == nil || got.ID == "" {
+		t.Fatal("read-back must return the stored comment with an ID")
+	}
+	if n := addCount(t); n != 1 {
+		t.Fatalf("expected exactly 1 underlying `review add` call (no retry), got %d", n)
+	}
+
+	// And the session must hold exactly one comment with this content.
+	cs, err := cli.Comments(ctx, "gl:grp/proj/pr/42", "/tmp/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 1 {
+		t.Fatalf("session must hold exactly one comment after the probe, got %d", len(cs))
+	}
+}
+
+// TestAddCommentHappyPath — attempt 1 succeeds (exit 0 + JSON body).
+// Underlying call count = 1; returned comment matches input exactly.
+func TestAddCommentHappyPath(t *testing.T) {
+	fakeTuicr(t)
+	cli := NewCLI()
+	ctx := context.Background()
+
+	in := CommentInput{
+		Content: "happy path", Type: "issue",
+		File: "a.go", Line: 5, Side: "new", Username: "test",
+	}
+	got, err := cli.AddComment(ctx, "gl:grp/proj/pr/42", "/tmp/repo", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID == "" || got.Content != "happy path" || got.Path != "a.go" || got.StartLine != 5 {
+		t.Fatalf("unexpected stored comment: %+v", got)
+	}
+	if n := addCount(t); n != 1 {
+		t.Fatalf("happy path must invoke `review add` exactly once, got %d", n)
+	}
+}
+
+// TestReadBackMatchRequiresExactLine — two identical comments on different
+// lines: read-back must NOT return the wrong one. The fixed
+// parseStoredComment requires (file, side, line-range, content) to all
+// match; matching by content alone would confuse these two.
+func TestReadBackMatchRequiresExactLine(t *testing.T) {
+	fakeTuicr(t)
+	cli := NewCLI()
+	ctx := context.Background()
+
+	// Two identical comments on different lines (post-insertion).
+	cs0, err := cli.Comments(ctx, "gl:grp/proj/pr/42", "/tmp/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Seed two comments directly via the fake's state file (matching the
+	// comment shape produced by the fake).
+	seed := []Comment{
+		{ID: "c1", Path: "a.go", StartLine: 10, EndLine: 10, Side: "new",
+			CommentType: "issue", Author: "test", LifecycleState: "local_draft",
+			Content: "duplicate text"},
+		{ID: "c2", Path: "a.go", StartLine: 99, EndLine: 99, Side: "new",
+			CommentType: "issue", Author: "test", LifecycleState: "local_draft",
+			Content: "duplicate text"},
+	}
+	b, _ := json.Marshal(seed)
+	os.WriteFile(os.Getenv("FAKE_TUICR_STATE")+".comments.json", b, 0o644)
+	_ = cs0
+
+	// Without a parsed JSON response, parseStoredComment must match by
+	// (file, side, line, content). Force it through the read-back path:
+	// point at line 10 → must return c1, not c2.
+	// We can't directly invoke the unexported method, so we drive via
+	// AddComment with FAKE_TUICR_BAD_JSON. The fake inserts ONE comment
+	// first, then we make a second AddComment that the read-back path must
+	// disambiguate.
+	t.Setenv("FAKE_TUICR_BAD_JSON", "1")
+	// Insert a third comment that has the SAME content as c1 but a DIFFERENT line.
+	_, _ = cli.AddComment(ctx, "gl:grp/proj/pr/42", "/tmp/repo", CommentInput{
+		Content: "duplicate text", Type: "issue",
+		File: "a.go", Line: 10, Side: "new", Username: "test",
+	})
+	// After this, the session has c1 (line 10, seed) + new (line 10, fake
+	// inserted) — two identical (file, side, line, content) candidates.
+	// The read-back path must report AMBIGUOUS (or fail), not silently
+	// pick the wrong one. We force a second AddComment for a different
+	// line; the fake inserts a 3rd identical-content comment on line 99.
+	_, _ = cli.AddComment(ctx, "gl:grp/proj/pr/42", "/tmp/repo", CommentInput{
+		Content: "duplicate text", Type: "issue",
+		File: "a.go", Line: 99, Side: "new", Username: "test",
+	})
+	// Now 4 stored comments (c1, c2, fake-insert, fake-insert). Force one
+	// more AddComment and observe the ambiguous result — two candidates
+	// at line 99 (c2 + the latest fake insert) match by content.
+	_, err = cli.AddComment(ctx, "gl:grp/proj/pr/42", "/tmp/repo", CommentInput{
+		Content: "duplicate text", Type: "issue",
+		File: "a.go", Line: 99, Side: "new", Username: "test",
+	})
+	if err == nil {
+		t.Fatal("expected ambiguity error on duplicate (file, side, line, content), got nil")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("error must flag ambiguity, got: %v", err)
 	}
 }

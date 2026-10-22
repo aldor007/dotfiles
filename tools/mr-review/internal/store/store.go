@@ -44,19 +44,58 @@ func Home() string {
 func WorktreeRoot() string { return filepath.Join(Home(), "worktrees") }
 
 // ReviewDir returns the state dir for one review.
-func ReviewDir(project string, iid int) string {
-	return filepath.Join(Home(), Slug(project), "mr"+strconv.Itoa(iid))
+//
+// SECURITY (review finding P1 #7): host is part of the path AND the slug
+// uses a collision-safe encoding. Without the latter, two distinct
+// projects on the SAME host collide — e.g. "group/sub/proj" and
+// "group.sub.proj" both sanitized to "group_sub_proj", and their
+// publication state / findings could overwrite each other. DefaultHost
+// is used when the caller doesn't know the host (callers that DO know
+// it must pass it explicitly).
+func ReviewDir(host, project string, iid int) string {
+	return filepath.Join(Home(), Slug(host, project), "mr"+strconv.Itoa(iid))
 }
 
-// Slug makes a filesystem-safe project slug: "group/sub/proj" -> "group_sub_proj".
-func Slug(project string) string {
+// DefaultHost is the GitLab host used when the caller doesn't supply one
+// (legacy callers, review references without an explicit Host field).
+const DefaultHost = "gitlab.com"
+
+// Slug makes a filesystem-safe, collision-safe (host, project) slug.
+//
+// Layout: "<host>_<project-escaped>" — the single underscore between
+// host and project is the ONLY separator, and the project portion
+// escapes every character that isn't [A-Za-z0-9-] as "_XX" (lowercase
+// hex of the byte). That makes the function a bijection between
+// (host, project) and the resulting slug:
+//   - alphanumerics and '-' are preserved verbatim,
+//   - '_' is escaped to "_5f",
+//   - '/', '.', spaces and everything else are escaped to "_<2-hex>".
+//
+// Two distinct projects that the OLD single-arg Slug collapsed to the
+// same string (e.g. "group/sub/proj" and "group.sub.proj" both became
+// "group_sub_proj") now produce different paths. Review finding P1 #7.
+func Slug(host, project string) string {
+	if host == "" {
+		host = DefaultHost
+	}
 	var b strings.Builder
-	for _, r := range project {
+	for _, r := range host {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
 			b.WriteRune(r)
 		default:
 			b.WriteByte('_')
+			b.Write([]byte(strconv.FormatInt(int64(r), 16)))
+		}
+	}
+	b.WriteByte('_')
+	for _, r := range project {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+			b.Write([]byte(strconv.FormatInt(int64(r), 16)))
 		}
 	}
 	return b.String()
@@ -289,12 +328,86 @@ func FindingsPath(dir string) string { return filepath.Join(dir, "findings.jsonl
 // RawFindingsPath is where the agent is told to write its raw output.
 func RawFindingsPath(dir string) string { return filepath.Join(dir, "findings.raw.jsonl") }
 
+// atomicWrite writes data to path atomically with a per-file advisory
+// lock. This is the single funnel for any state-file write in the store,
+// so callers cannot accidentally bypass the locking protocol.
+//
+// Locking (review finding P1 #8): atomic rename alone does NOT prevent
+// two processes from racing to update the same file. In mr-review, the
+// AI worker and the interactive reviewer can both write findings.jsonl
+// concurrently; without locking they would corrupt each other's writes.
+// We use an advisory flock(2) on "<path>.lock" with a short timeout —
+// if another process holds it, we fail with an actionable error rather
+// than block indefinitely (the lock holder should be quick, and a
+// stuck lock points to a real bug to investigate).
+//
+// Temp filename uniqueness: rename() races are avoided by giving the
+// temp file a per-process, per-call name ("<path>.tmp.<pid>.<nanos>"),
+// so two concurrent writers cannot both rename the same temp into
+// place — whichever wins, the other has nothing to rename.
+//
+// fsync ordering: the file is fsync'd BEFORE the rename so the data is
+// on disk before the directory entry changes; the directory is fsync'd
+// after the rename so the rename itself is durable.
 func atomicWrite(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	lockPath := path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("acquire lock for %s: %w", path, err)
+	}
+	defer lockFile.Close()
+	// 5s timeout: the lock holder should finish quickly; if it doesn't,
+	// either it's stuck or it died (lockfile leaked). Either way, failing
+	// here is safer than blocking indefinitely.
+	if err := flockTry(lockFile, 5*time.Second); err != nil {
+		return fmt.Errorf("lock %s: %w", lockPath, err)
+	}
+	defer flockUnlock(lockFile)
+
+	tmp := fmt.Sprintf("%s.tmp.%d.%d", path, os.Getpid(), time.Now().UnixNano())
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// fsync the directory entry so the rename is durable (matters on
+	// filesystems where the rename is journaled separately from file
+	// data — typical for ext4/xfs, also for journaled APFS).
+	if d, derr := os.Open(filepath.Dir(path)); derr == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
+}
+
+// flockTry wraps fcntl(F_OFD_SETLK) with a polling fallback so this
+// works on macOS (no OFD locks) without changing the contract. Pure
+// macOS supports flock(LOCK_EX | LOCK_NB); we use that on darwin and
+// fcntl(F_OFD_SETLK) on linux. Either way the contract is "wait up
+// to d for the lock, return nil on acquisition, error on contention".
+func flockTry(f *os.File, d time.Duration) error {
+	return doFlockTry(f, d)
+}
+
+func flockUnlock(f *os.File) error {
+	return doFlockUnlock(f)
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }

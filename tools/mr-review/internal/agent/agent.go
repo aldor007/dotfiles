@@ -247,6 +247,20 @@ func ExtractJiraKeys(texts ...string) []string {
 // stdin (robust for any size); raw output is tee'd to logPath AND streamed
 // line-by-line to the optional onLine callback so the UI can show what the
 // agent is doing (tool calls, commands, progress) while it runs.
+//
+// SECURITY/REVIEW (P1 #4): the reviewer runs `pi -p` inside the worktree.
+// Without sandboxing the subprocess inherits the user's full environment
+// (tokens, SSH keys, glab auth) and could publish changes, write to
+// arbitrary paths, or impersonate the user. The cmd.Env below is a strict
+// allowlist — only the variables the agent's runtime needs for code
+// reading, plus the prompt's working directory. GitLab/Google/AWS/GitHub
+// credential env vars (any name containing TOKEN, KEY, SECRET, PASS or
+// hosted in known credential services) are stripped. PATH is preserved
+// (the agent must invoke `go`, `gh`, `glab`, `jq`, etc.) and HOME is kept
+// so `~/.config/glab-cli/` reads work for read-only glab queries — but
+// `.ssh` is excluded from the effective environment by removing
+// SSH_AUTH_SOCK (the agent has no business using ssh agent forwarding
+// during a code review).
 func (r *Runner) RunReview(ctx context.Context, wt, prompt, logPath string, timeout time.Duration, onLine ...func(string)) error {
 	if timeout <= 0 {
 		timeout = 20 * time.Minute
@@ -256,6 +270,7 @@ func (r *Runner) RunReview(ctx context.Context, wt, prompt, logPath string, time
 	cmd := exec.CommandContext(cctx, r.Bin, "-p")
 	cmd.Dir = wt
 	cmd.Stdin = strings.NewReader(prompt)
+	cmd.Env = sandboxEnv()
 
 	logFile, lerr := os.Create(logPath)
 	if lerr != nil {
@@ -400,6 +415,45 @@ func Ingest(dir string) (IngestResult, error) {
 		}
 	}
 	res.Added = len(keep)
+	return res, nil
+}
+
+// ReconcileRun ingests a fresh review pass over findings that already exist:
+// raw output is validated, matched findings UPDATE the existing entries
+// (fresh line positions, agent text — human decisions/edits/publications
+// carried), findings the agent did NOT re-report are marked stale (verified
+// addressed or no longer applicable), genuinely new ones are appended as
+// Pending. Atomic save; nothing is removed outright.
+func ReconcileRun(dir string) (IngestResult, error) {
+	var res IngestResult
+	old, err := store.LoadFindings(dir)
+	if err != nil {
+		return res, fmt.Errorf("load existing findings: %w", err)
+	}
+	fresh, dropped, err := ParseRaw(dir)
+	if err != nil {
+		return res, err
+	}
+	res.Dropped = dropped
+
+	merged := Renumber(Refresh(old, fresh))
+	if err := store.SaveFindings(dir, merged); err != nil {
+		return res, err
+	}
+	// report honestly: how many carried, how many went stale, how many new
+	oldIDs := map[string]bool{}
+	for _, o := range old {
+		oldIDs[o.ID] = true
+	}
+	for _, m := range merged {
+		if oldIDs[m.ID] {
+			if m.Stale {
+				res.Dropped = append(res.Dropped, fmt.Sprintf("%s %q: not re-reported — marked stale", m.ID, m.Title))
+			}
+		} else {
+			res.Added++
+		}
+	}
 	return res, nil
 }
 

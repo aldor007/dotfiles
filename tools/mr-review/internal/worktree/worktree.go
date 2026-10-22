@@ -57,7 +57,7 @@ func (m *Manager) Path(r *store.Review) string {
 		short = short[:8]
 	}
 	return filepath.Join(store.WorktreeRoot(),
-		fmt.Sprintf("%s-mr%d-%s", store.Slug(r.Project), r.IID, short))
+		fmt.Sprintf("%s-mr%d-%s", store.Slug(r.Host, r.Project), r.IID, short))
 }
 
 // head returns the worktree's checked-out commit ("" when missing).
