@@ -12,7 +12,7 @@ Terminal multiplexer: **tmux**. Workflows: **herdr**-managed panes/workspaces.
 | `nvim/` formatters | `conform.nvim` formats on save (LSP fallback), `nvim-lint` adds ruff/shellcheck. Binaries: `brew install stylua ruff prettier shellcheck` or `./install.sh -i formatters` |
 | `.zshrc` | oh-my-zsh, PATH/tool wiring (gsd, kimchi/pi, docker wrapper, PR summary) |
 | `.tmux/` | tmux config (prefix `C-a`, mouse on, optional powerline2) |
-| `scripts/` | `pr-summary.sh` (daily PR/MR digest), `worktree-clean`, `service-repo-project` (names/ids from gitignored `local/projects.env`), `pi` (kimchi shim), `sql-db.sh` (per-env Cloud SQL via px IAP tunnel + IAM — `--psql`, `--rainfrog`, `--visql`, `--fg`), `dotfiles-init.sh` (renders the local config), small utils |
+| `scripts/` | `pr-summary.sh` (daily PR/MR digest), `worktree-clean`, `service-repo-project` (names/ids from gitignored `local/projects.env`), `pi` (kimchi shim), `sql-db.sh` (per-env Cloud SQL via px IAP tunnel + IAM — `--psql`, `--rainfrog`, `--visql`, `--fg`), `pam-approve.sh` (GCP PAM grant approvals — fzf TUI approve/deny, `--auto` watch mode), `dotfiles-init.sh` (renders the local config), small utils |
 | `.config/herdr/` | herdr plugin configs (single source of truth, symlinked in by install.sh) |
 | `install.sh` | installer — `-i herdr` (any OS), `-i all` (legacy Debian/Ubuntu stack) |
 | `.gitconfig` `.pylintrc` `.eslintrc.json` `.jshintrc` `.screenrc` | classic dotfiles |
