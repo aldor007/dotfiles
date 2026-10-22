@@ -2,15 +2,30 @@
 --   ,e  local explorer rooted at the current file's parent directory,
 --       revealing + selecting the file (GoLand-style)
 --   ,E  worktree explorer rooted at the git worktree root (.git dir or file)
--- Re-pressing either closes the tree (no duplicate windows).
+--   <C-n> toggle at the worktree root (old NERDTree/nvim-tree key)
+--
+-- Uses neo-tree's own `toggle` flag: command.execute() runs renderer.close()
+-- SYNCHRONOUSLY and falls through to open only when nothing was closed.
+-- The previous window-scan + action="close" dance raced with neo-tree's
+-- async close: a fast <C-n><C-n><C-n> saw the closing window as still open
+-- and closed an already-closing tree — 3rd press "no effect".
 local M = {}
 
-local function tree_is_open()
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype or ""
-    if ft:match("^neo%-tree") then return true end
+-- Debounce: neo-tree's OPEN path is deferred internally (while close is
+-- synchronous), so a sub-100ms key mash could get a press absorbed mid-open.
+-- Collapsing rapid presses into one toggle keeps parity exact for humans.
+local pending_timer = nil
+local function debounced(fn)
+  return function(...)
+    local args = { ... }
+    if pending_timer then
+      vim.fn.timer_stop(pending_timer)
+    end
+    pending_timer = vim.fn.timer_start(100, function()
+      pending_timer = nil
+      fn(unpack(args))
+    end)
   end
-  return false
 end
 
 local function run(args)
@@ -30,34 +45,32 @@ end
 
 ---,e — root at the current file's directory, file revealed & selected.
 function M.toggle_local()
-  if tree_is_open() then
-    run({ action = "close", position = "left" })
-    return
-  end
-  local ctx = require("config.context")
-  local file = ctx.source_file()
-  run({
-    action = "focus",
-    source = "filesystem",
-    position = "left",
-    dir = ctx.source_dir(),
-    reveal_file = file or nil,
-    reveal = file ~= nil,
-  })
+  return debounced(function()
+    local ctx = require("config.context")
+    local file = ctx.source_file()
+    run({
+      action = "focus",
+      toggle = true,
+      source = "filesystem",
+      position = "left",
+      dir = ctx.source_dir(),
+      reveal_file = file or nil,
+      reveal = file ~= nil,
+    })
+  end)()
 end
 
 ---,E — root at the git worktree root.
 function M.toggle_worktree()
-  if tree_is_open() then
-    run({ action = "close", position = "left" })
-    return
-  end
-  run({
-    action = "focus",
-    source = "filesystem",
-    position = "left",
-    dir = require("config.context").worktree_root(),
-  })
+  return debounced(function()
+    run({
+      action = "focus",
+      toggle = true,
+      source = "filesystem",
+      position = "left",
+      dir = require("config.context").worktree_root(),
+    })
+  end)()
 end
 
 return M
