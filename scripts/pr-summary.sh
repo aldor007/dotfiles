@@ -123,9 +123,15 @@ gl_fetch() { # gl_fetch <api args…>
 # GitLab has no client-side pagination; a notes/MR list longer than per_page
 # would permanently lose items once the baseline advances. Page until a short
 # page (per_page=100 in every caller), merging arrays with jq -s.
+# Separator: any base that already carries a query string joins with '&',
+# anything else with '?'. The previous pattern `*"?")` matched a URL
+# ENDING in `?` only, which produced malformed URLs like
+# `notes?per_page=100?page=2` for any base that already had a query
+# string, and would silently loop on page 1. `*\?*` matches "contains a ?"
+# and is portable across bash, zsh and POSIX sh.
 gl_fetch_all() { # gl_fetch_all <path> (path may carry a query string)
   local base="$1" sep page out n all='[]'
-  case "$base" in *"?") sep="&";; *) sep="?";; esac
+  case "$base" in *\?*) sep="&";; *) sep="?";; esac
   page=1
   while [ "$page" -le 20 ]; do
     if ! out=$(glab api "${base}${sep}page=$page" 2>/dev/null); then

@@ -267,37 +267,60 @@ func TestResolveSessionPriority(t *testing.T) {
 	}
 }
 
-// TestPrepareSessionClearsPartial — a session whose file count is below the
-// review's diff is cleared (stale partial build); a complete one is kept.
-func TestPrepareSessionClearsPartial(t *testing.T) {
+// TestPrepareSessionNeverClears — PrepareSession must NEVER clear a
+// session, regardless of the file-count comparison. Auto-clearing was the
+// original P0 finding (silent loss of human review work when tuicr's file
+// count legitimately disagreed with GitLab's). A partial session is
+// reported via SessionStatusPartial; clearing is a human decision.
+func TestPrepareSessionNeverClears(t *testing.T) {
 	fakeTuicr(t)
 	cli := NewCLI()
 	ctx := context.Background()
 
-	// stale: 3 files in session, review expects 10
+	// Case 1: file count below expected — session must remain, status Partial.
 	t.Setenv("FAKE_TUICR_FILES", "3")
-	slug, cleared, err := cli.PrepareSession(ctx, "/tmp/repo", "grp/proj", 42, 10)
+	slug, status, err := cli.PrepareSession(ctx, "/tmp/repo", "grp/proj", 42, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cleared || slug != "gl:grp/proj/pr/42" {
-		t.Fatalf("partial session must be cleared: slug=%q cleared=%v", slug, cleared)
+	if slug != "gl:grp/proj/pr/42" {
+		t.Fatalf("partial session slug must be returned: got %q", slug)
 	}
-	// the fake deleted its state file → session gone
-	sessions, _ := cli.ListSessions(ctx, "/tmp/repo")
-	if len(sessions) != 0 {
-		t.Fatalf("cleared session must be removed, got %d", len(sessions))
+	if status != SessionStatusPartial {
+		t.Fatalf("partial session must be reported as SessionStatusPartial, got %v", status)
+	}
+	// The fake marks the session as cleared when `review clear` runs;
+	// assert it was NOT invoked by checking the marker file is absent.
+	if _, err := os.Stat(os.Getenv("FAKE_TUICR_STATE") + ".cleared"); err == nil {
+		t.Fatal("P0: PrepareSession must never invoke `tuicr review clear`; marker file present")
 	}
 
-	// complete: 10 files, review expects 10 → kept (fresh session, no marker)
-	t.Setenv("FAKE_TUICR_FILES", "10")
+	// Case 2: file count equal — status Ready, no clear.
+	// Re-prime the fake by removing any leftover cleared marker.
 	os.Remove(os.Getenv("FAKE_TUICR_STATE") + ".cleared")
-	slug, cleared, err = cli.PrepareSession(ctx, "/tmp/repo", "grp/proj", 42, 10)
+	t.Setenv("FAKE_TUICR_FILES", "10")
+	slug, status, err = cli.PrepareSession(ctx, "/tmp/repo", "grp/proj", 42, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cleared || slug == "" {
-		t.Fatalf("complete session must be kept: slug=%q cleared=%v", slug, cleared)
+	if status != SessionStatusReady {
+		t.Fatalf("complete session must be SessionStatusReady, got %v", status)
+	}
+	if slug == "" {
+		t.Fatal("ready session must return its slug")
+	}
+	if _, err := os.Stat(os.Getenv("FAKE_TUICR_STATE") + ".cleared"); err == nil {
+		t.Fatal("P0: PrepareSession must never invoke `tuicr review clear` on a ready session either")
+	}
+
+	// Case 3: expectedFiles == 0 means "don't compare" — treat as Ready.
+	t.Setenv("FAKE_TUICR_FILES", "3")
+	slug, status, err = cli.PrepareSession(ctx, "/tmp/repo", "grp/proj", 42, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != SessionStatusReady || slug == "" {
+		t.Fatalf("expectedFiles=0 must not classify as Partial: status=%v slug=%q", status, slug)
 	}
 }
 

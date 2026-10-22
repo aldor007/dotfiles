@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"mr-review/internal/plex"
+	"mr-review/internal/tuicr"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -52,15 +53,18 @@ func (m *model) openTuicrPane() tea.Cmd {
 		m.msg = "no worktree — prepare the review first"
 		return nil
 	}
-	// clear a stale/partial tuicr session first (tuicr persists
-	// interrupted builds and would resume the incomplete diff)
+	// Detect a stale/partial tuicr session (file count below the GitLab
+	// diff size). PrepareSession never clears — clearing erases human
+	// review work, and the count can legitimately disagree between tuicr
+	// and GitLab (tuicr filters or omits some files). Surface the status
+	// to the user; they decide whether to clear via tuicr itself.
 	expected := m.expectedDiffFiles()
 	if expected > 0 {
-		if slug, cleared, err := m.tuicrClient().PrepareSession(
+		if slug, status, err := m.tuicrClient().PrepareSession(
 			context.Background(), m.rev.Worktree, m.rev.Project, m.rev.IID, expected); err != nil {
 			m.msg = "tuicr session check failed: " + err.Error()
-		} else if cleared {
-			m.msg = "stale tuicr session cleared — rebuilding the full diff"
+		} else if status == tuicr.SessionStatusPartial {
+			m.msg = "tuicr session file count is below the MR diff — open it to inspect; do not auto-clear"
 		} else if slug != "" {
 			m.msg = ""
 		}

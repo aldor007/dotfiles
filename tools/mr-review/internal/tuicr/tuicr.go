@@ -342,29 +342,53 @@ func ResolveSession(sessions []Session, project string, iid int) *Session {
 	return newest
 }
 
-// PrepareSession makes sure a usable tuicr session exists for the review:
-// it resolves the session for the MR/worktree and, if it is PARTIAL (fewer
-// files than the review's diff actually contains — tuicr builds sessions
-// incrementally and persists interrupted builds), clears it so the next
-// pane launch rebuilds the complete diff. Returns the session slug ("" when
-// none exists yet — the pane spawn creates it) and whether a rebuild was
-// triggered.
-func (c *CLI) PrepareSession(ctx context.Context, repo, project string, iid, expectedFiles int) (slug string, cleared bool, err error) {
+// SessionStatus describes how a session matches the MR the caller asked for.
+type SessionStatus int
+
+const (
+	// SessionStatusMissing means no session was found for the MR (the human
+	// has not opened tuicr yet, or the slug does not match).
+	SessionStatusMissing SessionStatus = iota
+	// SessionStatusReady means a session was found and its file count
+	// matches the expected diff size — the pane can attach directly.
+	SessionStatusReady
+	// SessionStatusPartial means the session exists but appears incomplete
+	// (file count below expected). tuicr builds sessions incrementally and
+	// an interrupted build can persist this way. mr-review WILL NOT clear
+	// the session automatically — doing so can erase human review work.
+	// The caller surfaces this state to the user; the user decides
+	// whether to open the session in tuicr and clear it themselves.
+	SessionStatusPartial
+)
+
+// PrepareSession resolves the tuicr session for an MR and classifies it.
+//
+// IMPORTANT: PrepareSession never clears or modifies a session. The
+// previous implementation called `tuicr review clear` whenever the
+// session's file count was below expected, which silently destroyed
+// human review work whenever the count drifted (the most common case:
+// tuicr filters or omits files in some diffs; the caller's expected
+// count comes from GitLab's mr.changes, which can disagree). If the
+// session is partial, the caller is told via SessionStatusPartial and
+// is expected to surface that to the user — clearing is an explicit
+// human decision, taken inside the tuicr pane or via
+// `tuicr review clear --session <slug>`.
+//
+// Returns the slug ("" when no session exists yet — the pane spawn
+// creates it), the status, and any error.
+func (c *CLI) PrepareSession(ctx context.Context, repo, project string, iid, expectedFiles int) (slug string, status SessionStatus, err error) {
 	sessions, err := c.ListSessions(ctx, repo)
 	if err != nil {
-		return "", false, err
+		return "", SessionStatusMissing, err
 	}
 	s := ResolveSession(sessions, project, iid)
 	if s == nil {
-		return "", false, nil
+		return "", SessionStatusMissing, nil
 	}
-	if s.FileCount < expectedFiles {
-		if cerr := c.Clear(ctx, s.Slug, repo); cerr != nil {
-			return s.Slug, false, fmt.Errorf("clearing stale session: %w", cerr)
-		}
-		return s.Slug, true, nil
+	if expectedFiles > 0 && s.FileCount < expectedFiles {
+		return s.Slug, SessionStatusPartial, nil
 	}
-	return s.Slug, false, nil
+	return s.Slug, SessionStatusReady, nil
 }
 
 // slugHasProject reports whether a forge slug ("gl:group/sub/proj/pr/7")
