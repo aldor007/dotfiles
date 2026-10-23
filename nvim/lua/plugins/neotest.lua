@@ -17,14 +17,16 @@ return {
       { "<leader>ts", function() require("neotest").summary.toggle() end, desc = "test: summary" },
       { "<leader>tx", function() require("neotest").run.stop() end, desc = "test: stop" },
     },
-    opts = {
-      adapters = {
+    opts = {},
+    -- the adapter require stays OUT of the spec table: it must not run at
+    -- spec-load time (Lazy! clean removes unpackaged plugins and the cache
+    -- loader then fails the whole config load)
+    config = function(_, opts)
+      opts.adapters = {
         require("neotest-golang")({
           runner = "go", -- plain `go test`; env inherits from the shell
         }),
-      },
-    },
-    config = function(_, opts)
+      }
       require("neotest").setup(opts)
     end,
   },
