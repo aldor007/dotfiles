@@ -6,6 +6,12 @@ return {
     lazy = false, -- plugin does not support lazy-loading
     build = ":TSUpdate",
     config = function()
+      -- CI/validate.sh: the sync pass installs parsers; later nvim
+      -- invocations skip the install call — re-running it races with the
+      -- existing parser dirs (nvim-treesitter ENOTEMPTY on rename).
+      if vim.env.NVIM_TS_INSTALL_SKIP == "1" then
+        return
+      end
       require("nvim-treesitter").setup({})
 
       local parsers = {

@@ -137,6 +137,13 @@ if [ "$SYNC" = 1 ]; then
   step "3b/6 Lazy sync (installs/updates plugins — mutating!)"
   if timeout 600 "${NV[@]}" --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
     echo "OK    Lazy sync"
+    # later nvim invocations (smoke tests) must NOT re-run the treesitter
+    # install — it races with the parsers the sync just installed
+    export NVIM_TS_INSTALL_SKIP=1
+    # pre-create the hardtime state log (hardtime opens it at load; a
+    # missing file makes it abort with "Unable to open")
+    mkdir -p "$ISO_ROOT/state/nvim"
+    : > "$ISO_ROOT/state/nvim/hardtime.nvim.log"
   else
     echo "FAIL  Lazy sync"; fail=1
   fi
