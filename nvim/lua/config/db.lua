@@ -43,6 +43,9 @@ local ROOT = find_repo_root()
 local SCRIPT = ROOT and (ROOT .. "/scripts/sql-db.sh") or nil
 local ENV_FILE = ROOT and (ROOT .. "/local/projects.env") or nil
 local EXAMPLE_ENV_FILE = ROOT and (ROOT .. "/scripts/projects.env.example") or nil
+if ENV_FILE and vim.fn.filereadable(ENV_FILE) ~= 1 then
+  ENV_FILE = nil
+end
 if not ENV_FILE and EXAMPLE_ENV_FILE and vim.fn.filereadable(EXAMPLE_ENV_FILE) == 1 then
   ENV_FILE = EXAMPLE_ENV_FILE
 end
