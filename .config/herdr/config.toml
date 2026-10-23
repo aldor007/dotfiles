@@ -135,6 +135,28 @@ description = "reviewr: toggle pane"
 # mr-review: GitLab MR AI review launcher in a session-modal popup
 # (prefix+shift+v is free: reviewr owns prefix+v, resize owns shift+h/j/k/l).
 # Publishing lives in mr-review-publish and always asks for confirmation.
+#
+# Audit decision (deferred): the audit suggested switching to a persistent
+# tab or workspace for the actual review, with the popup reserved for MR
+# selection. Decision: keep the current popup binding. Rationale:
+#   1. The MR-review binary's own workspace mode is already invoked when
+#      the user opens a review (its internal `wsPane = plex.Start(...)`
+#      lifecycle in tools/mr-review/internal/tui/workspace.go gives a
+#      hybrid cockpit+tuicr split INSIDE the popup). The popup hosts the
+#      full review experience; switching the herdr key from popup to
+#      tab would just change WHERE the split-pane lives, not whether
+#      AI/manual decoupling exists.
+#   2. prefix+shift+v is one of the few available binding slots (prefix+v
+#      is reviewr, prefix+shift+m/o are glab-status, prefix+w/space/etc.
+#      are committed). Reassigning would collide with muscle memory.
+#   3. mr-review's publish path (mr-review-publish) requires explicit
+#      confirmation regardless of how the review was launched — the
+#      popup-vs-tab choice does not affect publish safety.
+#   4. Background AI review continues while the user works in other
+#      panes; this is the existing mr-review tool's design, not the
+#      launcher's. Switching the launcher would not change AI lifecycle.
+# If a future audit or user feedback changes this tradeoff, the swap
+# is a 1-line change (type = "tab" or "workspace").
 [[keys.command]]
 key = "prefix+shift+v"
 type = "popup"

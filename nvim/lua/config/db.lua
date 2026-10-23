@@ -94,7 +94,21 @@ end
 -- tables through the API and returns copies, so in-place mutation of
 -- vim.g.dbs would silently never land in g:.
 local dbs = {}
+-- All public entrypoints (M.seed, M.check_tunnels, M.use_env, M.stop)
+-- guard on these. None of them will crash with "attempt to concatenate
+-- a nil value" — without this guard, M.seed's notify path would render
+-- "db: nil missing/empty" which is correct but useless.
 function M.seed()
+  if not SCRIPT then
+    vim.schedule(function()
+      vim.notify(
+        "db: cannot mint IAM token (no scripts/sql-db.sh found). " ..
+        "Run scripts/dotfiles-init.sh or set DOTFILES_DIR.",
+        vim.log.levels.ERROR
+      )
+    end)
+    return
+  end
   -- vim.system callbacks run in a fast-event context where vim.g, vim.notify
   -- and vim.cmd can hit E5560 ("vim.api.* must not be called in a fast event
   -- context"). vim.schedule_wrap defers the body to the main loop. Audit
@@ -113,8 +127,9 @@ function M.seed()
       if p then port_by_env[e] = p end
     end
     if next(port_by_env) == nil or #ENVS ~= vim.tbl_count(port_by_env) then
+      local path = ENV_FILE or (ROOT and (ROOT .. "/local/projects.env")) or "<unknown>"
       vim.notify(
-        "db: " .. ENV_FILE .. " missing/empty — run scripts/dotfiles-init.sh first",
+        "db: " .. path .. " missing/empty — run scripts/dotfiles-init.sh first",
         vim.log.levels.ERROR
       )
       return

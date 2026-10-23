@@ -380,6 +380,30 @@ function install_herdr {
         # report successful setup while configured shortcuts are unresolved.
         if herdr plugin list 2>/dev/null | grep -q "kimchi-remote"; then
             echo "install_herdr: kimchi-remote installed and discoverable"
+            # Phase 4 audit fix: the four prefix+<key> bindings in
+            # .config/herdr/config.toml call specific plugin actions. The
+            # plugin manifest may rename them across releases. Verify
+            # every referenced action actually exists in the installed
+            # plugin before we let the install claim success.
+            if command -v python3 >/dev/null 2>&1; then
+                action_list_json=$(herdr plugin action list 2>/dev/null || true)
+                if [ -n "$action_list_json" ]; then
+                    echo "$action_list_json" \
+                        | python3 "$REPO_DIR/scripts/herdr-action-validate.py" \
+                              --plugin=kimchi-remote \
+                              --expected=open-picker \
+                              --expected=refresh-mine \
+                              --expected=open-worker-shell \
+                              --expected=open-new-workspace \
+                        || {
+                            # Don't fail the install on a validation mismatch
+                            # (the user may be intentionally running an
+                            # older plugin manifest). Just warn loudly.
+                            echo "install_herdr: WARNING one or more kimchi-remote actions referenced in .config/herdr/config.toml are missing from the installed plugin manifest." >&2
+                            echo "install_herdr:          Check herdr plugin action list kimchi-remote to see what's available." >&2
+                        }
+                fi
+            fi
         else
             echo "install_herdr: WARNING kimchi-remote install ran but the plugin is not discoverable via 'herdr plugin list' — bindings prefix+w / prefix+shift+w / prefix+alt+w / prefix+a will fail at runtime" >&2
         fi
