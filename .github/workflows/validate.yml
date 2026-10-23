@@ -46,9 +46,9 @@ jobs:
       # nvim-treesitter (main branch) compiles parsers from source with the
       # tree-sitter CLI — without it every parser install fails with
       # "ENOENT (cmd): 'tree-sitter'" and the validate run goes red.
-      - name: Install tree-sitter CLI
+      - name: Install tree-sitter CLI (0.25.x — ABI must match nvim 0.12 runtime)
         run: |
-          curl -fsSL https://github.com/tree-sitter/tree-sitter/releases/download/v0.27.1/tree-sitter-linux-x64.gz -o /tmp/tree-sitter.gz
+          curl -fsSL https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x64.gz -o /tmp/tree-sitter.gz
           gunzip -f /tmp/tree-sitter.gz
           chmod +x /tmp/tree-sitter
           echo "/tmp" >> "$GITHUB_PATH"
