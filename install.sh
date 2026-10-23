@@ -374,31 +374,44 @@ function install_herdr {
     # install reporting success while four keybindings pointed at a
     # missing plugin. The validate step below proves the install actually
     # took effect.
-    if [ -d "$REPO_DIR/local/herdr-kimchi-remote" ]; then
-        run herdr plugin install --yes --path "$REPO_DIR/local/herdr-kimchi-remote"
+    # kimchi-remote: local-only plugin (not on github — verified via
+    # `curl https://github.com/castai/kimchi-remote` → 404). Lives under
+    # local/herdr-kimchi-remote/ and must be linked in from the repo so the
+    # prefix+w / prefix+shift+w / prefix+alt+w / prefix+a bindings in
+    # config.toml resolve. Prefer `herdr plugin link`, which is the current
+    # local-plugin registration path; fallback to the legacy path-based
+    # install only when the installed herdr does not support `link`.
+    local_kimchi_dir="$REPO_DIR/local/herdr-kimchi-remote"
+    if [ -d "$local_kimchi_dir" ]; then
+        if herdr plugin link --help >/dev/null 2>&1; then
+            if ! herdr plugin list 2>/dev/null | grep -q "kimchi-remote"; then
+                if ! herdr plugin link "$local_kimchi_dir"; then
+                    echo "install_herdr: ERROR failed to link kimchi-remote from $local_kimchi_dir" >&2
+                    echo "install_herdr:          check the plugin manifest and retry; no local plugin cleanup was attempted." >&2
+                fi
+            else
+                echo "install_herdr: kimchi-remote already linked; preserving existing installation"
+            fi
+        else
+            if ! herdr plugin install --yes --path "$local_kimchi_dir"; then
+                echo "install_herdr: ERROR failed to install kimchi-remote from $local_kimchi_dir" >&2
+                echo "install_herdr:          plugin was not silently ignored; fix the local plugin before retrying." >&2
+            fi
+        fi
         # Validate the install actually landed — a clean clone should not
         # report successful setup while configured shortcuts are unresolved.
         if herdr plugin list 2>/dev/null | grep -q "kimchi-remote"; then
             echo "install_herdr: kimchi-remote installed and discoverable"
-            # Phase 4 audit fix: the four prefix+<key> bindings in
-            # .config/herdr/config.toml call specific plugin actions. The
-            # plugin manifest may rename them across releases. Verify
-            # every referenced action actually exists in the installed
-            # plugin before we let the install claim success.
             if command -v python3 >/dev/null 2>&1; then
-                action_list_json=$(herdr plugin action list 2>/dev/null || true)
-                if [ -n "$action_list_json" ]; then
-                    echo "$action_list_json" \
-                        | python3 "$REPO_DIR/scripts/herdr-action-validate.py" \
-                              --plugin=kimchi-remote \
-                              --expected=open-picker \
-                              --expected=refresh-mine \
-                              --expected=open-worker-shell \
-                              --expected=open-new-workspace \
-                        || {
-                            # Don't fail the install on a validation mismatch
-                            # (the user may be intentionally running an
-                            # older plugin manifest). Just warn loudly.
+                action_list_json=$(herdr plugin action list 2>&1)
+                rc=$?
+                if [ "$rc" -ne 0 ]; then
+                    echo "install_herdr: WARNING unable to discover kimchi-remote actions via 'herdr plugin action list':" >&2
+                    echo "$action_list_json" >&2
+                elif [ -z "$action_list_json" ]; then
+                    echo "install_herdr: WARNING kimchi-remote action discovery returned empty output" >&2
+                else
+                    echo "$action_list_json"                         | python3 "$REPO_DIR/scripts/herdr-action-validate.py"                               --plugin=kimchi-remote                               --expected=open-picker                               --expected=refresh-mine                               --expected=open-worker-shell                               --expected=open-new-workspace                         || {
                             echo "install_herdr: WARNING one or more kimchi-remote actions referenced in .config/herdr/config.toml are missing from the installed plugin manifest." >&2
                             echo "install_herdr:          Check herdr plugin action list kimchi-remote to see what's available." >&2
                         }
