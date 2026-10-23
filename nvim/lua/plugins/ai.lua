@@ -5,6 +5,14 @@
 -- Kimchi gateway key: prefer the env (exported in .zshrc for new shells),
 -- fall back to reading kimchi's config.json directly — so nvim sessions
 -- started before the .zshrc change (or from non-interactive shells) work too.
+--
+-- blink.cmp wiring: the after/ shim at
+-- nvim/after/blink/completion/source/minuet.lua bridges blink.cmp's
+-- `require('blink.completion.source.minuet')` lookup to
+-- `require('minuet.blink')`. minuet's own init.lua only registers with
+-- nvim-cmp (`if has_cmp then ...`), so blink.cmp users get nothing
+-- without the shim — the source is in `sources.default` (lsp.lua:128)
+-- but never resolves. See the shim file for the rationale.
 local function kimchi_api_key()
   local v = vim.env.KIMCHI_API_KEY
   if v and v ~= "" then return v end
@@ -58,7 +66,10 @@ return {
             "CODESTRAL_API_KEY", "MISTRAL_API_KEY", "ANTHROPIC_API_KEY",
             "OPENAI_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY",
           }) do
-            v = vim.env[key]
+            -- local: without it this `v` leaked into the enclosing module
+            -- scope (visible to any later code in this spec). Local keeps
+            -- the iteration scope.
+            local v = vim.env[key]
             if v and v ~= "" then return true end
           end
           return false
