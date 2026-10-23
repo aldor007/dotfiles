@@ -105,7 +105,7 @@ func TestRegistryContextExclusiveKeys(t *testing.T) {
 // drift, the old p/l/R ghost bindings stay gone).
 func TestRegistryHelpDerived(t *testing.T) {
 	m := newTestModel(t, 120, 35, mockFindings(3))
-	help := m.helpOverlay(120, 30)
+	help := strings.Join(m.helpOverlay(120, 80), "\n")
 	for _, want := range []string{"COMMAND PALETTE", "approve", "publish"} {
 		if !strings.Contains(strings.ToLower(help), strings.ToLower(want)) {
 			t.Fatalf("help missing %q", want)
@@ -120,7 +120,7 @@ func TestRegistryHelpDerived(t *testing.T) {
 // fuzzy-filter, navigate, execute with Enter, restore focus.
 func TestPaletteOpenFilterExecute(t *testing.T) {
 	m := newTestModel(t, 120, 35, mockFindings(3))
-	m.focus = focusList
+	m.focus = focusFindings
 
 	// open via the registry key
 	m2, _ := m.Update(key(":"))
@@ -147,7 +147,7 @@ func TestPaletteOpenFilterExecute(t *testing.T) {
 		t.Fatal("palette execute must run the action handler")
 	}
 	// focus is preserved (never changed by the palette)
-	if m4m.focus != focusList {
+	if m4m.focus != focusFindings {
 		t.Fatalf("focus must be restored, got %d", m4m.focus)
 	}
 }

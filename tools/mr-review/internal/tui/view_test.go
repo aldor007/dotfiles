@@ -66,7 +66,7 @@ func newTestModelDiff(t *testing.T, width, height int, findings []store.Finding,
 		detailTop: map[int]int{}, searchInput: search, paletteInput: pal,
 		visualStart: -1,
 	}
-	m.narrow = width < 90
+	m.narrow = width < 80
 	m.rebuild()
 	m.ensureDiff()
 	return m
@@ -125,13 +125,13 @@ func TestViewFitsTerminalWidths(t *testing.T) {
 
 func TestViewEmptyAndSingleFinding(t *testing.T) {
 	m := newTestModel(t, 120, 35, nil)
-	if v := m.View().Content; !strings.Contains(v, "(no findings)") {
+	if v := m.View().Content; !strings.Contains(v, "no findings") {
 		t.Fatal("empty list message missing")
 	}
 	// filtered empty state mentions the filter
 	m.filter = Filter{Kind: "approved"}
 	m.rebuild()
-	if v := m.View().Content; !strings.Contains(v, "no findings match the filter") {
+	if v := m.View().Content; !strings.Contains(v, "no findings match") {
 		t.Fatal("filtered empty state missing")
 	}
 	m = newTestModel(t, 120, 35, mockFindings(1))
@@ -141,58 +141,67 @@ func TestViewEmptyAndSingleFinding(t *testing.T) {
 }
 
 func TestNarrowSinglePane(t *testing.T) {
-	m := newTestModel(t, 80, 24, mockFindings(5))
+	m := newTestModel(t, 79, 24, mockFindings(5))
 	if !m.narrow {
-		t.Fatal("80 cols must be narrow mode")
+		t.Fatal("79 cols must be narrow mode")
 	}
-	// list first
+	// 3 → the findings list fills the single pane
+	m = pressKey(m, "3")
 	if v := m.View().Content; !strings.Contains(v, "FINDINGS") {
 		t.Fatal("narrow list view missing")
 	}
-	// enter → detail fills the whole width
+	// enter → the finding detail fills the whole width
 	m2, _ := m.Update(keyEnter)
 	mm := m2.(*model)
-	v := mm.View().Content
-	if !strings.Contains(v, "DIFF ") || strings.Contains(v, "FINDINGS 5/5") {
-		t.Fatal("narrow detail view wrong (expected the Diff tab, no findings list)")
+	if mm.focus != focusDiff {
+		t.Fatal("enter must open the finding detail in the single pane")
 	}
-	// esc → back to list
+	v := mm.View().Content
+	if !strings.Contains(v, "DETAILS") || strings.Contains(v, "FINDINGS 5/5") {
+		t.Fatal("narrow detail view wrong (expected finding detail, no findings list)")
+	}
+	// esc → back to the list
 	m3, _ := mm.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if m3.(*model).focus != focusList {
+	if m3.(*model).focus != focusFindings {
 		t.Fatal("esc must return to the list in narrow mode")
 	}
 }
 
 func TestTabSwitchingAndFocus(t *testing.T) {
 	m := newTestModel(t, 120, 35, mockFindings(3))
-	if m.tab != tabDiff {
-		t.Fatal("default tab must be Diff")
+	if m.tab != tabOverview {
+		t.Fatal("default tab must be Overview")
 	}
-	// Tab → focus detail; h/l cycle tabs
+	// Tab → focus detail; h/l cycle tabs (2-tab model: Overview ↔ Comment)
 	m2, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	mm := m2.(*model)
-	if mm.focus != focusDetail {
+	if mm.focus != focusDiff {
 		t.Fatal("Tab must focus the detail pane")
 	}
-	if mm.tab != tabDiff {
+	if mm.tab != tabOverview {
 		t.Fatal("tab must be preserved")
 	}
-	m3, _ := mm.Update(key("l"))
-	if m3.(*model).tab != tabExplanation {
-		t.Fatalf("l must move to Explanation, got %d", m3.(*model).tab)
+	// h/l cycle the detail tabs in narrow mode — switch to a narrow terminal
+	r, _ := mm.Update(tea.WindowSizeMsg{Width: 79, Height: 24})
+	mn := r.(*model)
+	// l from Overview → Comment (single swap with 2 tabs)
+	m3, _ := mn.Update(key("l"))
+	if m3.(*model).tab != tabComment {
+		t.Fatalf("l must move to Comment, got %d", m3.(*model).tab)
 	}
+	// h from Comment → Overview
 	m4, _ := m3.Update(key("h"))
-	if m4.(*model).tab != tabDiff {
-		t.Fatal("h must move back to Diff")
+	if m4.(*model).tab != tabOverview {
+		t.Fatal("h must move back to Overview")
 	}
-	// wrap-around
+	// h from Overview cycles → Comment (since 2 tabs cycle between them)
 	m5, _ := m4.Update(key("h"))
-	if m5.(*model).tab != tabDiscussion {
-		t.Fatal("h from Diff must wrap to Discussion")
+	if m5.(*model).tab != tabComment {
+		t.Fatal("h from Overview must cycle to Comment")
 	}
 	// Tab again → back to list focus, tab preserved
 	m6, _ := m5.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if m6.(*model).focus != focusList || m6.(*model).tab != tabDiscussion {
+	if m6.(*model).focus != focusFindings || m6.(*model).tab != tabComment {
 		t.Fatal("Tab must return focus to the list and keep the tab")
 	}
 }
@@ -245,7 +254,7 @@ func TestPublishPreviewRequiresExplicitEnter(t *testing.T) {
 	if mm.overlay != 4 {
 		t.Fatalf("P must open the publication preview, got overlay=%d", mm.overlay)
 	}
-	v := mm.View().Content
+	v := strings.Join(mm.publishPreviewOverlay(mm.width, mm.bodyHeight()), "\n") // overlay box only: the backdrop is intentionally still rendered behind it
 	if !strings.Contains(v, "PUBLICATION PREVIEW") || !strings.Contains(v, "nothing is sent yet") {
 		t.Fatal("preview overlay text wrong")
 	}
@@ -291,20 +300,24 @@ func TestHelpOverlay(t *testing.T) {
 	if v := mm.View().Content; !strings.Contains(v, "KEYBOARD REFERENCE") {
 		t.Fatal("help overlay missing")
 	}
-	// any key closes it
+	// scroll keys stay inside the (scrollable) help; unknown keys close it
 	m3, _ := mm.Update(key("j"))
-	if m3.(*model).overlay != 0 {
-		t.Fatal("help must close on any key")
+	if m3.(*model).overlay == 0 {
+		t.Fatal("j must scroll the help, not close it")
+	}
+	m4, _ := m3.(*model).Update(key("x"))
+	if m4.(*model).overlay != 0 {
+		t.Fatal("unknown key must close the help")
 	}
 }
 
 func TestDiffScrollFollowsSelection(t *testing.T) {
 	m := newTestModel(t, 120, 35, mockFindings(3))
-	m.focus = focusDetail
-	m.tab = tabDiff
+	m.focus = focusDiff
+	m.tab = tabOverview
 	// selecting a finding must center its diff window on the right line
 	m.clampScrolls()
-	top := m.detailTop[tabDiff]
+	top := m.detailTop[tabOverview]
 	f := m.current()
 	rows, hl := DiffWindow(m.diffFor(f), f.Side, f.Line, f.LineEnd, m.ctxLines)
 	_ = rows
@@ -322,9 +335,11 @@ func TestLongContentWrapsNotClips(t *testing.T) {
 	fs := mockFindings(1)
 	fs[0].Explanation = strings.Repeat("word ", 120) // ~600 chars
 	m := newTestModel(t, 100, 30, fs)
-	m.tab = tabExplanation
-	m.focus = focusDetail
-	content := m.tabContent(tabExplanation)
+	// Overview tab composes diff + explanation + evidence; verify long
+	// explanation content wraps (not clips) inside the overview panel.
+	m.tab = tabOverview
+	m.focus = focusDiff
+	content := m.tabContent(tabOverview)
 	w := m.detailWidth() - 2
 	for _, l := range content {
 		if got := visibleCells(stripANSIish(l)); got > w {

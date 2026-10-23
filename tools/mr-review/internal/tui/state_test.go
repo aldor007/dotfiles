@@ -39,12 +39,17 @@ func stateCheck(t *testing.T, m *model, wantID string) {
 	}
 	v := m.View().Content
 	plain := stripANSIish(v)
-	if !strings.Contains(plain, "DETAILS") {
-		t.Fatal("details pane missing")
+	// the details region ("SELECTED FINDING") renders in the findings pane on
+	// wide terminals and in the floating drawer on medium ones; narrow mode
+	// shows the list alone, so only assert details when they are on screen
+	L := m.layout()
+	detailsVisible := L.mode == layoutWide || (L.mode == layoutMedium && m.focus == focusFindings)
+	listVisible := L.mode == layoutWide || m.focus == focusFindings
+	if detailsVisible && !strings.Contains(plain, "SELECTED FINDING") {
+		t.Fatal("findings details region missing")
 	}
 	// the selected ID must appear in a highlighted list row — only when the
-	// list pane is actually rendered (narrow detail mode shows details alone)
-	listVisible := !m.narrow || m.focus == focusList
+	// findings list is actually rendered
 	if listVisible {
 		hl := false
 		for _, l := range strings.Split(plain, "\n") {
@@ -159,7 +164,7 @@ func TestPublishedSkipped(t *testing.T) {
 	// publish preview must never list published findings
 	m4 := newTestModel(t, 120, 35, fs)
 	m4.findings[1].Decision = "approved"
-	v := m4.publishPreviewOverlay(120, 30)
+	v := strings.Join(m4.publishPreviewOverlay(120, 30), "\n")
 	if strings.Contains(stripANSIish(v), "F001") {
 		t.Fatal("published finding offered for publication")
 	}
@@ -198,7 +203,10 @@ func TestTabSwitchPreservesDecisions(t *testing.T) {
 	m := newTestModel(t, 120, 35, fs)
 	acted := m.currentID()
 	m2 := pressKey(m, "a") // approve the first finding
-	mm := pressKey(m2, "tab")
+	r, _ := m2.Update(tea.WindowSizeMsg{Width: 79, Height: 24}) // h/l are narrow-mode tab bindings
+	mn := r.(*model)
+	mm := pressKey(mn, "tab") // tab cycles focus (diff → findings): decisions persist
+	mm = pressKey(mm, "2")    // back to the diff pane: h/l cycle detail tabs there
 	mm = pressKey(mm, "l")
 	mm = pressKey(mm, "l")
 	mm = pressKey(mm, "l")
@@ -210,32 +218,43 @@ func TestTabSwitchPreservesDecisions(t *testing.T) {
 			t.Fatal("tab switching reset the decision")
 		}
 	}
+	// approving auto-advances; the Comment tab honestly shows the CURRENT
+	// finding's decision. Jump the findings cursor back to the approved
+	// finding and assert its decision is still rendered.
+	for i, idx := range mm.filtered {
+		if mm.findings[idx].ID == acted {
+			mm.cursor = i
+			break
+		}
+	}
+	mm = pressKey(mm, "2")
 	v := mm.View().Content
 	if !strings.Contains(stripANSIish(v), "approved") {
 		t.Fatal("comment tab must show the decision")
 	}
 }
 
-// 8: details tabs scroll independently.
+// 8: overview tab scroll position is preserved when switching to comment tab.
 func TestDetailsScrollIndependent(t *testing.T) {
 	fs := mockFindings(1)
 	fs[0].Explanation = strings.Repeat("word ", 400)
 	fs[0].Evidence = strings.Repeat("ref ", 400)
 	m := newTestModel(t, 120, 35, fs)
-	m.focus = focusDetail
-	m.tab = tabExplanation
-	m = pressKey(m, "j") // scroll explanation down
-	topExpl := m.detailTop[tabExplanation]
-	if topExpl <= 0 {
-		t.Fatal("explanation must scroll")
+	m.focus = focusDiff
+	m.tab = tabOverview
+	m = pressKey(m, "j") // scroll overview down
+	topOverview := m.detailTop[tabOverview]
+	if topOverview <= 0 {
+		t.Fatal("overview must scroll")
 	}
-	m.tab = tabEvidence
-	if m.detailTop[tabEvidence] != 0 {
-		t.Fatal("evidence must keep its own scroll position")
+	// switch to comment tab and back
+	m.tab = tabComment
+	if m.detailTop[tabComment] != 0 {
+		t.Fatal("comment tab must start at top")
 	}
-	m.tab = tabExplanation
-	if m.detailTop[tabExplanation] != topExpl {
-		t.Fatal("explanation scroll position must be preserved")
+	m.tab = tabOverview
+	if m.detailTop[tabOverview] != topOverview {
+		t.Fatal("overview scroll position must be preserved across tab switches")
 	}
 }
 
@@ -248,10 +267,10 @@ func TestResizeKeepsState(t *testing.T) {
 	mm := pressKey(m2, "tab")
 	mm2, _ := mm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m3 := mm2.(*model)
-	if !m3.narrow {
-		t.Fatal("80 cols must switch to narrow mode")
+	if m3.layout().mode != layoutMedium {
+		t.Fatal("80 cols must switch to medium mode (sidebar+diff)")
 	}
-	if m3.currentID() != sel || m3.focus != focusDetail {
+	if m3.currentID() != sel || m3.focus != focusDiff {
 		t.Fatalf("resize lost state: sel=%s focus=%d", m3.currentID(), m3.focus)
 	}
 	for i := range m3.findings {
@@ -260,8 +279,16 @@ func TestResizeKeepsState(t *testing.T) {
 		}
 	}
 	stateCheck(t, m3, sel)
-	mm3, _ := m3.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
-	m4 := mm3.(*model)
+	mm3, _ := m3.Update(tea.WindowSizeMsg{Width: 70, Height: 24})
+	m5 := mm3.(*model)
+	if !m5.narrow {
+		t.Fatal("70 cols must switch to narrow mode")
+	}
+	if m5.currentID() != sel {
+		t.Fatalf("resize lost selection: sel=%s", m5.currentID())
+	}
+	mm4, _ := m5.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	m4 := mm4.(*model)
 	if m4.narrow {
 		t.Fatal("200 cols must be wide mode")
 	}
@@ -333,7 +360,7 @@ func TestFocusSwitchConsistency(t *testing.T) {
 	m2 := pressKey(m, "r") // reject the first finding → auto-advance
 	sel := m2.currentID()
 	mm := pressKey(m2, "tab")
-	if mm.focus != focusDetail {
+	if mm.focus != focusDiff {
 		t.Fatal("Tab must focus details")
 	}
 	stateCheck(t, mm, sel)
@@ -342,40 +369,43 @@ func TestFocusSwitchConsistency(t *testing.T) {
 		t.Fatal("detail scrolling must not change the selection")
 	}
 	mm = pressKey(mm, "tab")
-	if mm.focus != focusList {
+	if mm.focus != focusFindings {
 		t.Fatal("Tab must return to the list")
 	}
 	stateCheck(t, mm, sel)
 }
 
-// Geometry: tab bar spans the full details width; body rows are perfectly
-// framed (one leading │, one trailing │, no blank column before the border).
-func TestTabBarSpansPaneWidth(t *testing.T) {
-	for _, sz := range [][2]int{{100, 30}, {120, 35}, {160, 45}, {200, 50}} {
+// Geometry: the FINDINGS pane header renders across the full pane width and
+// body rows are perfectly framed (one leading │, one trailing │, no ragged
+// right edge). (Repurposed from TestTabBarSpansPaneWidth: the wide right
+// pane no longer has a segmented tab bar.)
+func TestFindingsPaneHeaderSpansPaneWidth(t *testing.T) {
+	for _, sz := range [][2]int{{120, 35}, {160, 45}, {200, 50}} {
 		m := newTestModel(t, sz[0], sz[1], mockFindings(3))
-		m.focus = focusDetail
-		v := m.View().Content
-		rows := strings.Split(v, "\n")
-		// find the tab-bar top row (right pane segment starting with ┌)
+		m.focus = focusFindings
+		L := m.layout()
+		wantW := L.findingsW + 2
+		// findings pane column range inside the composed side-by-side body:
+		// files box (fw+2) + gap + diff box (dw+2) + gap
+		fx := L.filesW + L.diffW + 6
 		found := false
-		for _, r := range rows {
-			plain := stripANSIish(r)
-			if strings.Contains(plain, "┌") && strings.Contains(plain, "┬") {
-				found = true
-				if got := lipgloss.Width(r); got != sz[0] {
-					t.Fatalf("%dx%d: tab bar row width %d != terminal %d", sz[0], sz[1], got, sz[0])
-				}
+		for _, r := range strings.Split(m.View().Content, "\n") {
+			if !strings.Contains(stripANSIish(r), "FINDINGS") {
+				continue
 			}
+			found = true
+			pane := keepCells(skipCells(r, fx), wantW) // column slice, ANSI-safe
+			if lipgloss.Width(pane) != wantW {
+				t.Fatalf("%dx%d: findings pane row width %d != pane width %d", sz[0], sz[1], lipgloss.Width(pane), wantW)
+			}
+			plain := stripANSIish(pane)
+			if !strings.HasPrefix(plain, "│") || !strings.HasSuffix(plain, "│") {
+				t.Fatalf("%dx%d: findings pane header row not framed: %q", sz[0], sz[1], plain)
+			}
+			break
 		}
 		if !found {
-			t.Fatalf("%dx%d: segmented tab bar not rendered inside the body", sz[0], sz[1])
-		}
-		// every body row must end with the box border (no ragged right edge)
-		for i, r := range rows {
-			plain := stripANSIish(r)
-			if strings.HasPrefix(plain, "│") && !strings.HasSuffix(plain, "│") {
-				t.Fatalf("%dx%d: body row %d does not end with the border: %q", sz[0], sz[1], i, plain)
-			}
+			t.Fatalf("%dx%d: FINDINGS pane header not rendered inside the body", sz[0], sz[1])
 		}
 	}
 }
@@ -404,14 +434,14 @@ func TestDiffHunkNavAndHorizontalScroll(t *testing.T) {
 	fs := []store.Finding{{ID: "F001", File: "x.go", Line: 2, LineEnd: 2,
 		Severity: "P1", Kind: "bug", Title: "t", Decision: "pending"}}
 	m := newTestModelDiff(t, 120, 35, fs, diff)
-	m.focus = focusDetail
-	m.tab = tabDiff
+	m.focus = focusDiff
+	m.tab = tabOverview
 	if m.diffFor(m.current()) == nil {
 		t.Fatal("diff not parsed")
 	}
-	before := m.detailTop[tabDiff]
+	before := m.detailTop[tabOverview]
 	m2 := pressKey(m, "]")
-	if m2.detailTop[tabDiff] == before && m2.ctxLines == m.ctxLines {
+	if m2.detailTop[tabOverview] == before && m2.ctxLines == m.ctxLines {
 		t.Fatal("] must move to the next hunk or expand context")
 	}
 	m3 := pressKey(m, ",")
@@ -424,7 +454,7 @@ func TestDiffHunkNavAndHorizontalScroll(t *testing.T) {
 	}
 	// rendering with offset must not exceed width
 	w := m4.detailWidth()
-	for _, l := range m4.tabContent(tabDiff) {
+	for _, l := range m4.tabContent(tabOverview) {
 		if got := lipgloss.Width(l); got > w {
 			t.Fatalf("h-scrolled line %d cells > %d", got, w)
 		}

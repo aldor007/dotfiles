@@ -49,7 +49,7 @@ func actionCases() map[string]actionCase {
 				t.Errorf("gp must advance past the approved finding, got %s", m.currentID())
 			}
 		}},
-		"findings.prev-pending": {keys: []string{"j", "gP"}, post: func(t *testing.T, m *model) {
+		"findings.prev-pending": {keys: []string{"3", "j", "gP"}, post: func(t *testing.T, m *model) {
 			if m.current() == nil || m.current().ID != "F001" {
 				t.Errorf("gP must return to F001, got %s", m.currentID())
 			}
@@ -118,22 +118,28 @@ func actionCases() map[string]actionCase {
 			}
 		}},
 		// ---- manual review ----
-		"view.findings": {keys: []string{"2", "1"}, post: func(t *testing.T, m *model) {
+		"view.findings": {keys: []string{"3"}, post: func(t *testing.T, m *model) {
 			if m.leftView != viewFindings {
-				t.Error("1 must show findings")
+				t.Error("3 must show findings")
 			}
 		}},
-		"view.files": {keys: []string{"2"}, post: func(t *testing.T, m *model) {
+		"view.diff": {keys: []string{"2"}, post: func(t *testing.T, m *model) {
+			if m.focus != focusDiff {
+				t.Error("2 must focus the diff pane")
+			}
+		}},
+		"view.files": {keys: []string{"1"}, post: func(t *testing.T, m *model) {
 			if m.leftView != viewFiles {
-				t.Error("2 must show the changed-file tree")
+				t.Error("1 must show the changed-file tree")
 			}
 		}},
-		"view.comments": {keys: []string{"3"}, post: func(t *testing.T, m *model) {
+		// comments view is palette-only now (no direct key binding)
+		"view.comments": {keys: []string{"g", "c"}, post: func(t *testing.T, m *model) {
 			if m.leftView != viewComments {
-				t.Error("3 must show the comment navigator")
+				t.Error("palette view.comments must show the comment navigator")
 			}
 		}},
-		"view.file-findings": {keys: []string{"2", "j", "j", "4"}, post: func(t *testing.T, m *model) {
+		"view.file-findings": {keys: []string{"1", "j", "j", "4"}, post: func(t *testing.T, m *model) {
 			if m.leftView != viewFileFindings {
 				t.Error("view.file-findings must switch to the IN FILE tab")
 			}
@@ -142,6 +148,31 @@ func actionCases() map[string]actionCase {
 			}
 			if m.fileFindingsCount() < 1 {
 				t.Errorf("expected at least one finding for handler.go, got %d", m.fileFindingsCount())
+			}
+		}},
+		"files.h":            {keys: []string{"1", "h"}, post: func(t *testing.T, m *model) {}},
+		"files.l":            {keys: []string{"1", "l"}, post: func(t *testing.T, m *model) {}},
+		"files.toggle-flat":  {keys: []string{"1", "t"}, post: func(t *testing.T, m *model) {}},
+		"files.sort":         {keys: []string{"1", "g", "o"}, post: func(t *testing.T, m *model) {}},
+		"files.filter":       {keys: []string{"1", "g", "f"}, post: func(t *testing.T, m *model) {}},
+		"files.expand-all":   {run: func(t *testing.T, m *model) { m.filesSetExpansion(true) }, post: func(t *testing.T, m *model) {}},
+		"files.collapse-all": {run: func(t *testing.T, m *model) { m.filesSetExpansion(false) }, post: func(t *testing.T, m *model) {}},
+		"diff.side-by-side": {run: func(t *testing.T, m *model) { m.width = 200; m.toggleDiffSideBySide() }, post: func(t *testing.T, m *model) {
+			if !m.diffSideBySide {
+				t.Error("S in the diff pane must toggle side-by-side")
+			}
+		}},
+		"findings.details-down": {keys: []string{"3", "J"}, post: func(t *testing.T, m *model) {}},
+		"findings.details-up":   {keys: []string{"3", "J", "K"}, post: func(t *testing.T, m *model) {}},
+		"publish.queue":         {keys: []string{"g", "q"}, post: func(t *testing.T, m *model) {
+			if m.topOverlay() != ovQueue {
+				t.Error("Q must open the publish queue")
+			}
+		}},
+		"comments.preview":      {run: func(t *testing.T, m *model) {}, post: func(t *testing.T, m *model) {}},
+		"view.findings-overview": {keys: []string{"O"}, post: func(t *testing.T, m *model) {
+			if m.tab != tabOverview {
+				t.Errorf("O must open the Overview tab, got %d", m.tab)
 			}
 		}},
 		"files.mark-reviewed": {keys: []string{"2", "j", "j", "enter", "m"}, post: func(t *testing.T, m *model) {
@@ -229,7 +260,7 @@ func actionCases() map[string]actionCase {
 		}},
 
 		// ---- navigation ----
-		"nav.down": {keys: []string{"j"}, post: func(t *testing.T, m *model) {
+		"nav.down": {keys: []string{"3", "j"}, post: func(t *testing.T, m *model) {
 			if m.cursor != 1 {
 				t.Errorf("cursor = %d, want 1", m.cursor)
 			}
@@ -244,53 +275,60 @@ func actionCases() map[string]actionCase {
 				t.Errorf("gg cursor = %d", m.cursor)
 			}
 		}},
-		"nav.last": {keys: []string{"G"}, post: func(t *testing.T, m *model) {
+		"nav.last": {keys: []string{"3", "G"}, post: func(t *testing.T, m *model) {
 			if m.cursor != len(m.filtered)-1 {
 				t.Errorf("G cursor = %d, want %d", m.cursor, len(m.filtered)-1)
 			}
 		}},
 		"nav.half-down": {keys: []string{"ctrl+d"}, post: func(t *testing.T, m *model) {}},
 		"nav.half-up":   {keys: []string{"ctrl+u"}, post: func(t *testing.T, m *model) {}},
-		"nav.focus-next": {keys: []string{"tab"}, post: func(t *testing.T, m *model) {
-			if m.focus != focusDetail {
-				t.Error("tab must move focus to the detail pane")
+		"nav.focus-next": {keys: []string{"1", "tab"}, post: func(t *testing.T, m *model) {
+			if m.focus != focusDiff {
+				t.Error("tab from the files pane must move focus to the diff pane")
 			}
 		}},
-		"nav.focus-prev": {keys: []string{"tab", "shift+tab"}, post: func(t *testing.T, m *model) {
-			if m.focus != focusList {
-				t.Error("shift+tab must move focus back to the list")
+		"nav.focus-prev": {keys: []string{"shift+tab"}, post: func(t *testing.T, m *model) {
+			if m.focus != focusFiles {
+				t.Error("shift+tab must move focus back to the files pane")
 			}
 		}},
 		"nav.focus-left": {keys: []string{"tab", "ctrl+h"}, post: func(t *testing.T, m *model) {
-			if m.focus != focusList {
-				t.Error("ctrl+h must focus the left pane")
+			if m.focus != focusFiles {
+				t.Error("ctrl+h must focus the files pane")
 			}
 		}},
 		"nav.focus-right": {keys: []string{"ctrl+l"}, post: func(t *testing.T, m *model) {
-			if m.focus != focusDetail {
+			if m.focus != focusDiff {
 				t.Error("ctrl+l must focus the diff pane")
 			}
 		}},
-		"nav.tab-prev": {keys: []string{"tab", "h"}, post: func(t *testing.T, m *model) {
-			if m.tab != tabDiscussion {
-				t.Errorf("h from Diff must wrap to Discussion, got tab %d", m.tab)
+		"nav.tab-prev": {run: func(t *testing.T, m *model) {
+			m.narrow = true // h/l are the narrow-mode detail-tab bindings
+			press(m, "h")
+		}, post: func(t *testing.T, m *model) {
+			if m.tab != tabComment {
+				t.Errorf("h from Overview must go to Comment, got tab %d", m.tab)
 			}
 		}},
-		"nav.tab-next": {keys: []string{"tab", "l"}, post: func(t *testing.T, m *model) {
-			if m.tab != tabExplanation {
-				t.Errorf("l from Diff must go to Explanation, got tab %d", m.tab)
+		"nav.tab-next": {run: func(t *testing.T, m *model) {
+			m.narrow = true // h/l are the narrow-mode detail-tab bindings
+			press(m, "l")
+		}, post: func(t *testing.T, m *model) {
+			if m.tab != tabComment {
+				t.Errorf("l from Overview must go to Comment, got tab %d", m.tab)
 			}
 		}},
 		"nav.hunk-prev": {keys: []string{"g", "d", "["}, post: func(t *testing.T, m *model) {}},
 		"nav.hunk-next": {keys: []string{"g", "d", "]"}, post: func(t *testing.T, m *model) {}},
-		"nav.ctx-more": {keys: []string{"tab", "+"}, post: func(t *testing.T, m *model) {
+		// +/- only work in the finding-window mode: esc leaves the continuous browse first
+		"nav.ctx-more": {keys: []string{"esc", "+"}, post: func(t *testing.T, m *model) {
 			if m.ctxLines <= 6 {
 				t.Errorf("ctxLines = %d, want widened", m.ctxLines)
 			}
 		}},
-		"nav.ctx-less":   {keys: []string{"tab", "+"}, post: func(t *testing.T, m *model) {}},
-		"nav.horiz-left": {keys: []string{"tab", ","}, post: func(t *testing.T, m *model) {}},
-		"nav.horiz-right": {keys: []string{"tab", "."}, post: func(t *testing.T, m *model) {
+		"nav.ctx-less":   {keys: []string{"esc", "-"}, post: func(t *testing.T, m *model) {}},
+		"nav.horiz-left": {keys: []string{","}, post: func(t *testing.T, m *model) {}},
+		"nav.horiz-right": {keys: []string{"."}, post: func(t *testing.T, m *model) {
 			if m.diffHOff != 24 {
 				t.Errorf("diffHOff = %d, want 24", m.diffHOff)
 			}
@@ -303,7 +341,7 @@ func actionCases() map[string]actionCase {
 		"nav.search-next": {run: func(t *testing.T, m *model) { m.searchText = "cleanup" }, post: func(t *testing.T, m *model) {}},
 		"nav.search-prev": {run: func(t *testing.T, m *model) { m.searchText = "cleanup" }, post: func(t *testing.T, m *model) {}},
 		"nav.open": {keys: []string{"enter"}, post: func(t *testing.T, m *model) {
-			if m.focus != focusDetail {
+			if m.focus != focusDiff {
 				t.Error("enter on a finding must focus the detail pane")
 			}
 		}},

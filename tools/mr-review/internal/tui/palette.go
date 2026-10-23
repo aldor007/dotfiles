@@ -7,7 +7,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -41,7 +40,7 @@ func (m *model) refreshPalette() {
 	q := strings.ToLower(strings.TrimSpace(m.paletteInput.Value()))
 	m.paletteItems = m.paletteItems[:0]
 	for _, a := range all {
-		if q == "" || fuzzyScore(strings.ToLower(a.Name+" "+a.Desc), q) >= 0 {
+		if q == "" || fuzzyScore(strings.ToLower(a.Name+" "+a.Desc+" "+a.ID), q) >= 0 {
 			m.paletteItems = append(m.paletteItems, a)
 		}
 	}
@@ -81,42 +80,6 @@ func (m *model) updatePalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.paletteInput, cmd = m.paletteInput.Update(msg)
 	m.refreshPalette()
 	return m, cmd
-}
-
-// paletteView renders the overlay (bordered box, centered).
-func (m *model) paletteView(w, h int) string {
-	const maxRows = 12
-	boxW := min(w-6, 92)
-	boxH := min(h-4, maxRows+4)
-
-	var b strings.Builder
-	b.WriteString(styleHeader.Render("ACTIONS") + "\n")
-	b.WriteString(styleBorder.Render(strings.Repeat("─", boxW-2)) + "\n")
-	if len(m.paletteItems) == 0 {
-		b.WriteString(styleDim.Render(" no matching actions") + "\n")
-	}
-	rows := boxH - 4 // title + rule + input + hint
-	top := 0
-	if m.paletteSel >= rows {
-		top = m.paletteSel - rows + 1
-	}
-	for i := top; i < len(m.paletteItems) && i < top+rows; i++ {
-		a := m.paletteItems[i]
-		line := fmt.Sprintf("  %-32s %-38s %s",
-			truncPlain(a.Name, 32), truncPlain(a.Desc, 38), a.KeyLabel())
-		if plainMode() {
-			if i == m.paletteSel {
-				line = ">" + line[1:]
-			}
-		} else if i == m.paletteSel {
-			line = styleCursor.Render(pad(line, boxW-4))
-		}
-		b.WriteString(cut(line, boxW-2) + "\n")
-	}
-	b.WriteString(styleBorder.Render(strings.Repeat("─", boxW-2)) + "\n")
-	b.WriteString(m.paletteInput.View() + "\n")
-	b.WriteString(styleDim.Render(" type to filter · ↑/↓ or ctrl+n/p · enter run · esc cancel") + "\n")
-	return overlayBoxRaw(b.String(), boxW, boxH)
 }
 
 // overlayBoxRaw draws a box around pre-rendered content.

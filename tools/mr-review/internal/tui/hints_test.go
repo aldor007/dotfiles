@@ -13,7 +13,7 @@ func TestFooterHintsResolve(t *testing.T) {
 		set  func(m *model)
 	}{
 		{"findings", func(m *model) {}},
-		{"detail", func(m *model) { m.focus = focusDetail }},
+		{"detail", func(m *model) { m.focus = focusDiff }},
 		{"files", func(m *model) { m.setView(viewFiles) }},
 		{"comments", func(m *model) { m.setView(viewComments) }},
 		{"visual", func(m *model) { m.browseFilePath(changedFileOf(m)); m.startVisual() }},
@@ -34,6 +34,7 @@ func TestFooterHintsResolve(t *testing.T) {
 		"j/k": true, "↑/↓": true, "enter/space": true, "Ctrl+S": true,
 		"Esc": true, "1/2/3": true, "[:]": true, "type": true,
 		"h/l": true, "Enter": true, "esc": true,
+		"{/}": true, "[:/]": true, "J/K": true,
 	}
 	for _, tc := range contexts {
 		m := newMultiFileModel(t, 120, 35)
@@ -71,7 +72,7 @@ func TestPrefixHintsFromRegistry(t *testing.T) {
 	m := newMultiFileModel(t, 120, 35)
 	m.pendingKey = "g"
 	got := m.prefixCompletions("g")
-	want := []string{"gP", "gd", "gg", "gn", "gp"} // sorted; gp/gP = next/prev pending
+	want := []string{"gP", "gc", "gd", "gg", "gn", "gp", "gq"} // sorted; gc = comment navigator, gq = publish queue
 	if len(got) != len(want) {
 		t.Fatalf("prefixCompletions(g) = %v, want %v", got, want)
 	}
@@ -81,7 +82,7 @@ func TestPrefixHintsFromRegistry(t *testing.T) {
 		}
 	}
 	hints := m.footerHints()
-	if len(hints) != 5 || hints[0].Keys != "gP" {
+	if len(hints) != 7 || hints[0].Keys != "gP" {
 		t.Fatalf("footer hints while g pending = %v", hints)
 	}
 	// a prefix with no completions falls back to an empty bar, not garbage

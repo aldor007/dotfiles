@@ -53,7 +53,7 @@ func TestDiscussTimeoutEnforced(t *testing.T) {
 func TestAskNonBlockingAndEscCancellable(t *testing.T) {
 	fakeAgent(t, "sleep")
 	m := newMultiFileModel(t, 120, 35)
-	m.focus = focusList
+	m.focus = focusFindings
 	m.inputOn = true
 	m.input.SetValue("why is this wrong?")
 

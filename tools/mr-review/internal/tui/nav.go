@@ -16,17 +16,9 @@ import (
 // ---- vertical movement -----------------------------------------------------
 
 func (m *model) cursorDown() {
-	if m.focus == focusList {
+	switch m.focus {
+	case focusFindings:
 		switch m.leftView {
-		case viewFindings:
-			if m.cursor < len(m.filtered)-1 {
-				m.cursor++
-				m.syncDiffScroll()
-			}
-		case viewFiles:
-			if m.treeCursor < len(m.treeRows())-1 {
-				m.treeCursor++
-			}
 		case viewComments:
 			if m.commentCur < m.filteredCommentCount()-1 {
 				m.commentCur++
@@ -35,30 +27,33 @@ func (m *model) cursorDown() {
 			if m.fileFindCur < m.fileFindingsCount()-1 {
 				m.fileFindCur++
 			}
+		default: // viewFindings
+			if m.cursor < len(m.filtered)-1 {
+				m.cursor++
+				m.syncDiffScroll()
+			}
+		}
+		return
+	case focusFiles:
+		if m.treeCursor < len(m.treeRows())-1 {
+			m.treeCursor++
+			m.filesPreviewFollow() // explicit movement arms the diff preview
 		}
 		m.trackFileFindingsTarget()
 		return
+	default: // focusDiff
+		if m.browseFile != "" {
+			m.browseMove(1)
+			return
+		}
+		m.scrollBy(1)
 	}
-	// detail focus
-	if m.tab == tabDiff && m.browseFile != "" {
-		m.browseMove(1)
-		return
-	}
-	m.scrollBy(1)
 }
 
 func (m *model) cursorUp() {
-	if m.focus == focusList {
+	switch m.focus {
+	case focusFindings:
 		switch m.leftView {
-		case viewFindings:
-			if m.cursor > 0 {
-				m.cursor--
-				m.syncDiffScroll()
-			}
-		case viewFiles:
-			if m.treeCursor > 0 {
-				m.treeCursor--
-			}
 		case viewComments:
 			if m.commentCur > 0 {
 				m.commentCur--
@@ -67,110 +62,131 @@ func (m *model) cursorUp() {
 			if m.fileFindCur > 0 {
 				m.fileFindCur--
 			}
+		default: // viewFindings
+			if m.cursor > 0 {
+				m.cursor--
+				m.syncDiffScroll()
+			}
+		}
+		return
+	case focusFiles:
+		if m.treeCursor > 0 {
+			m.treeCursor--
+			m.filesPreviewFollow() // explicit movement arms the diff preview
 		}
 		m.trackFileFindingsTarget()
 		return
+	default: // focusDiff
+		if m.browseFile != "" {
+			m.browseMove(-1)
+			return
+		}
+		m.scrollBy(-1)
 	}
-	if m.tab == tabDiff && m.browseFile != "" {
-		m.browseMove(-1)
-		return
-	}
-	m.scrollBy(-1)
 }
 
 func (m *model) toFirst() {
-	if m.focus == focusList {
+	switch m.focus {
+	case focusFindings:
 		switch m.leftView {
-		case viewFindings:
-			m.cursor = 0
-			m.syncDiffScroll()
-		case viewFiles:
-			m.treeCursor = 0
 		case viewComments:
 			m.commentCur = 0
 		case viewFileFindings:
 			m.fileFindCur = 0
+		default:
+			m.cursor = 0
+			m.syncDiffScroll()
 		}
 		return
-	}
-	if m.tab == tabDiff && m.browseFile != "" {
-		m.diffCursor = 0
-		m.ensureBrowseVisible()
+	case focusFiles:
+		m.treeCursor = 0
 		return
+	default:
+		if m.browseFile != "" {
+			m.diffCursor = 0
+			m.ensureBrowseVisible()
+			return
+		}
+		m.setScroll(0)
 	}
-	m.setScroll(0)
 }
 
 func (m *model) toLast() {
-	if m.focus == focusList {
+	switch m.focus {
+	case focusFindings:
 		switch m.leftView {
-		case viewFindings:
-			m.cursor = len(m.filtered) - 1
-			m.syncDiffScroll()
-		case viewFiles:
-			m.treeCursor = len(m.treeRows()) - 1
 		case viewComments:
 			m.commentCur = m.filteredCommentCount() - 1
 		case viewFileFindings:
 			m.fileFindCur = m.fileFindingsCount() - 1
+		default:
+			if n := len(m.filtered); n > 0 {
+				m.cursor = n - 1
+			}
+			m.syncDiffScroll()
 		}
 		return
-	}
-	if m.tab == tabDiff && m.browseFile != "" {
-		m.diffCursor = m.browseDocLen() - 1
-		m.syncBrowseFile()
-		m.ensureBrowseVisible()
+	case focusFiles:
+		if n := len(m.treeRows()); n > 0 {
+			m.treeCursor = n - 1
+		}
 		return
+	default:
+		if m.browseFile != "" {
+			m.diffCursor = m.browseDocLen() - 1
+			m.syncBrowseFile()
+			m.ensureBrowseVisible()
+			return
+		}
+		m.setScroll(1 << 30)
 	}
-	m.setScroll(1 << 30)
 }
 
 func (m *model) halfScroll(dir int) {
-	if m.focus == focusList {
-		page := m.listVisibleRows() / 2
-		if page < 1 {
-			page = 1
+	if m.focus == focusDiff {
+		if m.browseFile != "" {
+			m.browseMove(dir * m.browseViewportH() / 2)
+			return
 		}
-		for i := 0; i < page; i++ {
-			if dir > 0 {
-				m.cursorDown()
-			} else {
-				m.cursorUp()
-			}
-		}
+		m.scrollBy(dir * m.bodyHeight() / 2)
 		return
 	}
-	if m.tab == tabDiff && m.browseFile != "" {
-		m.browseMove(dir * m.browseViewportH() / 2)
-		return
+	page := m.listVisibleRows() / 2
+	if page < 1 {
+		page = 1
 	}
-	m.scrollBy(dir * m.bodyHeight() / 2)
+	for i := 0; i < page; i++ {
+		if dir > 0 {
+			m.cursorDown()
+		} else {
+			m.cursorUp()
+		}
+	}
 }
 
 // ---- focus -----------------------------------------------------------------
 
 func (m *model) focusNext() {
-	if m.focus == focusList {
-		m.focus = focusDetail
-	} else {
-		m.focus = focusList
-	}
+	m.focus = (m.focus + 1) % 3 // files -> diff -> findings -> files
 	m.clampScrolls()
 }
 
-func (m *model) focusPrev() { m.focusNext() }
+func (m *model) focusPrev() {
+	m.focus = (m.focus + 2) % 3
+	m.clampScrolls()
+}
 
 func (m *model) focusPane(dir int) {
 	if dir < 0 {
-		m.focus = focusList
+		m.focus = focusFiles
 	} else {
-		m.focus = focusDetail
+		m.focus = focusDiff
 	}
 	m.clampScrolls()
 }
 
 func (m *model) cycleTab(dir int) {
-	if m.focus != focusDetail {
+	if m.focus != focusDiff {
 		return
 	}
 	m.tab = (m.tab + dir + tabCount) % tabCount
@@ -181,11 +197,24 @@ func (m *model) cycleTab(dir int) {
 
 func (m *model) setView(v int) {
 	if v == m.leftView {
+		// Already showing this view: still route focus ("3" at startup has
+		// leftView==viewFindings while the diff pane is focused — pressing 3
+		// must focus findings, not be swallowed).
+		switch v {
+		case viewFiles:
+			m.focus = focusFiles
+		case viewFindings, viewComments, viewFileFindings:
+			m.focus = focusFindings
+		}
+		m.clampScrolls()
 		return
 	}
 	m.leftView = v
-	if m.narrow {
-		m.focus = focusList
+	switch v {
+	case viewFiles:
+		m.focus = focusFiles
+	case viewFindings, viewComments, viewFileFindings:
+		m.focus = focusFindings
 	}
 	m.treeCursor = 0
 	m.commentCur = 0
@@ -342,7 +371,7 @@ func (m *model) fileJump(dir int) {
 }
 
 func (m *model) ctxAdjust(delta int) {
-	if m.focus != focusDetail || m.tab != tabDiff || m.browseFile != "" {
+	if m.focus != focusDiff || m.tab != tabOverview || m.browseFile != "" {
 		return
 	}
 	m.ctxLines += delta
@@ -354,7 +383,7 @@ func (m *model) ctxAdjust(delta int) {
 }
 
 func (m *model) horizScroll(delta int) {
-	if m.focus != focusDetail || m.tab != tabDiff {
+	if m.focus != focusDiff || m.tab != tabOverview {
 		return
 	}
 	m.diffHOff += delta
@@ -412,8 +441,8 @@ func (m *model) browseFinding() {
 	m.browseFile = f.File
 	m.diffCursor = m.nearestDocRow(f.File, f.Side, f.Line)
 	m.visualOn, m.visualStart = false, -1
-	m.focus = focusDetail
-	m.tab = tabDiff
+	m.focus = focusDiff
+	m.tab = tabOverview
 	m.diffHOff = 0
 	m.ensureBrowseVisible()
 	m.msg = "continuous diff at " + shortPath(f.File) + " (esc returns to findings)"
@@ -445,9 +474,9 @@ func (m *model) browseMove(delta int) {
 	m.ensureBrowseVisible()
 }
 
-// browseViewportH is the number of visible rows in the diff pane.
+// browseViewportH is the number of visible rows in the center diff pane.
 func (m *model) browseViewportH() int {
-	h := m.contentHeight() - 1 // header row
+	h := m.bodyHeight() - 3 // pane box borders (2) + pane header row
 	if h < 3 {
 		h = 3
 	}
@@ -457,7 +486,7 @@ func (m *model) browseViewportH() int {
 // ensureBrowseVisible keeps the cursor row inside the viewport.
 func (m *model) ensureBrowseVisible() {
 	h := m.browseViewportH()
-	top := m.detailTop[tabDiff]
+	top := m.detailTop[tabOverview]
 	if m.diffCursor < top {
 		top = m.diffCursor
 	}
@@ -467,7 +496,7 @@ func (m *model) ensureBrowseVisible() {
 	if top < 0 {
 		top = 0
 	}
-	m.detailTop[tabDiff] = top
+	m.detailTop[tabOverview] = top
 }
 
 // nearestDocRow finds the global row index of the line closest to `line` on
@@ -479,7 +508,10 @@ func (m *model) nearestDocRow(file, side string, line int) int {
 		if r.header || r.file != file {
 			continue
 		}
-		no := r.dl.numberFor(side)
+		no := r.dl.NewNo // number on the requested side only — numberFor's
+		if side == "old" { // OldNo fallback would let a del row steal the
+			no = r.dl.OldNo // anchor of a new-side line (wrong comment side)
+		}
 		if no == 0 {
 			continue
 		}
@@ -534,7 +566,7 @@ func (m *model) cycleSort() {
 func (m *model) startDiscuss() tea.Cmd {
 	f := m.current()
 	if f == nil {
-		m.msg = "no finding selected"
+		m.msg = "pick a finding with j/k, or press 2 for files, or 4 for this file's findings"
 		return nil
 	}
 	m.inputOn = true
@@ -564,47 +596,51 @@ func (m *model) openSelection() tea.Cmd {
 				m.rebuildTreeRows()
 			}
 		case viewFileFindings:
-			m.focus = focusDetail
+			m.focus = focusDiff
 			m.clampScrolls()
 		case viewComments:
 			m.jumpToComment()
 		}
 		return nil
 	}
-	if m.focus == focusList {
-		switch m.leftView {
-		case viewFindings:
-			m.focus = focusDetail
-			m.clampScrolls()
-		case viewFiles:
-			if r := m.treeRowAt(m.treeCursor); r != nil {
-				if r.node.dir {
-					r.node.expanded = !r.node.expanded
-					m.rebuildTreeRows()
-				} else {
-					m.fileFindingsFile = r.node.path // 4 jumps here from FILES view
-					m.browseFilePath(r.node.path)
-				}
+	switch m.focus {
+	case focusFiles:
+		if r := m.treeRowAt(m.treeCursor); r != nil {
+			if r.node.dir {
+				r.node.expanded = !r.node.expanded
+				m.rebuildTreeRows()
+			} else {
+				m.fileFindingsFile = r.node.path
+				m.browseFilePath(r.node.path)
 			}
-		case viewFileFindings:
-			// Enter drills into the focused finding (same as FINDINGS tab)
-			m.focus = focusDetail
+		}
+	case focusFindings:
+		switch m.leftView {
+		case viewFindings, viewFileFindings:
+			// Enter jumps the center diff to the selection AND opens the
+			// floating finding view (same overlay as `i`); Esc closes it and
+			// restores the pre-Enter focus + scroll.
+			m.focus = focusDiff
 			m.clampScrolls()
+			// narrow shows the finding detail as the full-screen pane already —
+			// the floating view would be redundant there
+			if !m.narrow && m.current() != nil && m.topOverlay() == ovNone {
+				m.pushOverlay(ovInspector)
+			}
 		case viewComments:
 			m.jumpToComment()
 		}
-		return nil
-	}
-	if m.focus == focusDetail && m.tab == tabDiff && m.browseFile != "" {
-		// Enter on a diff row with an active selection opens the range editor
-		if m.visualOn {
-			return m.startDraftComment()
+	default: // focusDiff
+		if m.tab == tabOverview && m.browseFile != "" {
+			// Enter on a diff row with an active selection opens the range editor
+			if m.visualOn {
+				return m.startDraftComment()
+			}
 		}
 	}
 	return nil
 }
 
-// browseFilePath browses a file from the tree (first hunk in view).
 func (m *model) browseFilePath(path string) {
 	m.ensureDiff()
 	if m.diffParsed[path] == nil {
@@ -613,8 +649,8 @@ func (m *model) browseFilePath(path string) {
 	}
 	m.diffCursor = m.firstAddressableRow(path)
 	m.syncBrowseFile()
-	m.focus = focusDetail
-	m.tab = tabDiff
+	m.focus = focusDiff
+	m.tab = tabOverview
 	m.ensureBrowseVisible()
 	m.msg = shortPath(path)
 }
@@ -827,7 +863,7 @@ func (m *model) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.searchInput, cmd = m.searchInput.Update(msg)
-	if m.focus == focusList { // live filter the navigator views
+	if m.focus == focusFindings { // live filter the navigator views
 		m.searchText = strings.TrimSpace(m.searchInput.Value())
 		m.applyViewFilters()
 	}
@@ -851,7 +887,7 @@ func (m *model) searchMatches() int {
 	}
 	q := strings.ToLower(m.searchText)
 	switch {
-	case m.focus == focusDetail && m.tab == tabDiff:
+	case m.focus == focusDiff && m.tab == tabOverview:
 		n := 0
 		for _, r := range m.browseDoc() {
 			if !r.header && strings.Contains(strings.ToLower(r.dl.Text), q) {
@@ -882,7 +918,7 @@ func (m *model) searchJump(dir int) {
 		return
 	}
 	q := strings.ToLower(m.searchText)
-	if m.focus == focusDetail && m.tab == tabDiff {
+	if m.focus == focusDiff && m.tab == tabOverview {
 		doc := m.browseDoc()
 		n := len(doc)
 		if n == 0 {
@@ -902,7 +938,7 @@ func (m *model) searchJump(dir int) {
 		return
 	}
 	// navigator views are already live-filtered; jump to the first row
-	if m.focus == focusList {
+	if m.focus == focusFindings {
 		switch m.leftView {
 		case viewFindings:
 			m.cursor = 0
@@ -945,7 +981,7 @@ func (m *model) jumpToComment() {
 		}
 		m.diffCursor = m.nearestDocRow(f.File, f.Side, f.Line)
 		m.syncBrowseFile()
-		m.focus, m.tab = focusDetail, tabDiff
+		m.focus, m.tab = focusDiff, tabOverview
 		m.ensureBrowseVisible()
 		m.msg = "finding " + f.ID + " in diff"
 	default:

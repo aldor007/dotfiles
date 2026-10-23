@@ -1,24 +1,71 @@
-// filetree.go — collapsible changed-file tree (tuicr-inspired). Shows the
-// diff's file hierarchy with add/modify/delete status, AI finding and comment
-// counts, and the per-file reviewed mark. Pure local state — nothing here is
-// ever published.
+// filetree.go — collapsible changed-file tree (lazygit-style data model).
+// Shows the diff's file hierarchy with add/modify/delete status, AI finding
+// and comment counts, per-file ±line counts and the reviewed mark. Pure
+// local state — nothing here is ever published.
+//
+// Stability contract: the node structure is rebuilt ONLY when the parsed
+// diff changes (diffVersion). Expansion state is keyed by dir path in
+// expandedDirs, sort/flat/filter kind live on the tree struct — every
+// rebuildTreeRows() preserves them, so filters and review toggles never
+// lose the user's view.
 package tui
 
 import (
-	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
-
-	"mr-review/internal/tui/widget"
 )
+
+// Files-pane sort modes (cycled by filesCycleSort). Dirs always sort first
+// (by path); files sort by the active mode with the path as tiebreaker.
+const (
+	filesSortDiff     = iota // original diff.patch order
+	filesSortPath            // alphabetical
+	filesSortReview          // unreviewed first
+	filesSortFindings        // most findings first
+	filesSortCount
+)
+
+var filesSortNames = [...]string{"diff order", "path", "review status", "findings"}
+
+// Files-pane path filters (cycled/set by filesSetFilter·filesCycleFilter).
+const (
+	filesFilterAll = iota
+	filesFilterUnreviewed
+	filesFilterReviewed
+	filesFilterFindings
+	filesFilterComments
+	filesFilterModified
+	filesFilterAdded
+	filesFilterDeleted
+	filesFilterCount
+)
+
+var filesFilterNames = [...]string{
+	"all", "unreviewed", "reviewed", "findings", "comments",
+	"modified", "added", "deleted",
+}
+
+// fileMeta is the per-file state snapshot the tree sorts and renders from.
+// Refreshed on every rebuildTreeRows (cheap: O(files + findings)).
+type fileMeta struct {
+	status   byte
+	reviewed bool
+	findings int
+	comments int
+	added    int
+	deleted  int
+}
 
 // treeNode is one directory or file in the changed-file tree.
 type treeNode struct {
 	name     string
-	path     string // full repo-relative path (files only)
+	path     string // full repo-relative path (files AND dirs)
 	dir      bool
 	expanded bool
 	status   byte // 'A', 'M', 'D', or ' ' (files only)
+	order    int  // position in the original diff (filesSortDiff)
 	children []*treeNode
 }
 
@@ -28,24 +75,47 @@ type treeRow struct {
 	depth int
 }
 
-// fileTree is the left-pane tree model.
+// fileTree is the FILES-pane tree model.
 type fileTree struct {
-	roots  []*treeNode
-	rows   []treeRow
-	filter string // substring filter on full paths ("" = all)
+	roots []*treeNode
+	rows  []treeRow
+
+	filter     string // substring filter on full paths ("" = all)
+	filterKind int    // filesFilter* predicate on file state
+	flat       bool   // flat file list instead of the hierarchy
+	sortMode   int    // filesSort*
+
+	// expandedDirs keys dir paths so expansion survives node rebuilds; it
+	// is re-synced from the live nodes after every row rebuild (foreign
+	// toggles like openSelection/mouse write node.expanded directly).
+	expandedDirs map[string]bool
+	builtVer     int                 // diffVersion the roots were built from
+	meta         map[string]fileMeta // per-file snapshot for sort/render
+
+	// previewPath is the file the cursor last previewed in the center diff
+	// (filesPreviewSync): a preview only fires when the cursor MOVES onto a
+	// different file, so re-focusing the pane never yanks the diff back.
+	previewPath string
 }
 
-// buildFileTree constructs the tree from the parsed diff.
-func buildFileTree(paths []string, status func(string) byte) *fileTree {
-	ft := &fileTree{}
-	for _, p := range paths {
-		ft.insert(p, status(p))
+// buildFileTree constructs the node hierarchy (not the visible rows —
+// rebuildRows does that once filter/meta are attached).
+func buildFileTree(paths []string, order map[string]int, status func(string) byte, expanded map[string]bool) *fileTree {
+	if expanded == nil {
+		expanded = map[string]bool{}
 	}
-	ft.sortAll()
-	ft.rebuildRows()
+	ft := &fileTree{expandedDirs: expanded, meta: map[string]fileMeta{}}
+	for i, p := range paths {
+		ord, ok := order[p]
+		if !ok {
+			ord = len(paths) + i // unknown diff position: stable, after known
+		}
+		ft.insert(p, status(p), ord)
+	}
 	return ft
 }
-func (ft *fileTree) insert(path string, status byte) {
+
+func (ft *fileTree) insert(path string, status byte, order int) {
 	segs := strings.Split(path, "/")
 	kids := &ft.roots
 	for i, s := range segs {
@@ -61,9 +131,14 @@ func (ft *fileTree) insert(path string, status byte) {
 		}
 		if found == nil {
 			if file {
-				found = &treeNode{name: s, path: path, status: status}
+				found = &treeNode{name: s, path: path, status: status, order: order}
 			} else {
-				found = &treeNode{name: s, dir: true, expanded: true}
+				dirPath := strings.Join(segs[:i+1], "/")
+				exp := true // dirs start expanded unless remembered collapsed
+				if v, ok := ft.expandedDirs[dirPath]; ok {
+					exp = v
+				}
+				found = &treeNode{name: s, path: dirPath, dir: true, expanded: exp}
 			}
 			*kids = append(*kids, found)
 		}
@@ -71,14 +146,22 @@ func (ft *fileTree) insert(path string, status byte) {
 	}
 }
 
-func (ft *fileTree) sortAll() {
+// applySort orders the hierarchy by the active sort mode. Dirs always come
+// first (path-sorted, so groups are stable); files compare by mode with the
+// path as tiebreaker. SliceStable keeps equal keys in diff order.
+func (ft *fileTree) applySort() {
+	mode := ft.sortMode
 	var sortKids func(nodes []*treeNode)
 	sortKids = func(nodes []*treeNode) {
-		sort.Slice(nodes, func(a, b int) bool {
-			if nodes[a].dir != nodes[b].dir {
-				return nodes[a].dir // dirs first
+		sort.SliceStable(nodes, func(a, b int) bool {
+			x, y := nodes[a], nodes[b]
+			if x.dir != y.dir {
+				return x.dir
 			}
-			return nodes[a].name < nodes[b].name
+			if x.dir {
+				return x.path < y.path
+			}
+			return fileLess(ft, x, y, mode)
 		})
 		for _, n := range nodes {
 			sortKids(n.children)
@@ -87,53 +170,273 @@ func (ft *fileTree) sortAll() {
 	sortKids(ft.roots)
 }
 
-// rebuildRows flattens the visible tree via widget.FlattenTree (same filter
-// semantics: matching files + their ancestor dirs, expanded-or-filtered
-// walking). The widget nodes are converted back so the rest of the model
-// keeps its *treeNode pointers.
-func (ft *fileTree) rebuildRows() {
-	orig := map[*widget.TreeNode]*treeNode{}
-	var conv func(nodes []*treeNode) []*widget.TreeNode
-	conv = func(nodes []*treeNode) []*widget.TreeNode {
-		out := make([]*widget.TreeNode, 0, len(nodes))
-		for _, n := range nodes {
-			w := &widget.TreeNode{
-				Name: n.name, Path: n.path, Dir: n.dir, Expanded: n.expanded,
-				Status: string(n.status), Reviewed: false,
-			}
-			orig[w] = n
-			w.Children = conv(n.children)
-			out = append(out, w)
+func fileLess(ft *fileTree, a, b *treeNode, mode int) bool {
+	ma, mb := ft.meta[a.path], ft.meta[b.path]
+	switch mode {
+	case filesSortReview:
+		if ma.reviewed != mb.reviewed {
+			return !ma.reviewed // triage order: unreviewed first
 		}
-		return out
+	case filesSortFindings:
+		if ma.findings != mb.findings {
+			return ma.findings > mb.findings
+		}
+	case filesSortDiff:
+		if a.order != b.order {
+			return a.order < b.order
+		}
 	}
-	flat := widget.FlattenTree(conv(ft.roots), ft.filter)
+	return a.path < b.path
+}
+
+// kept reports whether a FILE row survives the active search + kind filter.
+func (ft *fileTree) kept(n *treeNode) bool {
+	if n.dir {
+		return false // dirs are kept iff a descendant matches (matches())
+	}
+	mt := ft.meta[n.path]
+	switch ft.filterKind {
+	case filesFilterUnreviewed:
+		if mt.reviewed {
+			return false
+		}
+	case filesFilterReviewed:
+		if !mt.reviewed {
+			return false
+		}
+	case filesFilterFindings:
+		if mt.findings == 0 {
+			return false
+		}
+	case filesFilterComments:
+		if mt.comments == 0 {
+			return false
+		}
+	case filesFilterModified:
+		if mt.status != 'M' {
+			return false
+		}
+	case filesFilterAdded:
+		if mt.status != 'A' {
+			return false
+		}
+	case filesFilterDeleted:
+		if mt.status != 'D' {
+			return false
+		}
+	}
+	if ft.filter != "" &&
+		!strings.Contains(strings.ToLower(n.path), strings.ToLower(ft.filter)) {
+		return false
+	}
+	return true
+}
+
+// matches reports whether the node or any descendant file is kept.
+func (ft *fileTree) matches(n *treeNode) bool {
+	if !n.dir {
+		return ft.kept(n)
+	}
+	for _, c := range n.children {
+		if ft.matches(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// rebuildRows flattens the visible tree. Tree mode: dirs emit children when
+// expanded or when a filter is active (ancestors of matching files stay
+// visible). Flat mode: every kept file at depth 0. Ends by syncing the
+// expansion map from the live nodes.
+func (ft *fileTree) rebuildRows() {
+	filterActive := ft.filter != "" || ft.filterKind != filesFilterAll
 	ft.rows = ft.rows[:0]
-	for _, r := range flat {
-		ft.rows = append(ft.rows, treeRow{node: orig[r.Node], depth: r.Depth})
+	if ft.flat {
+		var walkFiles func(nodes []*treeNode)
+		walkFiles = func(nodes []*treeNode) {
+			for _, n := range nodes {
+				if n.dir {
+					walkFiles(n.children)
+					continue
+				}
+				if ft.kept(n) {
+					ft.rows = append(ft.rows, treeRow{node: n, depth: 0})
+				}
+			}
+		}
+		walkFiles(ft.roots)
+		ft.syncExpandedDirs()
+		return
 	}
+	var walk func(nodes []*treeNode, depth int)
+	walk = func(nodes []*treeNode, depth int) {
+		for _, n := range nodes {
+			if !ft.matches(n) {
+				continue
+			}
+			if n.dir {
+				if filterActive {
+					// Under a filter the hierarchy flattens away: kept files
+					// list directly, and a matching dir only surfaces as a
+					// collapsed group header for the matches inside it.
+					if !n.expanded {
+						ft.rows = append(ft.rows, treeRow{node: n, depth: depth})
+						continue
+					}
+					walk(n.children, depth)
+					continue
+				}
+				ft.rows = append(ft.rows, treeRow{node: n, depth: depth})
+				if n.expanded {
+					walk(n.children, depth+1)
+				}
+				continue
+			}
+			ft.rows = append(ft.rows, treeRow{node: n, depth: depth})
+		}
+	}
+	walk(ft.roots, 0)
+	ft.syncExpandedDirs()
+}
+
+// syncExpandedDirs records every dir's current expansion so a later node
+// rebuild (new diffVersion) restores it exactly.
+func (ft *fileTree) syncExpandedDirs() {
+	var walk func(nodes []*treeNode)
+	walk = func(nodes []*treeNode) {
+		for _, n := range nodes {
+			if n.dir {
+				ft.expandedDirs[n.path] = n.expanded
+				walk(n.children)
+			}
+		}
+	}
+	walk(ft.roots)
 }
 
 // ---- model integration -----------------------------------------------------
 
-// buildTree constructs (or rebuilds) the tree from the parsed diff.
+// buildTree constructs (or rebuilds) the tree from the parsed diff. The node
+// structure is only rebuilt when diffVersion moved; view state (expansion,
+// sort, flat, filter kind) carries over.
 func (m *model) buildTree() {
+	m.ensureDiff()
+	if m.tree != nil && m.tree.builtVer == m.diffVersion {
+		m.rebuildTreeRows()
+		return
+	}
+	var prev *fileTree
+	if m.tree != nil {
+		m.tree.syncExpandedDirs() // capture foreign node.expanded toggles
+		prev = m.tree
+	}
 	files := m.changedFiles()
-	fc := m.findingsPerFile()
-	cc := m.commentsPerFile()
-	m.tree = buildFileTree(files, func(p string) byte { return m.fileStatus(p) })
-	_ = fc
-	_ = cc
+	order := diffFileOrder(m.dir)
+	m.tree = buildFileTree(files, order, func(p string) byte { return m.fileStatus(p) }, prevExpandedDirs(prev))
+	m.tree.builtVer = m.diffVersion
+	if prev != nil {
+		m.tree.flat = prev.flat
+		m.tree.sortMode = prev.sortMode
+		m.tree.filterKind = prev.filterKind
+	}
 	m.rebuildTreeRows()
 }
 
+func prevExpandedDirs(prev *fileTree) map[string]bool {
+	if prev == nil {
+		return nil
+	}
+	return prev.expandedDirs
+}
+
+// diffFileOrder extracts the file order of the original diff.patch (stable
+// order for filesSortDiff). Deleted files appear as "+++ /dev/null" — the
+// preceding "--- a/<path>" line names them. Unreadable patch → empty map
+// (files fall back to a stable alphabetical position).
+func diffFileOrder(dir string) map[string]int {
+	out := map[string]int{}
+	b, err := os.ReadFile(filepath.Join(dir, "diff.patch"))
+	if err != nil {
+		return out
+	}
+	n := 0
+	lastOld := ""
+	for _, line := range strings.Split(string(b), "\n") {
+		switch {
+		case strings.HasPrefix(line, "--- a/"):
+			lastOld = strings.TrimPrefix(line, "--- a/")
+		case strings.HasPrefix(line, "+++ b/"):
+			p := strings.TrimPrefix(line, "+++ b/")
+			if p == "/dev/null" {
+				p = lastOld
+			}
+			if p != "" && p != "/dev/null" {
+				if _, seen := out[p]; !seen {
+					out[p] = n
+					n++
+				}
+			}
+		}
+	}
+	return out
+}
+
+// refreshTreeMeta snapshots per-file counts (findings, comments, ±lines,
+// review mark, status) for sorting and rendering.
+func (m *model) refreshTreeMeta() {
+	if m.tree == nil {
+		return
+	}
+	m.ensureDiff()
+	fc := m.findingsPerFile()
+	cc := m.commentsPerFile()
+	rev := m.reviewedSet()
+	meta := make(map[string]fileMeta, len(m.diffParsed))
+	for p, fd := range m.diffParsed {
+		mt := fileMeta{
+			status:   m.fileStatus(p),
+			reviewed: rev[p],
+			findings: fc[p],
+			comments: cc[p],
+		}
+		for _, l := range fd.Lines {
+			switch l.Kind {
+			case DiffAdd:
+				mt.added++
+			case DiffDel:
+				mt.deleted++
+			}
+		}
+		meta[p] = mt
+	}
+	m.tree.meta = meta
+}
+
+// rebuildTreeRows re-flattens the visible rows after any filter/sort/search
+// change, preserving the selected node (by identity — nodes are stable
+// across row rebuilds) and clamping the cursor into range.
 func (m *model) rebuildTreeRows() {
 	if m.tree == nil {
 		m.buildTree()
 		return
 	}
+	var sel *treeNode
+	if r := m.treeRowAt(m.treeCursor); r != nil {
+		sel = r.node
+	}
 	m.tree.filter = m.searchText
+	m.refreshTreeMeta()
+	m.tree.applySort()
 	m.tree.rebuildRows()
+	if sel != nil {
+		for i := range m.tree.rows {
+			if m.tree.rows[i].node == sel {
+				m.treeCursor = i
+				break
+			}
+		}
+	}
 	if m.treeCursor >= len(m.tree.rows) {
 		m.treeCursor = len(m.tree.rows) - 1
 	}
@@ -174,8 +477,6 @@ func (m *model) fileStatus(path string) byte {
 		switch l.Kind {
 		case DiffDel, DiffContext:
 			onlyAdds = false
-		case DiffHunkHeader:
-		case DiffAdd:
 		}
 	}
 	if onlyAdds {
@@ -200,92 +501,6 @@ func (m *model) commentsPerFile() map[string]int {
 		}
 	}
 	return out
-}
-
-// ---- rendering -------------------------------------------------------------
-
-// filesView renders the changed-file tree pane.
-func (m *model) filesView() []string {
-	w := m.listWidth()
-	h := m.bodyHeight() - 2
-	var out []string
-
-	files := m.changedFiles()
-	reviewed := len(m.reviewedSet())
-	hdr := fmt.Sprintf("CHANGED FILES %d/%d reviewed", reviewed, len(files))
-	if m.searchText != "" {
-		hdr += fmt.Sprintf(" · filter /%s", m.searchText)
-	}
-	if m.focus == focusList && m.leftView == viewFiles {
-		out = append(out, styleBorderF.Render("● "+hdr))
-	} else {
-		out = append(out, styleDim.Render("○ "+hdr))
-	}
-	out = append(out, styleBorder.Render(strings.Repeat("─", max(4, w-2))))
-
-	if len(files) == 0 {
-		out = append(out, centered("no changed files", w, h-2)...)
-		return m.padRows(out, h)
-	}
-
-	rows := m.treeRows()
-	// keep the cursor visible (widget.List scroll math, legacy semantics)
-	l := widget.List{Cursor: m.treeCursor, Len: len(rows)}
-	top, _ := l.Window(h - 2)
-	for i := top; i < len(rows) && len(out) < h; i++ {
-		r := rows[i]
-		line := m.renderTreeRow(r, w)
-		if i == m.treeCursor {
-			line = styleCursor.Render(pad(cut(line, w), w))
-		}
-		out = append(out, line)
-	}
-	return m.padRows(out, h)
-}
-
-func (m *model) renderTreeRow(r treeRow, w int) string {
-	n := r.node
-	indent := strings.Repeat("  ", r.depth)
-	if n.dir {
-		glyph := icons.TreeClosed
-		if n.expanded || m.searchText != "" {
-			glyph = icons.TreeOpen
-		}
-		return styleSection.Render(indent + glyph + " " + n.name + "/")
-	}
-	status := string(n.status)
-	style := styleDim
-	switch n.status {
-	case 'A':
-		style = lipglossGreen()
-	case 'D':
-		style = lipglossRed()
-	case 'M':
-		style = lipglossYellow()
-	}
-	fc := m.findingsPerFile()[n.name]
-	if n.path != n.name {
-		fc = m.findingsPerFile()[n.path]
-	}
-	cc := m.commentsPerFile()[n.path]
-	var meta []string
-	if fc > 0 {
-		meta = append(meta, fmt.Sprintf("%d finding%s", fc, plural(fc)))
-	}
-	if cc > 0 {
-		meta = append(meta, fmt.Sprintf("%d comment%s", cc, plural(cc)))
-	}
-	mark := " "
-	if m.reviewedSet()[n.path] {
-		mark = icons.Reviewed
-	}
-	metaStr := ""
-	if len(meta) > 0 {
-		metaStr = " · " + strings.Join(meta, " · ")
-	}
-	return fmt.Sprintf("%s%s %s %s%s %s",
-		indent, style.Render(status), plainOr(mark, styleOK.Render(mark)),
-		baseName(n.name), metaStr, "")
 }
 
 func plural(n int) string {

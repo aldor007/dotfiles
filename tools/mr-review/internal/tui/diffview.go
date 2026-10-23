@@ -53,6 +53,12 @@ type FileDiff struct {
 	Path  string // new path ("" for pure deletions: old path)
 	Old   bool   // file was deleted
 	Lines []DiffLine
+
+	// git extended-header metadata (go-diff exposes the raw header lines;
+	// rename info IS parsed upstream — no guessing required here).
+	OldPath string // original path for renames/deletions ("" when unchanged)
+	Rename  bool   // git rename detected (OldPath != Path)
+	Binary  bool   // binary file: no textual hunks in the diff
 }
 
 // ParseDiff converts a unified diff into per-file structures keyed by path.
@@ -72,6 +78,11 @@ func ParseDiff(diffText string, maxLines int) map[string]*FileDiff {
 			newPath = strings.TrimPrefix(fd.OrigName, "a/")
 		}
 		cur := &FileDiff{Path: newPath, Old: fd.NewName == "/dev/null"}
+		if old := strings.TrimPrefix(fd.OrigName, "a/"); old != "/dev/null" && old != newPath {
+			cur.OldPath = old
+			cur.Rename = true
+		}
+		cur.Binary = fileDiffIsBinary(fd)
 		files[newPath] = cur
 		for _, h := range fd.Hunks {
 			if maxLines > 0 && n > maxLines {
@@ -108,6 +119,22 @@ func ParseDiff(diffText string, maxLines int) map[string]*FileDiff {
 		}
 	}
 	return files
+}
+
+// fileDiffIsBinary reports whether a parsed FileDiff carries no textual
+// hunks because the patch is binary ("Binary files … differ" / "GIT binary
+// patch" extended headers, surfaced by go-diff in FileDiff.Extended).
+func fileDiffIsBinary(fd *diff.FileDiff) bool {
+	if fd == nil || len(fd.Hunks) > 0 {
+		return false
+	}
+	for _, ext := range fd.Extended {
+		l := strings.ToLower(ext)
+		if strings.Contains(l, "binary") {
+			return true
+		}
+	}
+	return false
 }
 
 // parseHunkHeader extracts the new-file start line from "@@ -a,b +c,d @@".
@@ -267,7 +294,7 @@ func RenderDiffLines(rows []DiffLine, side string, hlIdx, width int, plain bool,
 			out = append(out, clipPlain(cyan+l.Text+reset, width))
 			continue
 		}
-		code := l.Text
+		code := expandTabs(l.Text)
 		if highlighted != nil && i < len(highlighted) {
 			code = highlighted[i]
 		}

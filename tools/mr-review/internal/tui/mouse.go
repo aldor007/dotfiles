@@ -59,73 +59,101 @@ func (m *model) handleCockpitMouse(msg tea.MouseMsg) tea.Cmd {
 }
 
 // hitTest classifies a mouse position: which pane and which content row.
-// Returns ok=false for borders, headers, tab bars and the footer.
+// Returns ok=false for borders, gaps, headers and the footer.
+// Pane geometry (wide): each pane is a bordered box of inner width pw
+// (2 border cols) with a 1-col gap between panes:
+//
+//	files box [0, fw+2)  gap  diff box [fw+3, fw+3+dw+2)  gap  findings [fw+dw+6, …)
+//	row 0-1 header · row 2 box top border · row 3.. content · row 3+inner bottom border
 func (m *model) hitTest(x, y int) (pane string, row, col int, ok bool) {
 	inner := m.bodyHeight() - 2
 	if y < 3 || y >= 3+inner {
 		return "", 0, 0, false // header / borders / footer
 	}
-	lw := m.listWidth()
+	if m.zoom {
+		return "", 0, 0, false // zoomed body is one full-width pane: the 3-pane
+		// geometry below does not apply (a click would corrupt pane state)
+	}
+	L := m.layout()
+	if L.mode == layoutNarrow {
+		return "", 0, 0, false // narrow stays keyboard-first
+	}
+	filesEnd := L.filesW + 2 // right edge (exclusive) of the files box
+	diffStart := filesEnd + 1
+	diffEnd := diffStart + L.diffW + 2
+	findingsStart := diffEnd + 1
 	switch {
-	case x >= 1 && x <= lw:
-		item := y - 5 // pane header (row 3) + rule (row 4)
+	case x >= 1 && x <= L.filesW: // inside files box (border cols excluded)
+		item := y - 5 // pane header (row 3) + CHANGED FILES header + rule
 		if item < 0 {
 			return "", 0, 0, false
 		}
-		return "list", item, x, true
-	case x > lw+1 && x <= m.width-2:
-		innerIdx := y - 3
-		if innerIdx < 4 { // pane header + tab bar (3 rows)
+		return "files", item, x - 1, true
+	case x >= diffStart+1 && x <= diffEnd-2: // inside diff box
+		docRow := y - 5 // pane header (row 3) + browse title (row 4)
+		if docRow < 0 {
 			return "", 0, 0, false
 		}
-		return "detail", innerIdx - 4, x, true
+		return "diff", docRow, x - diffStart - 1, true
+	case L.mode == layoutWide && x >= findingsStart+1 && x <= findingsStart+L.findingsW:
+		listRow := y - 4 // pane header (row 3); findings cards follow
+		if listRow < 0 {
+			return "", 0, 0, false
+		}
+		return "findings", listRow, x - findingsStart - 1, true
 	}
-	return "", 0, 0, false // borders / divider
+	return "", 0, 0, false // borders / gaps
 }
 
-// mouseClick positions the cursor in the clicked pane. In the diff pane a
-// click also clears any selection (a following drag starts a new one).
+// mouseClick positions the cursor in the clicked pane and focuses it. In the
+// diff pane a click also clears any selection (a following drag starts a new one).
 func (m *model) mouseClick(mo tea.Mouse) tea.Cmd {
 	pane, row, _, ok := m.hitTest(mo.X, mo.Y)
 	if !ok {
 		return nil
 	}
 	switch pane {
-	case "list":
-		// same window math the views use: items start two rows into the pane
+	case "files":
+		m.focus = focusFiles
+		m.leftView = viewFiles
 		vis := m.bodyHeight() - 4
-		m.focus = focusList
-		switch m.leftView {
-		case viewFiles:
-			rows := m.treeRows()
-			top, _ := (&widget.List{Cursor: m.treeCursor, Len: len(rows)}).Window(vis)
-			idx := top + row
-			if idx < 0 || idx >= len(rows) {
-				return nil
-			}
-			m.treeCursor = idx
-			if r := m.treeRowAt(idx); r != nil && r.node.dir {
-				r.node.expanded = !r.node.expanded // click on a dir: expand/collapse
-				m.rebuildTreeRows()
-			}
+		rows := m.treeRows()
+		top, _ := (&widget.List{Cursor: m.treeCursor, Len: len(rows)}).Window(vis)
+		idx := top + row
+		if idx < 0 || idx >= len(rows) {
 			return nil
-		case viewComments:
+		}
+		m.treeCursor = idx
+		if r := m.treeRowAt(idx); r != nil && r.node.dir {
+			r.node.expanded = !r.node.expanded // click on a dir: expand/collapse
+			m.rebuildTreeRows()
+		}
+		return nil
+	case "findings":
+		m.focus = focusFindings
+		if m.leftView == viewComments {
 			rows := m.filteredComments()
-			top, _ := (&widget.List{Cursor: m.commentCur, Len: len(rows)}).Window(vis)
+			top, _ := (&widget.List{Cursor: m.commentCur, Len: len(rows)}).Window(m.bodyHeight() - 4)
 			idx := top + row
 			if idx >= 0 && idx < len(rows) {
 				m.commentCur = idx
 			}
 			return nil
 		}
-		return nil
-	case "detail":
-		if m.tab != tabDiff || m.browseFile == "" {
-			return nil // v1: mouse copy lives in the continuous diff
+		// findings cards are 2 lines each; visible cards start at listTop
+		card := row/2 + m.listTop
+		if card >= 0 && card < len(m.filtered) && card != m.cursor {
+			m.cursor = card
+			m.syncDiffScroll()
 		}
-		m.focus = focusDetail
+		return nil
+	case "diff":
+		if m.browseFile == "" {
+			return nil // mouse copy lives in the continuous diff
+		}
+		m.focus = focusDiff
 		doc := m.browseDoc()
-		top := m.detailTop[tabDiff]
+		top := m.detailTop[tabOverview]
 		idx := top + row
 		if idx < 0 || idx >= len(doc) {
 			return nil
@@ -143,11 +171,11 @@ func (m *model) mouseClick(mo tea.Mouse) tea.Cmd {
 // mouseDrag extends the selection while the left button is held in the diff.
 func (m *model) mouseDrag(mo tea.Mouse) tea.Cmd {
 	pane, row, _, ok := m.hitTest(mo.X, mo.Y)
-	if !ok || pane != "detail" || m.tab != tabDiff {
+	if !ok || pane != "diff" {
 		return nil
 	}
 	doc := m.browseDoc()
-	idx := m.detailTop[tabDiff] + row
+	idx := m.detailTop[tabOverview] + row
 	if idx < 0 || idx >= len(doc) || doc[idx].header {
 		return nil
 	}
@@ -188,7 +216,8 @@ func (m *model) mouseRelease() tea.Cmd {
 	return tea.SetClipboard(b.String())
 }
 
-// mouseWheel scrolls the pane under the wheel.
+// mouseWheel scrolls the pane under the wheel (wheel follows the pointer:
+// it scrolls that pane without requiring a prior click to move focus).
 func (m *model) mouseWheel(mo tea.Mouse) tea.Cmd {
 	pane, _, _, ok := m.hitTest(mo.X, mo.Y)
 	if !ok {
@@ -203,11 +232,24 @@ func (m *model) mouseWheel(mo tea.Mouse) tea.Cmd {
 	default:
 		return nil
 	}
-	if pane == "detail" && m.browseFile != "" {
-		for i := 0; i < abs(step); i++ {
-			m.browseMove(step)
+	switch pane {
+	case "diff":
+		if m.browseFile != "" {
+			for i := 0; i < abs(step); i++ {
+				m.browseMove(step)
+			}
+			return nil
 		}
+		// browse exited (esc): still scroll the pane under the pointer, not
+		// whatever pane happens to hold focus
+		m.focus = focusDiff
+		m.scrollBy(step * 3)
 		return nil
+	case "files":
+		m.focus = focusFiles
+		m.leftView = viewFiles
+	case "findings":
+		m.focus = focusFindings
 	}
 	for i := 0; i < abs(step); i++ {
 		if step < 0 {

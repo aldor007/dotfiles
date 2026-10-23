@@ -161,16 +161,31 @@ func buildActions(m *model) []Action {
 		{ID: "findings.filter-all", Cat: CatFindings, Name: "Filter: all findings",
 			Desc: "clear the status filter",
 			Run:  func(m *model) tea.Cmd { m.setStatusFilter("all"); return nil }},
+		{ID: "findings.details-down", Cat: CatFindings, Name: "Scroll finding details down",
+			Desc: "scroll the details region; the list stays put (J)", Keys: []string{"J"},
+			When: func(m *model) bool { return m.focus == focusFindings && m.leftView != viewComments },
+			Run:  func(m *model) tea.Cmd { m.findingsDetailsPage(1); return nil }},
+		{ID: "findings.details-up", Cat: CatFindings, Name: "Scroll finding details up",
+			Desc: "scroll the details region; the list stays put (K)", Keys: []string{"K"},
+			When: func(m *model) bool { return m.focus == focusFindings && m.leftView != viewComments },
+			Run:  func(m *model) tea.Cmd { m.findingsDetailsPage(-1); return nil }},
 
 		// ---- manual review ----
-		{ID: "view.findings", Cat: CatManual, Name: "Show findings list",
-			Desc: "left pane: AI findings (1)", Keys: []string{"1"},
+		{ID: "view.findings-overview", Cat: CatManual, Name: "Findings overview tab",
+			Desc: "open the Overview tab (all sections in one panel)", Keys: []string{"O"},
+			When: func(m *model) bool { return hasFinding(m) },
+			Run: func(m *model) tea.Cmd { m.tab = tabOverview; return nil }},
+		{ID: "view.findings", Cat: CatManual, Name: "Show findings pane",
+			Desc: "focus the findings pane (3)", Keys: []string{"3"},
 			Run: func(m *model) tea.Cmd { m.setView(viewFindings); return nil }},
+		{ID: "view.diff", Cat: CatManual, Name: "Focus diff pane",
+			Desc: "focus the center diff pane (2)", Keys: []string{"2"},
+			Run: func(m *model) tea.Cmd { m.focus = focusDiff; m.clampScrolls(); return nil }},
 		{ID: "view.files", Cat: CatManual, Name: "Show changed files",
-			Desc: "left pane: changed-file tree (2)", Keys: []string{"2"},
+			Desc: "focus the files pane (1)", Keys: []string{"1"},
 			Run: func(m *model) tea.Cmd { m.setView(viewFiles); return nil }},
 		{ID: "view.comments", Cat: CatManual, Name: "Show comment navigator",
-			Desc: "left pane: all comments (3)", Keys: []string{"3"},
+			Desc: "your drafts: c creates (held) · s stages ready · P publishes (gc)", Keys: []string{"gc"},
 			Run: func(m *model) tea.Cmd { m.setView(viewComments); return nil }},
 		{ID: "view.file-findings", Cat: CatManual, Name: "Show file's findings",
 			Desc: "left pane: findings for the selected file (4) — set the file with 2 → Enter",
@@ -178,8 +193,8 @@ func buildActions(m *model) []Action {
 			When: func(m *model) bool { return m.fileFindingsFile != "" },
 			Run:  func(m *model) tea.Cmd { m.setView(viewFileFindings); return nil }},
 		{ID: "files.mark-reviewed", Cat: CatManual, Name: "Toggle file reviewed",
-			Desc: "mark the selected/browsed file reviewed (m)",
-			Keys: []string{"m"},
+			Desc: "mark the selected/browsed file reviewed (m or space)",
+			Keys: []string{"m", "space"},
 			When: func(m *model) bool { return m.leftView == viewFiles || hasBrowse(m) },
 			Run:  func(m *model) tea.Cmd { m.toggleReviewedFile(); return nil }},
 		{ID: "files.next-unreviewed", Cat: CatManual, Name: "Next unreviewed file",
@@ -195,6 +210,32 @@ func buildActions(m *model) []Action {
 		{ID: "files.prev", Cat: CatManual, Name: "Previous changed file",
 			Desc: "jump to the previous file in the diff ({)", Keys: []string{"{"},
 			Run: func(m *model) tea.Cmd { m.fileJump(-1); return nil }},
+		{ID: "files.h", Cat: CatManual, Name: "Collapse dir / parent",
+			Desc: "collapse the dir, else jump to the parent (h)", Keys: []string{"h"},
+			When: func(m *model) bool { return m.leftView == viewFiles && m.focus == focusFiles },
+			Run:  func(m *model) tea.Cmd { m.filesCollapseOrParent(); return nil }},
+		{ID: "files.l", Cat: CatManual, Name: "Expand dir / open file",
+			Desc: "expand the dir, else open the file in the diff (l)", Keys: []string{"l"},
+			When: func(m *model) bool { return m.leftView == viewFiles && m.focus == focusFiles },
+			Run:  func(m *model) tea.Cmd { m.filesExpandOrOpen(); return nil }},
+		{ID: "files.toggle-flat", Cat: CatManual, Name: "Toggle flat file list",
+			Desc: "flat list ↔ hierarchy (t)", Keys: []string{"t"},
+			When: func(m *model) bool { return m.leftView == viewFiles && m.focus == focusFiles },
+			Run:  func(m *model) tea.Cmd { m.filesToggleFlat(); return nil }},
+		{ID: "files.sort", Cat: CatManual, Name: "Cycle files sort",
+			Desc: "diff order → path → review status → findings (go)", Keys: []string{"go"},
+			When: func(m *model) bool { return m.leftView == viewFiles && m.focus == focusFiles },
+			Run:  func(m *model) tea.Cmd { m.filesCycleSort(); return nil }},
+		{ID: "files.filter", Cat: CatManual, Name: "Cycle files filter",
+			Desc: "all → unreviewed → reviewed → findings → comments → modified → added → deleted (gf)", Keys: []string{"gf"},
+			When: func(m *model) bool { return m.leftView == viewFiles && m.focus == focusFiles },
+			Run:  func(m *model) tea.Cmd { m.filesCycleFilter(); return nil }},
+		{ID: "files.expand-all", Cat: CatManual, Name: "Expand all directories",
+			Desc: "reveal the whole changed-file tree", Keys: nil,
+			Run:  func(m *model) tea.Cmd { m.filesSetExpansion(true); return nil }},
+		{ID: "files.collapse-all", Cat: CatManual, Name: "Collapse all directories",
+			Desc: "collapse the changed-file tree", Keys: nil,
+			Run:  func(m *model) tea.Cmd { m.filesSetExpansion(false); return nil }},
 
 		// ---- comments ----
 		{ID: "comments.add", Cat: CatComments, Name: "Add line comment",
@@ -204,6 +245,15 @@ func buildActions(m *model) []Action {
 		{ID: "comments.visual", Cat: CatComments, Name: "Start range selection",
 			Desc: "select lines for a range comment (V)", Keys: []string{"V"},
 			When: hasBrowse, Run: func(m *model) tea.Cmd { m.startVisual(); return nil }},
+		{ID: "comments.preview", Cat: CatComments, Name: "Toggle comment preview",
+			Desc: "Markdown preview inside the comment editor (Ctrl+R)", Keys: nil,
+			Run: func(m *model) tea.Cmd {
+				if m.draftEdit != nil {
+					_, cmd := m.updateDraftEditor(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+					return cmd
+				}
+				return nil
+			}},
 		{ID: "comments.general", Cat: CatComments, Name: "Add general MR comment",
 			Desc: "a comment not attached to a diff line", Keys: nil,
 			Run: func(m *model) tea.Cmd { return m.startGeneralComment() }},
@@ -214,7 +264,7 @@ func buildActions(m *model) []Action {
 			Desc: "remove the selected local draft (d, asks to confirm)", Keys: []string{"d"},
 			When: hasDraftSel, Run: func(m *model) tea.Cmd { m.confirmDeleteDraft(); return nil }},
 		{ID: "comments.toggle-ready", Cat: CatComments, Name: "Toggle ready to publish",
-			Desc: "hold the draft back / mark it ready", Keys: nil,
+			Desc: "stage the draft for publication (s) — or hold it back", Keys: []string{"s"},
 			When: hasDraftSel, Run: func(m *model) tea.Cmd { m.toggleDraftReady(); return nil }},
 		{ID: "comments.external-edit", Cat: CatComments, Name: "Edit draft in $EDITOR",
 			Desc: "edit the selected draft with an external editor", Keys: nil,
@@ -252,12 +302,12 @@ func buildActions(m *model) []Action {
 			Desc: "focus the diff/details pane (Ctrl+l)", Keys: []string{"ctrl+l"},
 			Run: func(m *model) tea.Cmd { m.focusPane(1); return nil }},
 		{ID: "nav.tab-prev", Cat: CatNavigation, Name: "Previous detail tab",
-			Desc: "Diff · Explanation · Evidence · Comment · Discussion (h)", Keys: []string{"h"},
-			When: func(m *model) bool { return m.focus == focusDetail },
+			Desc: "previous detail tab, narrow mode (h)", Keys: []string{"h"},
+			When: func(m *model) bool { return m.narrow && m.focus == focusDiff },
 			Run:  func(m *model) tea.Cmd { m.cycleTab(-1); return nil }},
 		{ID: "nav.tab-next", Cat: CatNavigation, Name: "Next detail tab",
-			Desc: "cycle the detail tabs (l)", Keys: []string{"l"},
-			When: func(m *model) bool { return m.focus == focusDetail },
+			Desc: "next detail tab, narrow mode (l)", Keys: []string{"l"},
+			When: func(m *model) bool { return m.narrow && m.focus == focusDiff },
 			Run:  func(m *model) tea.Cmd { m.cycleTab(1); return nil }},
 		{ID: "nav.hunk-prev", Cat: CatNavigation, Name: "Previous hunk",
 			Desc: "jump to the previous hunk ([)", Keys: []string{"["},
@@ -303,7 +353,12 @@ func buildActions(m *model) []Action {
 			Run: func(m *model) tea.Cmd { m.openPalette(); return nil }},
 		{ID: "view.summary", Cat: CatView, Name: "Review summary",
 			Desc: "state of findings, comments and progress (s)", Keys: []string{"s"},
-			Run: func(m *model) tea.Cmd { m.overlay = ovSummary; return nil }},
+			When: func(m *model) bool { return !inCommentsView(m) }, // s stages in the navigator
+			Run:  func(m *model) tea.Cmd { m.overlay = ovSummary; return nil }},
+		{ID: "diff.side-by-side", Cat: CatView, Name: "Diff: toggle side-by-side",
+			Desc: "old | new two-column continuous diff (| in the diff pane)", Keys: []string{"|"},
+			When: func(m *model) bool { return m.browseFile != "" && m.focus == focusDiff && m.tab == tabOverview },
+			Run:  func(m *model) tea.Cmd { m.toggleDiffSideBySide(); return nil }},
 		{ID: "view.summary-edit", Cat: CatView, Name: "Edit summary comment",
 			Desc: "$EDITOR on the general review note (S outside the workspace)", Keys: []string{"S"},
 			When: func(m *model) bool { return wsPane == nil },
@@ -318,10 +373,10 @@ func buildActions(m *model) []Action {
 			Desc: "maximize the details/diff pane (z)", Keys: []string{"z"},
 			Run: func(m *model) tea.Cmd { m.zoom = !m.zoom; m.clampScrolls(); return nil }},
 		{ID: "view.prompt", Cat: CatView, Name: "View AI prompt",
-			Desc: "the exact prompt sent to the reviewer (p)", Keys: []string{"p"},
+			Desc: "the exact prompt sent to the reviewer, floating viewer (p)", Keys: []string{"p"},
 			Run: func(m *model) tea.Cmd { return m.viewFileCmd(promptPath(m.dir), "prompt") }},
 		{ID: "view.log", Cat: CatView, Name: "View agent log",
-			Desc: "raw AI reviewer output (L)", Keys: []string{"L"},
+			Desc: "raw AI reviewer output, floating viewer (L)", Keys: []string{"L"},
 			Run: func(m *model) tea.Cmd { return m.viewFileCmd(logPath(m.dir), "agent log") }},
 		{ID: "view.theme", Cat: CatView, Name: "Cycle theme",
 			Desc: "switch default ↔ Dracula (T)", Keys: []string{"T"},
@@ -343,6 +398,9 @@ func buildActions(m *model) []Action {
 		{ID: "publish.preview", Cat: CatGitLab, Name: "Publish approved comments",
 			Desc: "preview the exact batch, then confirm (P)", Keys: []string{"P"},
 			Run: func(m *model) tea.Cmd { return m.publishPreviewCmd() }},
+		{ID: "publish.queue", Cat: CatGitLab, Name: "Publish queue",
+			Desc: "everything staged for publication (gq)", Keys: []string{"gq"},
+			Run: func(m *model) tea.Cmd { m.pushOverlay(ovQueue); return nil }},
 		{ID: "publish.approve-mr", Cat: CatGitLab, Name: "Approve the MR (formal)",
 			Desc: "separate action; asks for its own confirmation", Keys: nil,
 			Run: func(m *model) tea.Cmd { return m.publishApproveCmd() }},
@@ -508,7 +566,7 @@ func (m *model) contextHints() []widget.Hint {
 	}
 	switch {
 	case m.draftEdit != nil:
-		return []widget.Hint{{Keys: "type", Desc: ""}, {Keys: "Ctrl+S", Desc: "save"}, {Keys: "Esc", Desc: "cancel (esc twice discards changes)"}}
+		return []widget.Hint{{Keys: "type", Desc: ""}, {Keys: "Ctrl+S", Desc: "save"}, {Keys: "Ctrl+R", Desc: "preview"}, {Keys: "Esc", Desc: "cancel (twice discards)"}}
 	case m.exportDlg != nil:
 		return []widget.Hint{{Keys: "↑/↓", Desc: "field"}, {Keys: "enter/space", Desc: "change"}, {Keys: "Ctrl+S", Desc: "export"}, {Keys: "Esc", Desc: "cancel"}}
 	case m.paletteOn:
@@ -517,14 +575,14 @@ func (m *model) contextHints() []widget.Hint {
 		return []widget.Hint{{Keys: "Enter", Desc: "run publisher"}, {Keys: "Esc", Desc: "cancel"}}
 	case m.visualOn:
 		return []widget.Hint{{Keys: "j/k", Desc: "extend"}, {Keys: "c", Desc: "comment on range"}, {Keys: "esc", Desc: "cancel"}}
-	case m.focus == focusDetail:
-		return []widget.Hint{{Keys: "j/k", Desc: "scroll"}, {Keys: "h/l", Desc: "tabs"}, {Keys: "[:]", Desc: "hunk"}, {Keys: "c", Desc: "comment"}, {Keys: "i", Desc: "inspect"}, {Keys: "z", Desc: "zoom"}, {Keys: ":", Desc: "commands"}, {Keys: "?", Desc: "help"}}
-	case m.leftView == viewFiles:
-		return []widget.Hint{{Keys: "j/k", Desc: "file"}, {Keys: "enter", Desc: "browse"}, {Keys: "m", Desc: "reviewed"}, {Keys: "gn", Desc: "next unreviewed"}, {Keys: "/", Desc: "filter"}, {Keys: ":", Desc: "commands"}}
+	case m.focus == focusDiff:
+		return []widget.Hint{{Keys: "j/k", Desc: "scroll"}, {Keys: "[:/]", Desc: "hunk"}, {Keys: "{/}", Desc: "file"}, {Keys: "c", Desc: "comment"}, {Keys: "V", Desc: "range"}, {Keys: "gc", Desc: "comments"}, {Keys: "|", Desc: "side-by-side"}, {Keys: "m", Desc: "reviewed"}, {Keys: ":", Desc: "commands"}, {Keys: "?", Desc: "help"}}
+	case m.focus == focusFiles:
+		return []widget.Hint{{Keys: "j/k", Desc: "file"}, {Keys: "h/l", Desc: "tree"}, {Keys: "enter", Desc: "browse"}, {Keys: "m", Desc: "reviewed"}, {Keys: "t", Desc: "flat"}, {Keys: "gf", Desc: "filter"}, {Keys: "go", Desc: "sort"}, {Keys: "gn", Desc: "next unreviewed"}, {Keys: "/", Desc: "filter"}, {Keys: ":", Desc: "commands"}}
 	case m.leftView == viewComments:
-		return []widget.Hint{{Keys: "j/k", Desc: "comment"}, {Keys: "enter", Desc: "jump"}, {Keys: "e", Desc: "edit"}, {Keys: "d", Desc: "delete"}, {Keys: "1/2/3", Desc: "views"}, {Keys: ":", Desc: "commands"}}
+		return []widget.Hint{{Keys: "j/k", Desc: "comment"}, {Keys: "enter", Desc: "jump"}, {Keys: "e", Desc: "edit"}, {Keys: "d", Desc: "delete"}, {Keys: ":", Desc: "commands"}}
 	default:
-		return []widget.Hint{{Keys: "j/k", Desc: "findings"}, {Keys: "a", Desc: "approve"}, {Keys: "r", Desc: "reject"}, {Keys: "e", Desc: "edit"}, {Keys: "d", Desc: "discuss"}, {Keys: "gd", Desc: "full diff"}, {Keys: ":", Desc: "commands"}, {Keys: "?", Desc: "help"}}
+		return []widget.Hint{{Keys: "j/k", Desc: "findings"}, {Keys: "J/K", Desc: "details"}, {Keys: "a/r", Desc: "approve/reject"}, {Keys: "e", Desc: "edit"}, {Keys: "d", Desc: "discuss"}, {Keys: "gd", Desc: "full diff"}, {Keys: "gc", Desc: "comments"}, {Keys: "gq", Desc: "queue"}, {Keys: ":", Desc: "commands"}, {Keys: "?", Desc: "help"}}
 	}
 }
 

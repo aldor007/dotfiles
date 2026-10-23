@@ -132,6 +132,7 @@ func newSessionModel(t *testing.T, dir string) *model {
 		visualStart: -1, width: 120, height: 35, narrow: false,
 	}
 	m.rebuild()
+	m.startDiffFirst()
 	return m
 }
 

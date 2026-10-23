@@ -37,17 +37,22 @@
 #                                         pam-approve.sh --auto \
 #                                           --entitlement developer-readonly-access
 #
-# Filters (all modes):
+# Filters:
 #   --project NAME      one project only: env name (dev-master, prod-eu, …) or
 #                       exact GCP project id
 #   --entitlement STR   only entitlements whose id contains STR (e.g. readonly)
 #   --reason TEXT       approval/denial reason (default: "approved by <gcloud
 #                       account> via pam-approve.sh"); per-grant prompt when
 #                       omitted in TUI mode
+#   --users L1,L2,…     (--auto only) requester allowlist for auto-approval:
+#                       only requests from these emails are approved; every
+#                       other pending request in scope is SKIPPED (logged as
+#                       skipped). Comma-separated, no spaces. Omit = everyone.
+#                       A leading "user:" prefix is stripped before matching.
 #
 # Security: auto-approval WEAKENS the breakglass control — it approves every
 # request in scope without review; keep the interval sane and prefer
-# --entitlement scoping. Every auto decision is logged. No secrets are
+# --entitlement/--users scoping. Every auto decision is logged. No secrets are
 # handled: gcloud credentials are used, never echoed. The project list comes
 # from gitignored local/projects.env (nothing infra-specific is tracked in git).
 #
@@ -67,6 +72,7 @@ usage: pam-approve.sh [--list|--auto] [--project NAME] [--entitlement STR]
   (no flags)        fzf TUI: enter approve · ctrl-d deny · ctrl-r refresh · esc quit
   --list            dump pending requests (TSV)
   --auto N          approve everything pending in scope every --interval sec
+  --users L1,L2     (--auto only) approve only these requesters, skip the rest
   --yes             skip the auto-mode typed confirmation
 EOF
 }
@@ -78,6 +84,7 @@ REASON=""
 REASON_GIVEN=0
 INTERVAL=30
 ASSUME_YES=0
+AUTO_USERS=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -88,12 +95,17 @@ while [ $# -gt 0 ]; do
     --reason)      [ $# -ge 2 ] || { echo "pam-approve: --reason requires a value" >&2; exit 2; }; REASON=$2; REASON_GIVEN=1; shift 2 ;;
     --interval)    [ $# -ge 2 ] || { echo "pam-approve: --interval requires a value" >&2; exit 2; }; INTERVAL=$2; shift 2 ;;
     --yes|-y)      ASSUME_YES=1; shift ;;
+    --users)       [ $# -ge 2 ] || { echo "pam-approve: --users requires a value" >&2; exit 2; }; AUTO_USERS=$2; shift 2 ;;
     -h|--help)     usage; exit 0 ;;
     *) echo "pam-approve: unknown arg: $1" >&2; usage; exit 2 ;;
   esac
 done
 
 case "$INTERVAL" in ''|*[!0-9]*) echo "pam-approve: --interval must be a number of seconds" >&2; exit 2 ;; esac
+if [ -n "$AUTO_USERS" ] && [ "$mode" != auto ]; then
+  echo "pam-approve: --users only applies to --auto" >&2
+  exit 2
+fi
 
 # ---- pre-flight ----------------------------------------------------------------
 command -v gcloud >/dev/null 2>&1 || { echo "pam-approve: gcloud not found on PATH" >&2; exit 1; }
@@ -190,6 +202,16 @@ list_pending() {
 count_rows() { printf '%s\n' "$1" | grep -c . || true; }
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+# user_allowed <requester>: is this requester in the --users allowlist?
+# (empty allowlist = everyone; a leading "user:" prefix is stripped)
+user_allowed() {
+  local _u
+  [ -z "$AUTO_USERS" ] && return 0
+  _u=${1#user:}
+  case ",$AUTO_USERS," in *",$_u,"*) return 0 ;; esac
+  return 1
+}
+
 # kill_tree <pid>: TERM a pid AND all its descendants (pgrep -P recursion).
 # `kill <pid>` alone orphans the mid-scan grandchildren (per-project subshells
 # and their gcloud calls); they'd race the EXIT trap's rm -rf of $CACHE.
@@ -255,7 +277,7 @@ auto_loop() {
   local _scope _confirm _rows _n _g _env _proj _ent _req _dur _just _lppid
   _scope=$(projects_in_scope | awk '{printf "%s ", $1}')
   echo "pam-approve: AUTO-APPROVAL watch mode (account: $ACCOUNT)" >&2
-  echo "pam-approve: scope: projects [${_scope% }] entitlement filter [${FILTER_ENTITLEMENT:-<all>}] interval ${INTERVAL}s reason [$REASON]" >&2
+  echo "pam-approve: scope: projects [${_scope% }] entitlement filter [${FILTER_ENTITLEMENT:-<all>}] users allowlist [${AUTO_USERS:-<all>}] interval ${INTERVAL}s reason [$REASON]" >&2
   if [ "$ASSUME_YES" -ne 1 ]; then
     cat >&2 <<'EOF'
 pam-approve: WARNING — every pending PAM grant request in the scope above will
@@ -284,6 +306,10 @@ EOF
       echo "pam-approve: $(now_utc) poll: no pending requests" >&2
     else
       printf '%s\n' "$_rows" | while IFS="$(printf '\t')" read -r _g _env _proj _ent _req _dur _just; do
+        if ! user_allowed "$_req"; then
+          echo "pam-approve: $(now_utc) skipped $_g ($_req → $_ent in $_proj) — not in --users allowlist" >&2
+          continue
+        fi
         if gcloud pam grants approve "$_g" --reason="$REASON (auto $(now_utc))" >/dev/null 2>>"$CACHE/gcloud-errors.log"; then
           echo "pam-approve: $(now_utc) approved $_g ($_req → $_ent in $_proj)" >&2
         else

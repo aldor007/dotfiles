@@ -39,8 +39,8 @@ type layoutCase struct {
 func layoutCases() []layoutCase {
 	return []layoutCase{
 		{"findings", func(m *model) {}},
-		{"detail-diff", func(m *model) { m.focus = focusDetail; m.tab = tabDiff }},
-		{"detail-explanation", func(m *model) { m.focus = focusDetail; m.tab = tabExplanation }},
+		{"detail-diff", func(m *model) { m.focus = focusDiff; m.tab = tabOverview }},
+		{"detail-explanation", func(m *model) { m.focus = focusDiff; m.tab = tabComment }},
 		{"files", func(m *model) { m.setView(viewFiles) }},
 		{"comments", func(m *model) {
 			m.setView(viewComments)
@@ -70,7 +70,7 @@ func layoutCases() []layoutCase {
 			m.setView(viewComments)
 			m.editSelectedDraft()
 		}},
-		{"zoom", func(m *model) { m.zoom = true; m.focus = focusDetail }},
+		{"zoom", func(m *model) { m.zoom = true; m.focus = focusDiff }},
 		{"help", func(m *model) { m.overlay = ovHelp }},
 		{"summary", func(m *model) { m.overlay = ovSummary }},
 		{"narrow-list", func(m *model) {}},
@@ -209,7 +209,7 @@ func TestPaletteFitsAndShowsShortcuts(t *testing.T) {
 func TestTabsStayInDetailPane(t *testing.T) {
 	for _, size := range sizes {
 		m := newMultiFileModel(t, size[0], size[1])
-		m.focus = focusDetail
+		m.focus = focusDiff
 		v := m.View().Content
 		for i, line := range strings.Split(v, "\n") {
 			if strings.Contains(line, "DIFF") && strings.Contains(line, "EXPL") {
@@ -224,6 +224,7 @@ func TestTabsStayInDetailPane(t *testing.T) {
 // TestSelectedFindingAlwaysVisibleAtSizes.
 func TestSelectedFindingAlwaysVisibleAtSizes(t *testing.T) {
 	m := newMultiFileModel(t, 80, 24)
+	m.focus = focusFindings // medium: the findings drawer must keep the selection visible
 	for i := 0; i < 15; i++ {
 		m.cursorDown()
 	}
@@ -244,6 +245,9 @@ func TestGoldenSnapshots(t *testing.T) {
 	}{
 		{"findings-120x35", 120, 35, func(m *model) {}},
 		{"browse-120x35", 120, 35, func(m *model) { m.browseFilePath("services/x/handler.go") }},
+		// chunk 3: footer-context goldens (1-line contextual footer verified visually)
+		{"footer-findings-120x35", 120, 35, func(m *model) {}},
+		{"footer-browse-120x35", 120, 35, func(m *model) { m.browseFilePath("services/x/handler.go") }},
 		{"palette-120x35", 120, 35, func(m *model) { m.openPalette() }},
 		{"publish-120x35", 120, 35, func(m *model) { m.overlay = ovPublish }},
 		// chunk 6: width coverage across the plan's five layout sizes

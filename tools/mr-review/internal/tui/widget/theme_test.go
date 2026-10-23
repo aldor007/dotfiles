@@ -12,7 +12,7 @@ func TestDefaultMatchesLegacyPalette(t *testing.T) {
 	want := map[Token]string{
 		TokFocus: "39", TokOK: "78", TokWarn: "214", TokErr: "196",
 		TokPub: "213", TokHeld: "243", TokAccent: "39", TokSection: "63",
-		TokBorder: "240", TokBorderFocus: "39", TokMarker: "39", TokSel: "39",
+		TokBorder: "245", TokBorderFocus: "39", TokMarker: "39", TokSel: "39",
 		TokBranch: "39", TokSevP0: "196", TokSevP1: "203", TokSevP2: "214",
 		TokSevP3: "250", TokDecisionPending: "185", TokTabActiveBg: "39",
 		TokTabActiveFg: "235",

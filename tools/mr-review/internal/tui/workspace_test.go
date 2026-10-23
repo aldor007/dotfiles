@@ -46,6 +46,11 @@ func TestWorkspacePaneLifecycle(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("pane spawn must arm the exit watcher")
 	}
+	t.Cleanup(func() { // never leak the package-global pane into later tests
+		if wsPane != nil {
+			mm.closeTuicrPane()
+		}
+	})
 	if wsFocus != wsFocusTuicr {
 		t.Fatal("opening must focus the tuicr pane")
 	}
@@ -63,6 +68,7 @@ func TestWorkspacePaneLifecycle(t *testing.T) {
 	}
 
 	// key routing: while tuicr focused, 'j' goes to the pane, not the model
+	mm.focus = focusFindings // j would move the findings cursor if it leaked to the model
 	cur := mm.cursor
 	mm.Update(key("j"))
 	time.Sleep(150 * time.Millisecond)
@@ -75,6 +81,7 @@ func TestWorkspacePaneLifecycle(t *testing.T) {
 	if wsFocus != wsFocusCockpit {
 		t.Fatal("ctrl+g must return focus to the cockpit")
 	}
+	mm.focus = focusFindings // cockpit keys restored: j must move the findings cursor again
 	cur = mm.cursor
 	mm.Update(key("j"))
 	if mm.cursor != cur+1 {

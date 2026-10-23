@@ -15,11 +15,8 @@ import (
 	"time"
 
 	"mr-review/internal/store"
-	"mr-review/internal/tui/widget"
 
-	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
 // commentRow is one navigator entry.
@@ -187,62 +184,6 @@ func (m *model) selectedDraft() *store.DraftComment {
 
 func (m *model) hasDraftSel() bool { return m.selectedDraft() != nil }
 
-// ---- navigator view --------------------------------------------------------
-
-func (m *model) commentsView() []string {
-	w := m.listWidth()
-	h := m.bodyHeight() - 2
-	var out []string
-	hdr := fmt.Sprintf("COMMENTS · %d drafts · %d ready", len(m.comments), m.readyDraftCount())
-	if m.searchText != "" {
-		hdr += " · filter /" + m.searchText
-	}
-	if m.focus == focusList && m.leftView == viewComments {
-		out = append(out, styleBorderF.Render("● "+hdr))
-	} else {
-		out = append(out, styleDim.Render("○ "+hdr))
-	}
-	out = append(out, styleBorder.Render(strings.Repeat("─", max(4, w-2))))
-
-	rows := m.commentRows()
-	if len(rows) == 0 {
-		msg := "no comments yet — press c on a diff line"
-		if m.searchText != "" {
-			msg = "no comments match /" + m.searchText
-		}
-		out = append(out, centered(msg, w, h-2)...)
-		return m.padRows(out, h)
-	}
-	// keep the cursor visible (widget.List scroll math, legacy semantics)
-	l := widget.List{Cursor: m.commentCur, Len: len(rows)}
-	top, _ := l.Window(h - 2)
-	for i := top; i < len(rows) && len(out) < h; i++ {
-		r := rows[i]
-		var st string
-		switch r.kind {
-		case "draft":
-			st = decisionStyleOf(r.draft.State == store.CommentReady, r.draft.Publication != nil).Render(r.stateLabel())
-		case "finding":
-			st = styleOK.Render(r.stateLabel())
-			if r.finding.Publication != nil {
-				st = stylePublished.Render("published")
-			}
-		default:
-			st = styleDim.Render(r.stateLabel())
-		}
-		line := fmt.Sprintf("%s %s %s",
-			styleSel.Render(r.marker()),
-			truncPlain(r.loc, w/3),
-			truncPlain(r.text, max(8, w-lipgloss.Width(r.marker())-w/3-8)))
-		line = pad(line, w-10) + st
-		if i == m.commentCur {
-			line = styleCursor.Render(pad(cut(line, w), w))
-		}
-		out = append(out, line)
-	}
-	return m.padRows(out, h)
-}
-
 func (m *model) readyDraftCount() int {
 	n := 0
 	for i := range m.comments {
@@ -253,31 +194,10 @@ func (m *model) readyDraftCount() int {
 	return n
 }
 
-// ---- draft editor overlay --------------------------------------------------
-
-// draftEditor is the multi-line editor for manual comments.
-type draftEditor struct {
-	id         string // "" for a new draft
-	file       string
-	side       string
-	line       int
-	lineEnd    int
-	general    bool
-	published  bool // editing after publication: not allowed to change text? (allowed, re-publish dup-checked)
-	ta         textarea.Model
-	origText   string
-	armDiscard bool // unsaved-changes protection: first Esc warns
-}
-
-func (e *draftEditor) title() string {
-	if e.general {
-		return "GENERAL MR COMMENT"
-	}
-	if e.lineEnd > e.line {
-		return fmt.Sprintf("COMMENT — %s:%d-%d (%s side)", shortPath(e.file), e.line, e.lineEnd, e.side)
-	}
-	return fmt.Sprintf("COMMENT — %s:%d (%s side)", shortPath(e.file), e.line, e.side)
-}
+// ---- draft editor overlay ---------------------------------------------------
+// The editor itself (draftEditor state, rendering, key handling, preview)
+// lives in commenteditor.go. This file keeps the invocation paths: how a
+// comment request becomes an anchored editor.
 
 // startDraftComment opens the editor at the current location: the continuous
 // diff cursor (or visual range), else the selected finding's line.
@@ -305,7 +225,7 @@ func (m *model) startDraftComment() tea.Cmd {
 			end--
 		}
 		if start > end {
-			m.msg = "selection has no diff rows — move to a diff line (j/k)"
+			m.msg = "no diff lines here — press j/k to move to a hunk, then try again"
 			return nil
 		}
 		if doc[start].file != doc[end].file {
@@ -331,6 +251,7 @@ func (m *model) startDraftComment() tea.Cmd {
 		}
 	} else if f := m.current(); f != nil {
 		e.file, e.side, e.line, e.lineEnd = f.File, f.Side, f.Line, f.LineEnd
+		e.findingID = f.ID // the strip shows which finding the comment anchors at
 	} else {
 		m.msg = "select a diff location first (2 → files, enter; or gd)"
 		return nil
@@ -340,73 +261,6 @@ func (m *model) startDraftComment() tea.Cmd {
 
 func (m *model) startGeneralComment() tea.Cmd {
 	return m.openDraftEditor(&draftEditor{general: true})
-}
-
-func (m *model) openDraftEditor(e *draftEditor) tea.Cmd {
-	ta := textarea.New()
-	ta.Placeholder = "Write the comment (Markdown)…"
-	ta.MaxHeight = 10
-	ta.SetValue(e.origText)
-	ta.Focus()
-	e.ta = ta
-	m.draftEdit = e
-	m.cancelVisual()
-	return textarea.Blink
-}
-
-func (m *model) updateDraftEditor(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	e := m.draftEdit
-	switch msg.String() {
-	case "ctrl+s", "ctrl+enter":
-		text := strings.TrimSpace(e.ta.Value())
-		if text == "" {
-			m.msg = "comment is empty — nothing saved"
-			return m, nil
-		}
-		if err := m.saveDraft(e, text); err != nil {
-			m.msg = "save failed: " + err.Error()
-			return m, nil
-		}
-		m.draftEdit = nil
-		m.msg = "draft saved (ready to publish — see view 3)"
-		return m, m.bgPendingReload()
-	case "esc":
-		if strings.TrimSpace(e.ta.Value()) != strings.TrimSpace(e.origText) && !e.armDiscard {
-			e.armDiscard = true
-			m.msg = "unsaved changes — esc again discards, ctrl+s saves"
-			return m, nil
-		}
-		m.draftEdit = nil
-		m.msg = "comment discarded"
-		return m, m.bgPendingReload()
-	}
-	e.armDiscard = false
-	var cmd tea.Cmd
-	e.ta, cmd = e.ta.Update(msg)
-	return m, cmd
-}
-
-// saveDraft persists the draft (insert or update) atomically. The in-memory
-// list is authoritative within the session (mirrors setDecision/findings).
-func (m *model) saveDraft(e *draftEditor, text string) error {
-	cs := m.comments
-	found := false
-	for i := range cs {
-		if cs[i].ID == e.id && e.id != "" {
-			cs[i].Text = text
-			cs[i].UpdatedAt = store.Now()
-			found = true
-		}
-	}
-	if !found {
-		id := store.NextCommentID(cs)
-		cs = append(cs, store.NewDraftComment(id, e.file, e.side, e.line, e.lineEnd, e.general, text))
-	}
-	if err := store.SaveComments(m.dir, cs); err != nil {
-		return err
-	}
-	m.comments = cs
-	return nil
 }
 
 // editSelectedDraft opens the editor with the selected draft's text.
@@ -556,12 +410,12 @@ func (m *model) publishApproveCmd() tea.Cmd {
 
 func (m *model) startVisual() {
 	if m.browseFile == "" {
-		m.msg = "range selection works in the continuous diff (gd / file tree)"
+		m.msg = "switch to the diff first (gd, or 2 → file) to select a range"
 		return
 	}
 	m.visualOn = true
 	m.visualStart = m.diffCursor
-	m.msg = "range selection — j/k to extend, c to comment, esc cancels"
+	m.msg = "range selected — j/k to extend · c to comment · esc to cancel"
 }
 
 func (m *model) cancelVisual() {

@@ -2,6 +2,8 @@
 // ALL changed files flattened into one scrollable virtual document. File
 // headers separate the files; the cursor moves through everything with
 // j/k; comments, ranges, hunk marks and markers attach to any row.
+// Side-by-side (old|new) rendering lives in diffmode.go — a pure view
+// transform of this document.
 package tui
 
 import (
@@ -140,23 +142,20 @@ func (m *model) browseDiffContent(w int) []string {
 		return []string{styleSection.Render("DIFF — no changed files in this diff")}
 	}
 	h := m.browseViewportH()
-	top := m.detailTop[tabDiff]
+	top := m.detailTop[tabOverview]
 	if top > len(doc)-1 {
 		top = max(0, len(doc)-1)
 	}
 	if top < 0 {
 		top = 0
 	}
-	m.detailTop[tabDiff] = top
+	m.detailTop[tabOverview] = top
 	end := top + h
 	if end > len(doc) {
 		end = len(doc)
 	}
 
-	hint := "esc findings · [/] hunk · { } file · V range · c comment · m file · / search"
-	title := fmt.Sprintf("CONTINUOUS DIFF · file %d/%d · row %d/%d  %s",
-		m.browseFileIndex()+1, len(m.changedFiles()), m.diffCursor+1, len(doc), hint)
-	out := []string{styleSection.Render(cut(title, w))}
+	out := []string{styleSection.Render(cut(m.browseTitle(w), w))}
 
 	selLo, selHi := m.visualRange()
 	selFile := ""
@@ -164,32 +163,71 @@ func (m *model) browseDiffContent(w int) []string {
 		selFile = doc[selLo].file
 	}
 	marked := false
-	for i := top; i < end; i++ {
-		r := doc[i]
-		var line string
-		if r.header {
-			line = m.renderBrowseFileHeader(r.file, w)
-		} else {
-			line = m.renderBrowseLine(r.file, r.dl, i, selLo, selHi, selFile)
-		}
-		if i == m.diffCursor {
-			if plainMode() {
-				line = styleCursor.Render(pad(cut(stripANSIish(line), w), w))
+	var body []string
+	if m.sideBySideActive() {
+		body = m.renderBrowseSBS(w, doc, top, end, selLo, selHi, selFile)
+	} else {
+		gw := m.gutterWidth(doc)
+		for i := top; i < end; i++ {
+			r := doc[i]
+			var line string
+			if r.header {
+				line = m.renderBrowseFileHeader(r.file, w)
 			} else {
-				line = styleCursor.Render(pad(cut(line, w), w))
+				line = m.renderBrowseLine(r.file, r.dl, i, selLo, selHi, selFile, gw)
 			}
-			marked = true
+			if i == m.diffCursor {
+				if plainMode() {
+					line = styleCursor.Render(pad(cut(stripANSIish(line), w), w))
+				} else {
+					line = styleCursor.Render(pad(cut(line, w), w))
+				}
+				marked = true
+			}
+			body = append(body, cut(line, w))
 		}
-		out = append(out, cut(line, w))
 	}
+	// In side-by-side the cursor is marked inside the anchored half (accent
+	// bar + wash in renderBrowseSBS/renderSBSSide); every doc row in the
+	// window is covered by exactly one sbs row, so being in-window suffices.
+	if m.sideBySideActive() && m.diffCursor >= top && m.diffCursor < end {
+		marked = true
+	}
+	out = append(out, body...)
 	if !marked { // cursor scrolled out (shouldn't happen): show position
 		out = append(out, styleDim.Render(fmt.Sprintf("cursor at row %d/%d", m.diffCursor+1, len(doc))))
 	}
 	return out
 }
 
-// renderBrowseFileHeader renders one file header row of the continuous diff.
+// browseTitle builds the status line above the continuous diff: position,
+// mode chip, active range, search state and horizontal scroll indicator.
+func (m *model) browseTitle(w int) string {
+	doc := m.browseDoc()
+	title := fmt.Sprintf("CONTINUOUS DIFF · file %d/%d · row %d/%d",
+		m.browseFileIndex()+1, len(m.changedFiles()), m.diffCursor+1, len(doc))
+	if m.sideBySideActive() {
+		title += styleDim.Render(" · SBS")
+	}
+	if m.visualOn {
+		lo, hi := m.visualRange()
+		title += fmt.Sprintf(" · V rows %d–%d", lo+1, hi+1)
+	}
+	if m.searchText != "" {
+		title += fmt.Sprintf(" · /%s · %d matches", m.searchText, m.searchMatches())
+	}
+	if m.diffHOff > 0 {
+		title += styleDim.Render(fmt.Sprintf(" · → +%d", m.diffHOff))
+	}
+	hint := "esc findings · [/] hunk · { } file · V range · c comment · m file · / search"
+	return cutPlainLine(title+"  "+styleDim.Render(hint), w)
+}
+
+// renderBrowseFileHeader renders one file header row of the continuous diff:
+// `── path ── M · +a −d · reviewed · n findings · m comments`.
+// Binary/empty sections and renames are called out in the meta segment.
 func (m *model) renderBrowseFileHeader(path string, w int) string {
+	fd := m.diffParsed[path]
 	status := string(m.fileStatus(path))
 	style := styleDim
 	switch status {
@@ -200,30 +238,58 @@ func (m *model) renderBrowseFileHeader(path string, w int) string {
 	case "M":
 		style = lipglossYellow()
 	}
-	mark := " "
+	// display path: renames keep old → new when the parser provides it
+	disp := path
+	if fd != nil && fd.Rename && fd.OldPath != "" {
+		disp = fd.OldPath + " → " + path
+	}
+	head := styleSection.Render("── " + disp + " ──")
+
+	adds, dels := 0, 0
+	if fd != nil {
+		for _, l := range fd.Lines {
+			switch l.Kind {
+			case DiffAdd:
+				adds++
+			case DiffDel:
+				dels++
+			}
+		}
+	}
+	meta := style.Render(status) +
+		" · " + lipglossGreen().Render(fmt.Sprintf("+%d", adds)) +
+		" " + lipglossRed().Render(fmt.Sprintf("−%d", dels))
+	if fd != nil && fd.Binary {
+		meta += styleDim.Render(" · binary file — no text diff")
+	} else if fd != nil && len(fd.Lines) == 0 {
+		meta += styleDim.Render(" · no text changes")
+	}
 	if m.reviewedSet()[path] {
-		mark = "✓"
+		meta += " · " + plainOr("reviewed", styleOK.Render("✓ reviewed"))
 	}
-	fc := m.findingsPerFile()[path]
-	cc := m.commentsPerFile()[path]
-	meta := ""
-	if fc > 0 || cc > 0 {
-		meta = styleDim.Render(fmt.Sprintf("  · %d finding%s · %d comment%s",
-			fc, plural(fc), cc, plural(cc)))
+	if fc := m.findingsPerFile()[path]; fc > 0 {
+		meta += styleDim.Render(fmt.Sprintf(" · %d finding%s", fc, plural(fc)))
 	}
-	return cutPlainLine(fmt.Sprintf("%s %s %s%s",
-		style.Render(status), plainOr(mark, styleOK.Render(mark)),
-		styleSection.Render(path), meta), w)
+	if cc := m.commentsPerFile()[path]; cc > 0 {
+		meta += styleDim.Render(fmt.Sprintf(" · %d comment%s", cc, plural(cc)))
+	}
+	return cutPlainLine(head+" "+meta, w)
 }
 
-// renderBrowseLine renders one diff row with gutter + marker column.
-func (m *model) renderBrowseLine(path string, l DiffLine, idx, selLo, selHi int, selFile string) string {
+// renderBrowseHunkHeader renders an @@ header row: reviewed mark + dim text.
+func (m *model) renderBrowseHunkHeader(path, text string, w int) string {
+	mark := " "
+	if m.reviewedHunkSet()[fmt.Sprintf("%s|%d", path, hunkStartOf(text))] {
+		mark = "✓"
+	}
+	return clipPlain("     "+mark+" "+styleDim.Render(text), w)
+}
+
+// renderBrowseLine renders one unified diff row:
+// cursor bar | old no | new no | marker | sign | code.
+func (m *model) renderBrowseLine(path string, l DiffLine, idx, selLo, selHi int, selFile string, gw int) string {
 	if l.Kind == DiffHunkHeader {
-		mark := " "
-		if m.reviewedHunkSet()[fmt.Sprintf("%s|%d", path, hunkStartOf(l.Text))] {
-			mark = "✓"
-		}
-		return clipPlain(fmt.Sprintf("     %s %s", mark, l.Text), 200)
+		return m.renderBrowseHunkHeader(path, l.Text, 200)
 	}
 	side := "new"
 	if l.NewNo == 0 {
@@ -234,11 +300,20 @@ func (m *model) renderBrowseLine(path string, l DiffLine, idx, selLo, selHi int,
 		lineNo = l.OldNo
 	}
 	marker := m.markerForLine(path, side, lineNo)
+	if marker == "" && l.NewNo != 0 && l.OldNo != 0 {
+		// context rows exist on both sides: an old-side comment on a context
+		// line must still surface its marker (anchoring is per side).
+		marker = m.markerForLine(path, "old", l.OldNo)
+	}
 	if marker == "" {
 		marker = " "
 	}
 	inSel := m.visualOn && selFile == path && idx >= selLo && idx <= selHi
-	gutter := fmt.Sprintf("%4s %4s %s ", numStr(l.OldNo), numStr(l.NewNo), marker)
+	bar := " "
+	if idx == m.diffCursor {
+		bar = diffCursorBar()
+	}
+	gutter := bar + " " + numStrW(l.OldNo, gw) + " " + numStrW(l.NewNo, gw) + " " + marker + " "
 	col, mark := "", " "
 	switch l.Kind {
 	case DiffAdd:
@@ -246,12 +321,18 @@ func (m *model) renderBrowseLine(path string, l DiffLine, idx, selLo, selHi int,
 	case DiffDel:
 		col, mark = red, "-"
 	}
-	body := l.Text
+	plain := expandTabs(l.Text)
+	body := plain
 	if !plainMode() {
-		hl := HighlightedCodeLines(path, []string{l.Text}, false)
-		if len(hl) == 1 {
+		if hl := HighlightedCodeLines(path, []string{plain}, false); len(hl) == 1 {
 			body = hl[0]
 		}
+	}
+	if m.diffHOff > 0 { // horizontal scroll: gutter stays, code scrolls
+		body = skipCells(body, m.diffHOff)
+	}
+	if m.searchText != "" {
+		body = highlightMatches(body, plain, m.searchText)
 	}
 	line := gutter + col + mark + " " + body + reset
 	if inSel {

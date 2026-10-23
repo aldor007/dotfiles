@@ -23,7 +23,7 @@ func (m *model) copyText() (text, desc string, ok bool) {
 	case m.leftView == viewComments:
 		r := m.selectedRow()
 		if r == nil {
-			return "", "no comment selected", false
+			return "", "pick a comment first — j/k to navigate", false
 		}
 		switch r.kind {
 		case "draft":
@@ -37,11 +37,11 @@ func (m *model) copyText() (text, desc string, ok bool) {
 	case m.leftView == viewFiles:
 		p := m.treeSelection()
 		if p == "" {
-			return "", "no file selected", false
+			return "", "pick a file first — j/k in the Files view", false
 		}
 		return p, "file path", true
 
-	case m.focus == focusDetail && m.tab == tabDiff && m.browseFile != "":
+	case m.focus == focusDiff && m.tab == tabOverview && m.browseFile != "":
 		doc := m.browseDoc()
 		if len(doc) == 0 {
 			return "", "empty diff", false
@@ -73,7 +73,7 @@ func (m *model) copyText() (text, desc string, ok bool) {
 	default: // findings navigator
 		f := m.current()
 		if f == nil {
-			return "", "no finding selected", false
+			return "", "pick a finding first — j/k in the Findings view", false
 		}
 		return f.EffectiveComment(), "finding comment", true
 	}
@@ -84,7 +84,7 @@ func (m *model) copyText() (text, desc string, ok bool) {
 func (m *model) runCopy() tea.Cmd {
 	text, desc, ok := m.copyText()
 	if !ok {
-		m.msg = "nothing to copy — " + desc
+		m.msg = "tip — " + desc + ". pick something first, then press y to copy."
 		return nil
 	}
 	m.msg = fmt.Sprintf("copied %s (%d line(s))", desc, strings.Count(text, "\n")+1)

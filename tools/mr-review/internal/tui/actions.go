@@ -143,22 +143,21 @@ func recordDiscussion(dir, id, q, a string) error {
 
 // viewFileCmd opens a state file read-only in the editor (prompt, log).
 func (m *model) viewFileCmd(path, name string) tea.Cmd {
-	if _, err := os.Stat(path); err != nil {
+	data, err := os.ReadFile(path)
+	if err != nil {
 		m.msg = name + " not written yet"
 		return nil
 	}
-	ed := editorBin()
-	args := []string{ed}
-	if strings.HasSuffix(ed, "vim") {
-		args = append(args, "-R") // read-only in vim-family editors
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	const maxLines = 4000
+	if len(lines) > maxLines {
+		lines = append([]string{fmt.Sprintf("… file truncated: showing the LAST %d of %d lines", maxLines, len(lines))}, lines[len(lines)-maxLines:]...)
 	}
-	args = append(args, path)
-	return tea.ExecProcess(exec.Command(args[0], args[1:]...), func(err error) tea.Msg {
-		if err != nil {
-			return childDoneMsg{err: err, note: "viewer failed"}
-		}
-		return childDoneMsg{note: "closed " + name}
-	})
+	m.viewerTitle = strings.ToUpper(name) + " — " + filepath.Base(path)
+	m.viewerLines = lines
+	m.viewerTop = 0
+	m.pushOverlay(ovViewer)
+	return nil
 }
 
 // cleanupCmd removes the review worktree (fast local git ops; state kept).
@@ -273,15 +272,10 @@ func (m *model) publishPreviewCmd() tea.Cmd {
 
 // publishRun hands off to the separate publisher binary.
 func (m *model) publishRun() tea.Cmd {
-	var approved int
-	for i := range m.findings {
-		f := &m.findings[i]
-		if f.Decision == "approved" && f.Publication == nil {
-			approved++
-		}
-	}
-	if approved == 0 {
-		m.msg = "nothing to publish: approve findings first (a)"
+	// the preview promises approved findings AND ready comments — the gate
+	// must match what the preview lists (comment-only publication is valid)
+	if publishableCount(m) == 0 {
+		m.msg = "nothing to publish: approve findings (a) or mark comments ready"
 		return nil
 	}
 	pubBin, err := publisherBinary()

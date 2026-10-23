@@ -56,13 +56,19 @@ func TestMouseCopyInDiff(t *testing.T) {
 func TestMouseWheelScrolls(t *testing.T) {
 	dir := writeReviewFixture(t, t.TempDir())
 	m := newSessionModel(t, dir)
+	// widen to the three-pane layout and aim the wheel at the findings pane
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 35})
+	m = out.(*model)
+	m = press(m, "3") // focus the findings pane: the wheel scrolls its list
+	L := m.layout()
+	fx := L.filesW + L.diffW + 6 + L.findingsW/2 // findings box center column
 	before := m.cursor
-	out, _ := m.Update(tea.MouseWheelMsg{X: 5, Y: 10, Button: tea.MouseWheelDown})
+	out, _ = m.Update(tea.MouseWheelMsg{X: fx, Y: 10, Button: tea.MouseWheelDown})
 	m = out.(*model)
 	if m.cursor <= before {
 		t.Fatalf("wheel down must move the findings cursor: %d → %d", before, m.cursor)
 	}
-	out, _ = m.Update(tea.MouseWheelMsg{X: 5, Y: 10, Button: tea.MouseWheelUp})
+	out, _ = m.Update(tea.MouseWheelMsg{X: fx, Y: 10, Button: tea.MouseWheelUp})
 	m = out.(*model)
 	if m.cursor != before {
 		t.Fatalf("wheel up must return the cursor to %d, got %d", before, m.cursor)

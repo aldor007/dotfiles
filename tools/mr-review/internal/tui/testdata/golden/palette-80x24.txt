@@ -1,18 +1,22 @@
-[1m!55868[m [2mfixed0sh[m REVIEW-810 Regional Spot Predictions
-[2mAI idle[m  [38;5;39mfeat/x → master[m  [38;5;39m✓ 0 / ⏳ 2[m
-┌────────────────────────────────────────────────────────────────────────┐
-│[1mACTIONS[m                                                                 │
-│[38;5;245m────────────────────────────────────────────────────────────────────────[m│
-│[7m  Approve finding                  approve the selected AI finding (loca[m│
-│  Reject finding                   reject the selected AI finding (local│
-│  Undo decision                    return the finding to pending        │
-│  Next pending finding             jump to the next pending finding     │
-│  Previous pending finding         jump to the previous pending finding │
-│  Discuss with AI                  ask the AI agent about this finding  │
-│  Edit suggested comment           edit the comment text of the selected│
-│  Open location in full diff       browse the continuous diff at the fin│
-│  Cycle sort                       severity → file → decision           │
-│  Filter findings                  menu: status + severity (f)          │
-└────────────────────────────────────────────────────────────────────────┘
-[1;38;5;63m[38;5;214mCOMMAND[m[m[2m · [m[38;5;39mLIST[m[2m · [m2 findings[2m  [m[2m? help · : commands · q quit[m[2m     [m[38;5;214mStatus: command p[m
-[38;5;245m┃ type to filter · ↑/↓ · enter run · esc close[m
+[2m[1m!55868 · REVIEW-810 Regional Spot Pr…[m  [2mfixed0sh[m  [2mAI idle[m[0m
+[2m  [38;5;39mfeat/x → master[m  [38;5;39m✓ 0 / ⏳ 2[m[0m
+[2m[38;5;39m╭──────────────────────╮[m [38;5;245m╭─────────────────────────────────────────────────────╮[m[0m
+[2m[38;5;39m│[2m○ [0m┌────────────────────────────────────────────────────────────────────────┐[2m  │[m[0m
+[2m[38;5;39m│[38;5;245m──[0m│[1mACTIONS[m                                                                 │[2m …[m│[m[0m
+[2m[38;5;39m│[7m[1;38;5;63m▾ [0m│[38;5;245m────────────────────────────────────────────────────────────────────────[m│[2m  │[m[0m
+[2m[38;5;39m│[1;38;5;63m  [0m│[7m  Approve finding                  approve the selected AI finding (loca│[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Reject finding                   reject the selected AI finding (local│[2m  [m│[m[0m
+[2m[38;5;39m│[1;38;5;63m  [0m│  Undo decision                    return the finding to pending        │[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Next pending finding             jump to the next pending finding     │[2m  │[m[0m
+[2m[38;5;39m│[1;38;5;63m  [0m│  Previous pending finding         jump to the previous pending finding │[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Discuss with AI                  ask the AI agent about this finding  │[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Edit suggested comment           edit the comment text of the selected│[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Open location in full diff       browse the continuous diff at the fin│[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Cycle sort                       severity → file → decision           │[2m  │[m[0m
+[2m[38;5;39m│  [0m│  Filter findings                  menu: status + severity (f)          │[2m  │[m[0m
+[2m[38;5;39m│  [0m│[38;5;245m────────────────────────────────────────────────────────────────────────[m│[2m  │[m[0m
+[2m[38;5;39m│  [0m│[37m: [m[7;37m [m                                                                     │[2m  │[m[0m
+[2m[38;5;39m│  [0m└────────────────────────────────────────────────────────────────────────┘[2m  │[m[0m
+[2m[38;5;39m╰──────────────────────╯[m [38;5;245m╰─────────────────────────────────────────────────────╯[m[0m
+[2m[1;38;5;63m[38;5;214mCOMMAND[m[m[2m · [m[38;5;39mFILES[m[2m · [m2 findings[2m  [m[2m? help · : commands · q quit[m[2m    [m[38;5;214mStatus: command p[0m
+[2m[48;5;236m┃ type to filter · ↑/↓ · enter run · esc close                                  [m[0m

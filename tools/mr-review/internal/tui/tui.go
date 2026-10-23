@@ -16,22 +16,15 @@ import (
 )
 
 // Detail tabs (right pane).
+// Chunk 2 (§2): collapsed from 5 → 2. Overview composes diff +
+// evidence + explanation + discussion summary; Comment is the editor.
 const (
-	tabDiff = iota
-	tabExplanation
-	tabEvidence
+	tabOverview = iota
 	tabComment
-	tabDiscussion
 	tabCount
 )
 
-var tabNames = []string{"Diff", "Explanation", "Evidence", "Comment", "Discussion"}
-
-// Focus targets.
-const (
-	focusList = iota
-	focusDetail
-)
+var tabNames = []string{"Overview", "Comment"}
 
 // Left-pane views (findings | files | comments | file's findings).
 const (
@@ -55,6 +48,8 @@ const (
 	ovInspector
 	ovExport
 	ovPalette
+	ovQueue
+	ovViewer
 )
 
 // Sort modes for the findings list.
@@ -134,6 +129,7 @@ func RunWorkspace(dir string) error {
 		visualStart: -1, wsAutoOpen: true,
 	}
 	m.rebuild()
+	m.startDiffFirst()
 	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err
@@ -182,6 +178,7 @@ func Run(dir string) error {
 		visualStart: -1,
 	}
 	m.rebuild()
+	m.startDiffFirst()
 	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err
@@ -265,6 +262,18 @@ type model struct {
 	ctxLines   int
 	diffHOff   int // horizontal scroll offset (cells) for the Diff tab
 
+	// side-by-side diff mode (session-scoped; rendered by diffmode.go).
+	// Only ACTIVE when the diff pane is wide enough — see sideBySideActive().
+	diffSideBySide       bool
+	gutterWCache         int // cached widest line-number column (per gutterWVer)
+	gutterWVer           int
+	browseSeeded         bool // render-time first-file seed has run (runs once)
+	viewerTitle          string
+	viewerLines          []string
+	viewerTop            int
+	overlaySavedFocus    int // pane context saved at the first pushOverlay
+	overlaySavedLeftView int
+
 	// changed-file tree + comment navigator state
 	tree         *fileTree
 	treeCursor   int
@@ -296,6 +305,7 @@ type model struct {
 	helpFilterOn    bool
 	helpFilterInput textinput.Model
 	helpFilter      string
+	helpTop         int // help overlay scroll offset (j/k/Ctrl-d/u)
 
 	// overlays with rich state
 	inspectorTop  int
@@ -433,6 +443,13 @@ func (m *model) Init() tea.Cmd {
 // actions) keep working: with an empty stack the field itself is the
 // current modal.
 func (m *model) pushOverlay(id int) {
+	// Entering the first overlay saves the pane context: overlays (Enter →
+	// floating finding view) may legitimately move focus while open, but
+	// closing must return the user to the pane they were in.
+	if len(m.overlayStack) == 0 {
+		m.overlaySavedFocus = m.focus
+		m.overlaySavedLeftView = m.leftView
+	}
 	m.overlayStack = append(m.overlayStack, id)
 	m.overlay = id
 }
@@ -449,6 +466,11 @@ func (m *model) popOverlay() {
 		m.overlay = m.overlayStack[n-1]
 	} else {
 		m.overlay = ovNone
+		// last overlay closed: return to the pane the user was in before the
+		// first overlay opened (Enter's floating view moves focus while open)
+		m.focus = m.overlaySavedFocus
+		m.leftView = m.overlaySavedLeftView
+		m.clampScrolls()
 	}
 }
 
@@ -493,7 +515,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.narrow = m.width < 90
+		m.narrow = m.width < 80
 		m.clampScrolls()
 		m.wsResize()
 		// force a full repaint: after a terminal resize the diff-based
@@ -710,27 +732,47 @@ func (m *model) updateOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case ovInspector:
+		// full finding actions INSIDE the floating window; esc/q/i exit
 		switch k {
 		case "esc", "q", "i":
 			m.popOverlay()
 			return m, nil
 		case "j", "down":
-			m.inspectorTop++
+			m.findingsDetailsScroll(2)
 			return m, nil
 		case "k", "up":
-			if m.inspectorTop > 0 {
-				m.inspectorTop--
-			}
+			m.findingsDetailsScroll(-2)
 			return m, nil
-		case "a":
-			m.popOverlay()
-			return m, m.setDecision("approved")
-		case "r":
-			m.popOverlay()
-			return m, m.setDecision("rejected")
+		case "ctrl+d":
+			m.findingsDetailsScroll(12)
+			return m, nil
+		case "ctrl+u":
+			m.findingsDetailsScroll(-12)
+			return m, nil
+		case "a", "r", "u":
+			id := ""
+			if f := m.current(); f != nil {
+				id = f.ID // stay on this finding inside the window
+			}
+			var cmd tea.Cmd
+			switch k {
+			case "a":
+				cmd = m.setDecision("approved")
+			case "r":
+				cmd = m.setDecision("rejected")
+			default:
+				cmd = m.setDecision("pending")
+			}
+			m.reselect(id) // cancel the auto-advance: the window stays put
+			return m, cmd
 		case "e":
 			m.popOverlay()
 			return m, m.startInlineCommentEdit()
+		case "y":
+			return m, m.runCopy()
+		case "d":
+			m.popOverlay()
+			return m, m.startDiscuss()
 		case "S":
 			m.popOverlay()
 			return m, m.stageTuicrCmd()
@@ -756,11 +798,29 @@ func (m *model) updateOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.popOverlay()
 			return m, nil
 		}
+		if k == "?" { // ? closes too (help floats; underlying focus untouched)
+			m.popOverlay()
+			return m, nil
+		}
 		if m.helpFilterOn {
 			var cmd tea.Cmd
 			m.helpFilterInput, cmd = m.helpFilterInput.Update(msg)
 			m.helpFilter = m.helpFilterInput.Value()
 			return m, cmd
+		}
+		switch k { // scroll the reference when it exceeds the box
+		case "j", "down":
+			m.helpScrollTo(1)
+			return m, nil
+		case "k", "up":
+			m.helpScrollTo(-1)
+			return m, nil
+		case "ctrl+d":
+			m.helpScrollTo(m.helpWindow())
+			return m, nil
+		case "ctrl+u":
+			m.helpScrollTo(-m.helpWindow())
+			return m, nil
 		}
 		m.popOverlay() // any other key closes
 		return m, nil
@@ -769,6 +829,29 @@ func (m *model) updateOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.popOverlay()
 			return m, nil
 		}
+	case ovViewer:
+		switch k {
+		case "esc", "q", "i":
+			m.popOverlay()
+			return m, nil
+		case "j", "down":
+			m.viewerTop++
+		case "k", "up":
+			if m.viewerTop > 0 {
+				m.viewerTop--
+			}
+		case "ctrl+d":
+			m.viewerTop += 15
+		case "ctrl+u":
+			m.viewerTop -= 15
+		}
+		return m, nil
+	case ovQueue:
+		if k == "esc" || k == "q" || k == "Q" {
+			m.popOverlay()
+			return m, nil
+		}
+		return m, nil // read-only: keys do nothing else while the queue is open
 	}
 	return m, nil
 }
@@ -798,10 +881,10 @@ func (m *model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.zoom = false
 			m.clampScrolls()
 			return m, nil
-		case m.narrow && m.focus == focusDetail:
-			m.focus = focusList
+		case m.narrow && m.focus == focusDiff:
+			m.focus = focusFindings
 			return m, nil
-		case m.leftView != viewFindings:
+		case m.focus == focusFindings && m.leftView != viewFindings:
 			m.setView(viewFindings)
 			return m, nil
 		}
@@ -876,7 +959,7 @@ func (m *model) jumpHunk(dir int) {
 		return
 	}
 	_, hl := DiffWindow(fd, f.Side, f.Line, f.LineEnd, m.ctxLines)
-	absIdx := m.detailTop[tabDiff] + hl // approximate absolute position
+	absIdx := m.detailTop[tabOverview] + hl // approximate absolute position
 	if dir < 0 {
 		// nearest header strictly above the current window
 		best := -1
@@ -886,18 +969,18 @@ func (m *model) jumpHunk(dir int) {
 			}
 		}
 		if best >= 0 {
-			m.detailTop[tabDiff] = max(0, best-1)
+			m.detailTop[tabOverview] = max(0, best-1)
 			return
 		}
 		if m.ctxLines < 200 {
 			m.ctxLines += 12
 		}
-		m.detailTop[tabDiff] = 0
+		m.detailTop[tabOverview] = 0
 		return
 	}
 	for i, l := range fd.Lines {
 		if l.Kind == DiffHunkHeader && i > absIdx+1 {
-			m.detailTop[tabDiff] = max(0, i-1)
+			m.detailTop[tabOverview] = max(0, i-1)
 			return
 		}
 	}
@@ -939,8 +1022,9 @@ func (m *model) reload() error {
 	if err != nil {
 		return err
 	}
-	m.findings, m.rev, m.comments = fs, rev, comments
+	m.rev, m.comments = rev, comments
 	m.remoteLoaded = false // remote notes may have changed too
+	m.ingestFindings(fs)   // ID-stable selection across the findings swap
 	m.rebuild()
 	return nil
 }

@@ -162,5 +162,38 @@ type = "plugin_action"
 command = "herdr-projects.open"
 description = "projects: agent mission board"
 
+# kimchi-remote: kimchi cloud workspaces as herdr machines.
+# Run `herdr plugin action invoke kimchi-remote.refresh-mine` once
+# after install so the picker shows only workspaces you own; thereafter
+# the startup hook keeps the list fresh.
+#   prefix+w       — open the workspace picker popup (your owned workspaces)
+#   prefix+shift+w — re-probe ownership and refresh the SSH aliases
+#   prefix+alt+w   — drop into an interactive `kimchi` REPL inside the
+#                    focused workspace as a split pane
+#   prefix+n       — create a new workspace (popup prompts for desc)
+[[keys.command]]
+key = "prefix+w"
+type = "plugin_action"
+command = "kimchi-remote.open-picker"
+description = "kimchi: pick a workspace"
+
+[[keys.command]]
+key = "prefix+shift+w"
+type = "plugin_action"
+command = "kimchi-remote.refresh-mine"
+description = "kimchi: refresh owned workspaces"
+
+[[keys.command]]
+key = "prefix+alt+w"
+type = "plugin_action"
+command = "kimchi-remote.open-worker-shell"
+description = "kimchi: open interactive worker (split)"
+
+[[keys.command]]
+key = "prefix+a"
+type = "plugin_action"
+command = "kimchi-remote.open-new-workspace"
+description = "kimchi: new workspace (popup)"
+
 [ui.toast]
 delivery = "terminal"

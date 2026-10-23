@@ -77,8 +77,8 @@ func TestFileTreeViewAndCounts(t *testing.T) {
 	if !strings.Contains(v, "services/") {
 		t.Fatal("directory rows missing")
 	}
-	if !strings.Contains(v, "1 finding") {
-		t.Fatal("finding counts missing")
+	if !strings.Contains(v, "1✦") {
+		t.Fatal("finding counts missing (compact chip expected)")
 	}
 	// reviewed marks appear after toggling
 	press(m, "2") // ensure files view (already there)
@@ -153,8 +153,8 @@ func TestBrowseModeOpenAndCursor(t *testing.T) {
 	if mm.browseFile != "services/x/handler.go" {
 		t.Fatalf("wrong browse file: %q", mm.browseFile)
 	}
-	if mm.focus != focusDetail || mm.tab != tabDiff {
-		t.Fatal("gd must focus the diff tab")
+	if mm.focus != focusDiff || mm.tab != tabOverview {
+		t.Fatal("gd must focus the overview tab")
 	}
 	v := mm.View().Content
 	if !strings.Contains(v, "markOffering") {
@@ -263,8 +263,8 @@ func TestVisualRangeComment(t *testing.T) {
 	if len(m.comments) != 1 || m.comments[0].LineEnd-m.comments[0].Line != 2 {
 		t.Fatalf("draft not saved with range: %+v", m.comments)
 	}
-	if m.comments[0].Origin != "human" || m.comments[0].State != store.CommentReady {
-		t.Fatalf("draft origin/state wrong: %+v", m.comments[0])
+	if m.comments[0].Origin != "human" || m.comments[0].State != store.CommentDraft {
+		t.Fatalf("draft origin/state wrong (save must start held, not ready): %+v", m.comments[0])
 	}
 	// persisted
 	cs, _ := store.LoadComments(m.dir)
@@ -302,9 +302,19 @@ func TestGeneralCommentViaPalette(t *testing.T) {
 	m.openPalette()
 	m.paletteInput.SetValue("general")
 	m.refreshPalette()
-	if len(m.paletteItems) == 0 || m.paletteItems[0].ID != "comments.general" {
-		t.Fatalf("general comment action missing from palette: %v", m.paletteItems)
+	var foundIdx = -1
+	for i, it := range m.paletteItems {
+		if it.ID == "comments.general" {
+			foundIdx = i
+			break
+		}
 	}
+	if foundIdx < 0 {
+		t.Fatalf("comments.general action missing from palette: %v", m.paletteItems)
+	}
+	// Select comments.general directly via the palette's own cursor (press j
+	// outside the palette navigates the findings list, not the palette).
+	m.paletteSel = foundIdx
 	m2, _ := m.Update(keyEnter)
 	mm := m2.(*model)
 	if mm.draftEdit == nil || !mm.draftEdit.general {
@@ -393,48 +403,48 @@ func TestCommentMarkersInDiffGutter(t *testing.T) {
 
 func TestViewSwitchingAndFocusRestore(t *testing.T) {
 	m := newMultiFileModel(t, 120, 35)
-	// 1/2/3 switch the left pane
-	press(m, "2")
+	// 1/2/3 focus the panes: 1 = files, 2 = diff, 3 = findings
+	press(m, "1")
 	if m.leftView != viewFiles {
-		t.Fatal("2 must show the file tree")
+		t.Fatal("1 must show the file tree")
 	}
 	press(m, "3")
-	if m.leftView != viewComments {
-		t.Fatal("3 must show the comment navigator")
+	if m.leftView != viewFindings || m.focus != focusFindings {
+		t.Fatal("3 must show the findings pane")
 	}
-	press(m, "1")
-	if m.leftView != viewFindings {
-		t.Fatal("1 must show findings")
+	press(m, "2")
+	if m.focus != focusDiff {
+		t.Fatal("2 must focus the diff pane")
 	}
 	// ctrl+h/l move focus between panes without changing the selection
 	m.cursor = 1
-	m.focus = focusDetail
 	press(m, "ctrl+h")
-	if m.focus != focusList {
-		t.Fatal("ctrl+h must focus the left pane")
+	if m.focus != focusFiles {
+		t.Fatal("ctrl+h must focus the files pane")
 	}
 	if m.cursor != 1 {
 		t.Fatal("focus change must not move the selection")
 	}
 	press(m, "ctrl+l")
-	if m.focus != focusDetail {
-		t.Fatal("ctrl+l must focus the detail pane")
+	if m.focus != focusDiff {
+		t.Fatal("ctrl+l must focus the diff pane")
 	}
 }
 
 func TestZoomPreservesState(t *testing.T) {
 	m := newMultiFileModel(t, 160, 45)
 	m.cursor = 1
-	m.tab = tabExplanation
+	m.tab = tabOverview
+	press(m, "2") // zoom maximizes the FOCUSED pane: focus the diff first
 	press(m, "z")
 	if !m.zoom {
 		t.Fatal("z must zoom")
 	}
 	v := m.View().Content
-	if !strings.Contains(v, "EXPLANATION") || strings.Contains(v, "FINDINGS ") {
-		t.Fatal("zoom must show only the detail pane")
+	if !strings.Contains(v, "● DIFF") || strings.Contains(v, "● FILES") || strings.Contains(v, "● FINDINGS") {
+		t.Fatal("zoom must show only the focused (diff) pane")
 	}
-	if m.cursor != 1 || m.tab != tabExplanation {
+	if m.cursor != 1 || m.tab != tabOverview {
 		t.Fatal("zoom must preserve selection and tab")
 	}
 	press(m, "z")
@@ -445,14 +455,17 @@ func TestZoomPreservesState(t *testing.T) {
 
 func TestInspectorOverlay(t *testing.T) {
 	m := newMultiFileModel(t, 120, 35)
-	m.focus = focusList
+	m.focus = focusFindings
 	press(m, "i")
 	if m.overlay != ovInspector {
 		t.Fatal("i must open the inspector")
 	}
 	v := m.View().Content
-	for _, want := range []string{"F001", "P2", "file:", "state:", "wrong order", "evidence"} {
-		if !strings.Contains(v, want) && !strings.Contains(strings.ToLower(v), strings.ToLower(want)) {
+	sv := stripANSIish(v) // the actions footer separates segments with styled " · "
+	// the floating view renders the full details-region format (formatted
+	// explanation, status pill, actions) at a large window size
+	for _, want := range []string{"F001", "P2", "STATUS", "pending", "wrong order", "EVIDENCE", "a approve · r reject"} {
+		if !strings.Contains(sv, want) && !strings.Contains(strings.ToLower(sv), strings.ToLower(want)) {
 			t.Fatalf("inspector missing %q", want)
 		}
 	}
@@ -488,11 +501,21 @@ func TestSearchFilterAcrossViews(t *testing.T) {
 
 func TestFindingToDiffAndBack(t *testing.T) {
 	m := newMultiFileModel(t, 120, 35)
-	m.focus = focusList
-	// enter → details
+	m.focus = focusFindings
+	// enter → details: jumps the diff AND opens the floating finding view
 	press(m, "enter")
-	if m.focus != focusDetail {
+	if m.focus != focusDiff {
 		t.Fatal("enter must focus details")
+	}
+	if m.topOverlay() != ovInspector {
+		t.Fatal("enter must open the floating finding view")
+	}
+	if !strings.Contains(stripANSIish(m.View().Content), "F001") {
+		t.Fatal("floating view must show the finding")
+	}
+	press(m, "esc") // close the floating view; diff location persists
+	if m.topOverlay() != ovNone {
+		t.Fatal("esc must close the floating view")
 	}
 	// gd → browse the finding's location
 	press(m, "gd")
@@ -557,7 +580,7 @@ func TestContinuousDiffAcrossFiles(t *testing.T) {
 	m3 := newMultiFileModel(t, 120, 35)
 	m3.browseFilePath("services/x/handler.go")
 	m3.searchText = "newCall" // only exists in services/y/service.go
-	m3.focus = focusDetail
+	m3.focus = focusDiff
 	m3.searchJump(1)
 	if m3.browseFile != "services/y/service.go" {
 		t.Fatalf("diff search must cross files, got %q", m3.browseFile)
