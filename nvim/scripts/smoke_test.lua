@@ -558,36 +558,74 @@ end)
 
 -- Cold-mode DAP checks (audit §3 testing gap): with SMOKE_COLD=1, no
 -- plugins are force-loaded. The very thing this verifies is whether
--- mason-nvim-dap.nvim and nvim-dap-ui actually load via their natural
+-- mason-nvim-dap.nvim and nvim-dap-ui actually loaded via their natural
 -- triggers (event = "VeryLazy") after UiEnter. The force-load path
 -- hides this — these checks only run in cold mode.
+--
+-- IMPORTANT: we cannot use `pcall(require, "mason-nvim-dap")` to probe
+-- load state — require() itself triggers lazy.nvim to load the plugin
+-- on demand, masking whether the natural trigger fired. The check below
+-- reads lazy.nvim's plugin table directly via `require("lazy.core.config")`,
+-- which records `loaded = true` only when the actual trigger fired (or
+-- the user called require() in the test, which we do NOT).
 if SMOKE_COLD then
-  check("DAP: mason-nvim-dap loaded (event=VeryLazy)", function()
-    local ok = pcall(require, "mason-nvim-dap")
-    assert(ok, "mason-nvim-dap not loaded — VeryLazy trigger did not fire")
+  -- Helper: returns true iff lazy.nvim has the plugin as `loaded`. We
+  -- deliberately do NOT call require() ourselves before this check — the
+  -- whole point is to assert the natural trigger loaded it.
+  local function lazy_loaded(name)
+    local lazy_config = require("lazy.core.config")
+    local plugin = lazy_config.plugins and lazy_config.plugins[name]
+    return plugin ~= nil and plugin.loaded == true
+  end
+
+  check("DAP: mason-nvim-dap.nvim loaded via natural trigger (event=VeryLazy)", function()
+    assert(lazy_loaded("mason-nvim-dap.nvim"),
+      "mason-nvim-dap.nvim.loaded is false in lazy.core.config — " ..
+      "the VeryLazy trigger did not fire (or the spec lost its event=). " ..
+      "This is the audit P1 cold-mode check; pcall(require) would mask it.")
   end)
 
-  check("DAP: nvim-dap-ui loaded (event=VeryLazy)", function()
-    local ok = pcall(require, "dapui")
-    assert(ok, "dapui not loaded — VeryLazy trigger did not fire")
+  check("DAP: nvim-dap-ui loaded via natural trigger (event=VeryLazy)", function()
+    assert(lazy_loaded("nvim-dap-ui"),
+      "nvim-dap-ui.loaded is false in lazy.core.config — " ..
+      "the VeryLazy trigger did not fire (or the spec lost its event=).")
   end)
 
-  -- The killer check: simulate a user pressing ,dc and verify that
-  -- nvim-dap's keybinding resolves to a real callable (i.e. the bridge
-  -- and the core loaded via the keys= trigger). If mason-nvim-dap never
-  -- loaded, dap.continue() would still exist (it's core nvim-dap) but
-  -- adapters would not be registered. We probe the listener registry.
-  check("DAP: ,dc handler can run after VeryLazy (no require cycle)", function()
-    -- require('dap') will trigger lazy.nvim to load nvim-dap via its
-    -- keys= entry. If we reach here without an error, the bridge and
-    -- core are wired correctly.
+  -- If both bridges loaded under their natural triggers, require dap and
+  -- inspect the listener registry for dapui_config — its presence
+  -- confirms the UI plugin's config() function ran (which is where the
+  -- listeners are registered). After the require(), re-check lazy_loaded
+  -- to ensure lazy.nvim itself wasn't broken.
+  check("DAP: dapui_config listeners registered (UI plugin ran config)", function()
+    -- It's fine to require dap here — the bridges are already loaded by
+    -- the natural triggers, and this require is checking that the user
+    -- path (which is also a require) works end-to-end.
     local ok, dap = pcall(require, "dap")
-    assert(ok and type(dap.continue) == "function", "dap.continue missing")
-    -- Verify DAP event listeners exist (set by dapui_config when its
-    -- config function ran; existence of any listener proves dapui loaded).
-    local listeners = require("dap").listeners
-    assert(listeners and listeners.after and listeners.before,
-      "dap listeners table missing — dapui never registered its hooks")
+    assert(ok, "require('dap') failed: " .. tostring(dap))
+    assert(type(dap.continue) == "function", "dap.continue missing — nvim-dap didn't fully load")
+    local after = dap.listeners and dap.listeners.after
+    local before = dap.listeners and dap.listeners.before
+    assert(type(after) == "table" and type(before) == "table",
+      "dap.listeners.after/before missing — dapui_config never ran")
+    -- The dapui_config handler registers specifically on these events.
+    -- Verify it's there by looking for the registration in either.
+    local function has(list, event)
+      return list[event] ~= nil and list[event].dapui_config ~= nil
+    end
+    local ok_init = has(after, "event_initialized")
+    local ok_term = has(before, "event_terminated") or has(before, "event_exited")
+    assert(ok_init,
+      "dap.listeners.after.event_initialized.dapui_config missing — UI auto-open listener not registered")
+    assert(ok_term,
+      "dap.listeners.before.event_{terminated,exited}.dapui_config missing — UI auto-close listener not registered")
+  end)
+
+  check("DAP: lazy.nvim plugin table still consistent post-checks", function()
+    local lazy_config = require("lazy.core.config")
+    -- Touch lazy.health to ensure the module is alive after the cold load.
+    local ok = pcall(require, "lazy.health")
+    assert(ok and lazy_config.plugins["mason-nvim-dap.nvim"] ~= nil,
+      "lazy.nvim plugin table missing mason-nvim-dap after cold checks")
   end)
 end
 

@@ -25,24 +25,34 @@ return {
       end
       require("neo-tree").setup(opts)
     end,
-    opts = {
-      close_if_last_window = true,
-      enable_git_status = true,      -- per-node git symbols in the tree
-      enable_diagnostics = false,    -- diagnostics live in trouble
-      window = { position = "left", width = 36 },
-      events = {
-        -- Filenames can contain a newline (agent-created junk); nui refuses
-        -- multi-line items and the renderer crashed (nvim_buf_set_lines).
-        -- Show the byte escaped so the entry stays visible AND openable
-        -- (opening uses node.path, which we leave untouched).
-        before_render = function(nodes)
-          for _, node in ipairs(nodes) do
-            if node and node.name and node.name:find("\n") then
+    -- Neo-tree's before_render event: under `event_handlers` (a list of
+    -- {event, handler} pairs at the top level of the setup call), NOT
+    -- under `filesystem` and NOT the docs-doesn't-document-it `events`
+    -- option (which silently does nothing — the previous config was a
+    -- no-op for this reason). The handler receives `state`, not a nodes
+    -- list, so we walk state.tree to escape newlines in filenames.
+    -- Opening still uses node.path, which we leave untouched.
+    event_handlers = {
+      {
+        event = "before_render",
+        handler = function(state)
+          local tree = state and state.tree
+          if not (tree and tree.get_nodes) then
+            return
+          end
+          for _, node in ipairs(tree:get_nodes()) do
+            if node and node.name and node.name:find("\n", 1, true) then
               node.name = node.name:gsub("\n", "\\n")
             end
           end
         end,
       },
+    },
+    opts = {
+      close_if_last_window = true,
+      enable_git_status = true,      -- per-node git symbols in the tree
+      enable_diagnostics = false,    -- diagnostics live in trouble
+      window = { position = "left", width = 36 },
       default_component_configs = {
         icon = {
           -- provider using the already-installed mini.icons (no duplicate

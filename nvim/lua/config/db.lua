@@ -7,13 +7,16 @@
 -- gitignored local/projects.env (scripts/dotfiles-init.sh) — not from git.
 local M = {}
 
--- Repo root resolved from the live config dir (stdpath("config") is the
--- symlinked nvim/ inside the repo when installed via install.sh, so its
--- parent IS the repo root) — no hardcoded ~/dotfiles. DOTFILES_DIR env
--- overrides when running that config from elsewhere.
+-- Repo root resolved from the live config dir. stdpath("config") is
+-- the symlinked nvim/ inside the repo when installed via install.sh, so
+-- we must resolve the SYMLINK to find the real repo root that owns
+-- local/projects.env (without this, `local/projects.env` lookup fails
+-- when nvim is symlinked from ~/.config/nvim → <repo>/nvim). DOTFILES_DIR
+-- env overrides when running that config from elsewhere.
 local function repo_root()
   local cfg = vim.fn.fnamemodify(vim.fn.stdpath("config"), ":p"):gsub("/+$", "")
-  local parent = vim.fn.fnamemodify(cfg, ":h")
+  local real = vim.uv.fs_realpath(cfg) or cfg
+  local parent = vim.fn.fnamemodify(real, ":h")
   if vim.fn.filereadable(parent .. "/local/projects.env") == 1 then
     return parent
   end
@@ -58,7 +61,11 @@ end
 -- vim.g.dbs would silently never land in g:.
 local dbs = {}
 function M.seed()
-  local job = vim.system({ "gcloud", "auth", "print-access-token" }, { text = true }, function(obj)
+  -- vim.system callbacks run in a fast-event context where vim.g, vim.notify
+  -- and vim.cmd can hit E5560 ("vim.api.* must not be called in a fast event
+  -- context"). vim.schedule_wrap defers the body to the main loop. Audit
+  -- finding P1. The wrap also returns the job so callers can :wait().
+  local on_done = vim.schedule_wrap(function(obj)
     if obj.code ~= 0 then
       return
     end
@@ -90,7 +97,7 @@ function M.seed()
     vim.g.dbs = dbs
     vim.notify("db: registered " .. #ENVS .. " connections (IAM token, ~1h)", vim.log.levels.INFO)
   end)
-  return job
+  return vim.system({ "gcloud", "auth", "print-access-token" }, { text = true }, on_done)
 end
 
 ---Check which env tunnels are up and notify the exact command to bring
@@ -100,19 +107,23 @@ end
 function M.check_tunnels()
   local pending = #ENVS
   local down = {}
+  -- Same fast-event context fix as M.seed.
+  local on_result = vim.schedule_wrap(function(env, obj)
+    if obj.code ~= 0 then
+      down[#down + 1] = env
+    end
+    pending = pending - 1
+    if pending == 0 and #down > 0 then
+      vim.notify(
+        "db: tunnel(s) down: " .. table.concat(down, ", ")
+          .. " — start in a terminal:  sql-db.sh --env <env> --fg",
+        vim.log.levels.WARN
+      )
+    end
+  end)
   for _, env in ipairs(ENVS) do
     vim.system({ SCRIPT, "--env", env }, { text = true }, function(obj)
-      if obj.code ~= 0 then
-        down[#down + 1] = env
-      end
-      pending = pending - 1
-      if pending == 0 and #down > 0 then
-        vim.notify(
-          "db: tunnel(s) down: " .. table.concat(down, ", ")
-            .. " — start in a terminal:  sql-db.sh --env <env> --fg",
-          vim.log.levels.WARN
-        )
-      end
+      on_result(env, obj)
     end)
   end
 end
@@ -122,7 +133,7 @@ end
 ---@param env string
 function M.use_env(env)
   dbs[env] = nil -- force a fresh resolve; re-added on success below
-  local job = vim.system({ SCRIPT, "--env", env, "--dsn" }, { text = true }, function(obj)
+  local on_done = vim.schedule_wrap(function(obj)
     local out = (obj.stdout or "") .. (obj.stderr or "")
     if obj.code ~= 0 then
       vim.notify("sql-db: " .. out:gsub("%s+", " "):sub(1, 300), vim.log.levels.ERROR)
@@ -140,7 +151,7 @@ function M.use_env(env)
     vim.notify("db: connected to " .. env, vim.log.levels.INFO)
     pcall(vim.cmd, "DB")
   end)
-  return job
+  return vim.system({ SCRIPT, "--env", env, "--dsn" }, { text = true }, on_done)
 end
 
 ---Tunnel teardown helper: scripts/sql-db.sh --stop (PID-file based, only

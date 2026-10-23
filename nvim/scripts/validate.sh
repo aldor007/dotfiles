@@ -145,6 +145,17 @@ else
   fail=1
 fi
 
+step "4b/6 Cold-start smoke test (audit §3 testing gap)"
+# SMOKE_COLD=1 verifies that plugins load via their natural triggers
+# (events, keys, commands) — not the force-load path. Catches lazy-load
+# bugs like the mason-nvim-dap-with-no-trigger class that the original
+# smoke test concealed by force-loading every plugin.
+if timeout 300 env SMOKE_COLD=1 "${NV[@]}" --headless "+luafile $NVIM_DIR/scripts/smoke_test.lua" 2>&1; then
+  :
+else
+  fail=1
+fi
+
 step "5/6 checkhealth (errors only)"
 health_file="${ISO_ROOT:-/tmp}/nvim-health.txt"
 if timeout 120 "${NV[@]}" --headless "+checkhealth" "+w! $health_file" +qa >/dev/null 2>&1; then

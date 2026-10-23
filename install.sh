@@ -369,10 +369,24 @@ function install_herdr {
     # local/herdr-kimchi-remote/ and gets installed by path so the
     # prefix+w / prefix+shift+w / prefix+alt+w / prefix+a bindings in
     # config.toml resolve. Audit finding P1 (plugin listed but never
-    # installed). Falls back to a clean no-op if the local source is
-    # absent (e.g. someone removes it from a future branch).
+    # installed). Falls back to a CLEAR WARNING (not a silent skip) when
+    # the local source is absent — the previous silent skip left a clean
+    # install reporting success while four keybindings pointed at a
+    # missing plugin. The validate step below proves the install actually
+    # took effect.
     if [ -d "$REPO_DIR/local/herdr-kimchi-remote" ]; then
         run herdr plugin install --yes --path "$REPO_DIR/local/herdr-kimchi-remote"
+        # Validate the install actually landed — a clean clone should not
+        # report successful setup while configured shortcuts are unresolved.
+        if herdr plugin list 2>/dev/null | grep -q "kimchi-remote"; then
+            echo "install_herdr: kimchi-remote installed and discoverable"
+        else
+            echo "install_herdr: WARNING kimchi-remote install ran but the plugin is not discoverable via 'herdr plugin list' — bindings prefix+w / prefix+shift+w / prefix+alt+w / prefix+a will fail at runtime" >&2
+        fi
+    else
+        echo "install_herdr: WARNING local/herdr-kimchi-remote/ not present in this checkout" >&2
+        echo "install_herdr:          the four prefix+w/-shift+w/-alt+w/-a keybindings in .config/herdr/config.toml point at the kimchi-remote plugin and will be no-ops until the source directory exists." >&2
+        echo "install_herdr:          to fix: git clone https://github.com/castai/kimchi-remote into local/herdr-kimchi-remote and re-run install.sh -i herdr" >&2
     fi
     run mkdir -p "$HOME/.config/herdr"
     link_or_backup "$REPO_DIR/.config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
