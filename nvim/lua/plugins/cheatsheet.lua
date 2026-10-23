@@ -37,6 +37,7 @@ return {
         "-- Code inspection (read AI changes & large repos)",
         "  ,o symbol outline (aerial) · ,on outline nav",
         "  ,xx workspace diagnostics · ,xX buffer diagnostics · ,xs document symbols (trouble)",
+        "  ,tt nearest test · ,tf test file · ,to output · ,ts summary · ,tx stop (neotest, Go)",
         "  treesitter-context pins the enclosing function/signature above the view (auto)",
         "  gitsigns ]h/[h hunk jumps · ,hp hunk preview — fastest way to review agent edits",
         "",
