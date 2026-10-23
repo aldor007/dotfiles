@@ -7,29 +7,63 @@
 -- gitignored local/projects.env (scripts/dotfiles-init.sh) — not from git.
 local M = {}
 
--- Repo root resolved from the live config dir. stdpath("config") is
--- the symlinked nvim/ inside the repo when installed via install.sh, so
--- we must resolve the SYMLINK to find the real repo root that owns
--- local/projects.env (without this, `local/projects.env` lookup fails
--- when nvim is symlinked from ~/.config/nvim → <repo>/nvim). DOTFILES_DIR
--- env overrides when running that config from elsewhere.
-local function repo_root()
+-- Repo root resolved deterministically. The previous version gated on
+-- `local/projects.env` (a generated, gitignored file) which means a
+-- fresh clone with no projects.env falls back to `~/dotfiles` (or
+-- whatever DOTFILES_DIR points to) even when those paths do not contain
+-- the tracked scripts/sql-db.sh. Fix: probe in order of preference,
+-- accepting the first location that owns the TRACKED marker
+-- scripts/sql-db.sh. That file exists in the repo from day one.
+--
+-- Precedence (first match wins):
+--   1. Valid explicit DOTFILES_DIR override whose scripts/sql-db.sh exists.
+--   2. Repo derived from stdpath('config') via vim.uv.fs_realpath
+--      (handles the ~/.config/nvim → <repo>/nvim symlink chain that
+--      install.sh sets up), validated by the marker.
+--   3. ~/dotfiles, validated by the marker.
+-- If none has the marker, return nil — the caller surfaces a useful error.
+local function find_repo_root()
+  local candidates = {}
+  if vim.env.DOTFILES_DIR and vim.env.DOTFILES_DIR ~= "" then
+    table.insert(candidates, vim.env.DOTFILES_DIR)
+  end
   local cfg = vim.fn.fnamemodify(vim.fn.stdpath("config"), ":p"):gsub("/+$", "")
   local real = vim.uv.fs_realpath(cfg) or cfg
-  local parent = vim.fn.fnamemodify(real, ":h")
-  if vim.fn.filereadable(parent .. "/local/projects.env") == 1 then
-    return parent
+  table.insert(candidates, vim.fn.fnamemodify(real, ":h"))
+  table.insert(candidates, vim.fn.expand("~/dotfiles"))
+  for _, candidate in ipairs(candidates) do
+    if candidate and candidate ~= "" and vim.fn.filereadable(candidate .. "/scripts/sql-db.sh") == 1 then
+      return candidate
+    end
   end
-  return vim.env.DOTFILES_DIR or vim.fn.expand("~/dotfiles")
+  return nil
 end
 
-local ROOT = repo_root()
-local SCRIPT = ROOT .. "/scripts/sql-db.sh"
-local ENV_FILE = ROOT .. "/local/projects.env"
+local ROOT = find_repo_root()
+local SCRIPT = ROOT and (ROOT .. "/scripts/sql-db.sh") or nil
+local ENV_FILE = ROOT and (ROOT .. "/local/projects.env") or nil
+
+if not ROOT then
+  -- Surface the missing-marker error eagerly. Without this, every
+  -- downstream call would fail with a less actionable message.
+  vim.api.nvim_create_autocmd("VimEnter", {
+    once = true,
+    callback = function()
+      local tried = {}
+      if vim.env.DOTFILES_DIR then table.insert(tried, "DOTFILES_DIR=" .. vim.env.DOTFILES_DIR) end
+      table.insert(tried, "repo from stdpath(config)")
+      table.insert(tried, "~/dotfiles")
+      vim.notify(
+        "db: cannot locate repo root (no scripts/sql-db.sh found at " .. table.concat(tried, ", ") .. "). Run scripts/dotfiles-init.sh or set DOTFILES_DIR.",
+        vim.log.levels.ERROR
+      )
+    end,
+  })
+end
 
 local function load_env_file()
   local out = {}
-  if vim.fn.filereadable(ENV_FILE) == 1 then
+  if ENV_FILE and vim.fn.filereadable(ENV_FILE) == 1 then
     for _, line in ipairs(vim.fn.readfile(ENV_FILE)) do
       local k, v = line:match("^([%w_]+)=(.*)$")
       if k and v then
@@ -105,6 +139,9 @@ end
 ---terminal (sql-db.sh --fg); it cannot be backgrounded from nvim. Called on
 ---`User DBUIOpened`.
 function M.check_tunnels()
+  if not SCRIPT then
+    return
+  end
   local pending = #ENVS
   local down = {}
   -- Same fast-event context fix as M.seed.
@@ -132,6 +169,12 @@ end
 ---Also registers the env in g:dbs so :DBUIToggle shows it (fresh token).
 ---@param env string
 function M.use_env(env)
+  if not SCRIPT then
+    vim.schedule(function()
+      vim.notify("db: cannot connect (no scripts/sql-db.sh found)", vim.log.levels.ERROR)
+    end)
+    return
+  end
   dbs[env] = nil -- force a fresh resolve; re-added on success below
   local on_done = vim.schedule_wrap(function(obj)
     local out = (obj.stdout or "") .. (obj.stderr or "")
@@ -156,9 +199,35 @@ end
 
 ---Tunnel teardown helper: scripts/sql-db.sh --stop (PID-file based, only
 ---kills tunnels this script started).
+---
+---Bug fixed: the previous version called vim.system() with NO on_exit
+---callback and immediately vim.notify("db: tunnels stopped", INFO).
+---That fired success BEFORE the script ran — and on failure it still
+---claimed success. Correct shape: callback observes the exit code, and
+---the notify runs ONLY after the process actually completes, scheduled
+---on the main loop (vim.system callbacks run in a fast-event context
+---where vim.notify / vim.api.* is forbidden — E5560).
 function M.stop()
-  vim.system({ SCRIPT, "--stop" })
-  vim.notify("db: tunnels stopped", vim.log.levels.INFO)
+  if not SCRIPT then
+    vim.schedule(function()
+      vim.notify("db: cannot stop tunnels (no scripts/sql-db.sh found — install.sh not run?)",
+        vim.log.levels.ERROR)
+    end)
+    return
+  end
+  local on_exit = vim.schedule_wrap(function(obj)
+    -- Truncate stderr aggressively; never echo full DSNs (the script's
+    -- --stop doesn't print them, but a future regression could).
+    local stderr_safe = (obj.stderr or ""):gsub("%s+", " "):sub(1, 200)
+    if obj.code ~= 0 then
+      vim.notify("db: stop failed (exit " .. tostring(obj.code) .. ")"
+        .. (stderr_safe ~= "" and (": " .. stderr_safe) or ""),
+        vim.log.levels.ERROR)
+      return
+    end
+    vim.notify("db: tunnels stopped (no tracked tunnels running)", vim.log.levels.INFO)
+  end)
+  vim.system({ SCRIPT, "--stop" }, { text = true }, on_exit)
 end
 
 return M

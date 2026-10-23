@@ -386,7 +386,9 @@ function install_herdr {
     else
         echo "install_herdr: WARNING local/herdr-kimchi-remote/ not present in this checkout" >&2
         echo "install_herdr:          the four prefix+w/-shift+w/-alt+w/-a keybindings in .config/herdr/config.toml point at the kimchi-remote plugin and will be no-ops until the source directory exists." >&2
-        echo "install_herdr:          to fix: git clone https://github.com/castai/kimchi-remote into local/herdr-kimchi-remote and re-run install.sh -i herdr" >&2
+        echo "install_herdr:          to fix: clone the kimchi-remote plugin to local/herdr-kimchi-remote/ (it's not on github) and re-run install.sh -i herdr." >&2
+        echo "install_herdr:          Either: git init && git remote add origin <your-internal-mirror> in local/herdr-kimchi-remote/" >&2
+        echo "install_herdr:          or copy the plugin files from a peer who has them, then re-run install.sh." >&2
     fi
     run mkdir -p "$HOME/.config/herdr"
     link_or_backup "$REPO_DIR/.config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
