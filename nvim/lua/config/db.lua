@@ -140,10 +140,11 @@ function M.seed()
     end
     for _, envname in ipairs(ENVS) do
       -- encode the FULL DB_USER (no hardcoded domain): IAM login uses the
-      -- principal's own email as the username
+      -- principal's own email as the username. The raw DSN must include both
+      -- the escaped username and the minted token as the password.
       local user_enc = DB_USER:gsub("@", "%%40")
       dbs[envname] = string.format(
-        "postgres://%s:%s@127.0.0.1:%d/%s?sslmode=require",
+        "%s:%s@127.0.0.1:%d/%s?sslmode=require",
         user_enc, token, port_by_env[envname], DB_NAME
       )
     end
