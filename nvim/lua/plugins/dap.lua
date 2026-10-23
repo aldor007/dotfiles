@@ -5,7 +5,10 @@ return {
   {
     "mfussenegger/nvim-dap",
     lazy = true,
-    dependencies = { "jay-babu/mason-nvim-dap.nvim" },
+    -- mason-nvim-dap is intentionally NOT a dependency: nvim-dap is the core
+    -- debugger; the bridge plugin (mason-nvim-dap) sits on top and must
+    -- depend on nvim-dap, never the other way around — audit finding P1.
+    dependencies = {},
     keys = {
       { "<leader>db", function() require("dap").toggle_breakpoint() end, desc = "dap: toggle breakpoint" },
       { "<leader>dc", function() require("dap").continue() end, desc = "dap: continue/start" },
@@ -21,7 +24,11 @@ return {
     lazy = true,
     dependencies = { "mason.nvim", "mfussenegger/nvim-dap" },
     opts = {
-      ensure_installed = { "delve", "debugpy" },
+      -- ensure_installed uses mason-nvim-dap's adapter IDs, not pip
+      -- distribution names: 'python' (not 'debugpy' — the adapter
+      -- registers itself under 'python' regardless of the underlying
+      -- library). audit finding P1.
+      ensure_installed = { "delve", "python" },
       automatic_setup = true,
       handlers = {},
     },

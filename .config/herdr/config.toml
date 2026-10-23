@@ -58,6 +58,38 @@ blue = "#0087ff"
 [ui.sound]
 enabled = false
 
+# Plugin keymap roles (audit P2 — navigation overlap):
+#   The plugins below all expose actions via prefix+<key>. They overlap
+#   conceptually; the design is "primary launcher per task, fuzzy palette
+#   for everything else", not "single menu":
+#
+#     primary nav   prefix+space   herdr-bar         — fuzzy jump to any
+#                                                tab / agent / workspace /
+#                                                repo / branch (Cmd+K style)
+#     primary cmds  prefix+b        command-center    — one popup listing
+#                                                every plugin action;
+#                                                discoverable, fuzzy
+#     workspaces    prefix+up       herdr-plus projects — one workspace
+#                                                per service (rendered by
+#                                                dotfiles-init.sh)
+#     quick actions prefix+down     herdr-plus quick-actions — worktree
+#                                                actions, db tunnels, etc.
+#     sidebars      prefix+e/f      herdr-nvim         — nvim split in a
+#                                                herdr sidebar pane
+#                 prefix+v        reviewr           — git diff/file viewer
+#                                                sidebar
+#     integrations prefix+i/+shift+i herdr-jira      — Jira tabs
+#                 prefix+shift+m/o glab-status        — MR status / open
+#                 prefix+shift+v   mr-review          — AI review popup
+#                 prefix+$         token-dashboard    — token spend
+#
+#   Decision (audit P2 finding, deferred): collapse any of these would
+#   require either dropping a feature or rebinding muscle memory across
+#   the existing config. Keeping all four launchers and explaining the
+#   intent here is the explicit choice — see herdr-plus quick-actions
+#   for the db-* shortcuts if you ever want a single entry point per
+#   service.
+
 # command-center plugin: one popup for all plugin actions
 [[keys.command]]
 key = "prefix+b"

@@ -29,17 +29,24 @@ return {
       -- the strict pre-merge/CI check). No-op when the binary is absent.
       vim.api.nvim_create_user_command("Kubeconform", function()
         local file = vim.fn.expand("%:p")
-        if not vim.fn.executable("kubeconform") then
+        -- vim.fn.executable() returns 1 or 0 (both truthy in Lua), so the
+        -- inverted check must use ~= 1 to detect a missing binary.
+        -- Audit finding P2 (truthiness bug).
+        if vim.fn.executable("kubeconform") ~= 1 then
           print("kubeconform not installed (brew install kubeconform)")
           return
         end
-        vim.fn.systemlist({ "kubeconform", "-strict", "-summary", file })
+        -- One invocation; -summary gives a one-line summary (status text),
+        -- and the regular output is the per-file diagnostic list. We print
+        -- both — the original code called kubeconform twice (once with
+        -- -summary, once without) which doubled validation time on large
+        -- manifests.
+        local out = vim.fn.systemlist({ "kubeconform", "-strict", "-summary", file })
         if vim.v.shell_error == 0 then
           print("kubeconform: valid manifest(s)")
         else
           print("kubeconform: validation errors (see output)")
         end
-        local out = vim.fn.systemlist({ "kubeconform", "-strict", file })
         print(table.concat(out, "\n"))
       end, { desc = "k8s: kubeconform current file" })
     end,

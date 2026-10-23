@@ -219,9 +219,13 @@ return {
     end,
     config = function(_, opts)
       require("telescope").setup(opts)
-      -- telescope is lazy-loaded; the notify extension hooks in when it is,
-      -- per nvim-notify README (manual load for lazy-loaded telescope).
+      -- telescope is lazy-loaded; the notify and fzf extensions hook in
+      -- when telescope loads. fzf-native.nvim was installed and built by
+      -- the spec above (make) but not loaded — that's the audit's P2
+      -- finding. Loading both keeps fuzzy matching fast for the
+      -- source-dir / worktree search scopes below.
       pcall(require("telescope").load_extension, "notify")
+      pcall(require("telescope").load_extension, "fzf")
     end,
   },
 

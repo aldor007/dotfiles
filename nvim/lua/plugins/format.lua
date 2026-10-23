@@ -13,12 +13,14 @@ return {
     keys = {
       {
         "<leader>cf",
-        function() require("conform").format({ async = true, lsp_fallback = true }) end,
+        -- lsp_format = "fallback" is the documented option name (the old
+        -- lsp_fallback = true was renamed). Audit finding P2.
+        function() require("conform").format({ async = true, lsp_format = "fallback" }) end,
         desc = "format: buffer",
       },
     },
     opts = {
-      format_on_save = { timeout_ms = 500, lsp_fallback = true },
+      format_on_save = { timeout_ms = 500, lsp_format = "fallback" },
       formatters_by_ft = {
         go = { "gofmt" },
         lua = { "stylua" },

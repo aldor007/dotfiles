@@ -30,7 +30,11 @@ return {
     event = "BufReadPre",
     dependencies = {
       "mason-org/mason.nvim",
-      "mason-org/mason-lspconfig.nvim",
+      -- mason-lspconfig.nvim is intentionally NOT a dependency: nvim-lspconfig
+      -- only needs Mason's rtp path, not the bridge plugin. Listing it here
+      -- creates a load-order cycle (mason-lspconfig.nvim deps lspconfig deps
+      -- mason-lspconfig.nvim) — audit finding P1. The bridge below still
+      -- runs setup before our overrides thanks to lazy.nvim's topo sort.
     },
     config = function()
       -- yamlls is NOT enabled here — yaml-companion owns it (k8s.lua does
