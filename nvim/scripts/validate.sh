@@ -53,10 +53,14 @@ ISO_ROOT=""
 if [ "$ISOLATED" = 1 ]; then
   ISO_ROOT=$(mktemp -d)
   trap 'rm -rf "$ISO_ROOT"' EXIT
-  mkdir -p "$ISO_ROOT/config" "$ISO_ROOT/data" "$ISO_ROOT/cache"
+  # state/nvim must exist: plugins like hardtime.nvim append their log to
+  # XDG_STATE_HOME/nvim/ at load time and abort the whole lazy force-load
+  # when the directory is missing (observed in CI: mini.pairs/lualine/
+  # which-key "not loaded" after the hardtime error aborted the loop)
+  mkdir -p "$ISO_ROOT/config" "$ISO_ROOT/data" "$ISO_ROOT/cache" "$ISO_ROOT/state/nvim"
   # NOTE: link the resolved nvim dir — $PWD is intentionally NOT used
   ln -s "$NVIM_DIR" "$ISO_ROOT/config/nvim"
-  ENV_SETUP=(env XDG_CONFIG_HOME="$ISO_ROOT/config" XDG_DATA_HOME="$ISO_ROOT/data" XDG_CACHE_HOME="$ISO_ROOT/cache")
+  ENV_SETUP=(env XDG_CONFIG_HOME="$ISO_ROOT/config" XDG_DATA_HOME="$ISO_ROOT/data" XDG_STATE_HOME="$ISO_ROOT/state" XDG_CACHE_HOME="$ISO_ROOT/cache")
   echo "(isolated mode — plugins install into $ISO_ROOT/data; first run downloads them)"
 fi
 NV=("${ENV_SETUP[@]}" nvim)
