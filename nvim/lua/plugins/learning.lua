@@ -34,14 +34,32 @@ return {
       { "<leader>uv", "<cmd>VimBeGoodPractice<cr>", desc = "learning: launch VimBeGood" },
     },
     config = function()
+      local function ensure_practice_tab()
+        local tabnr = vim.g.vim_be_good_practice_tab
+        if tabnr and vim.api.nvim_tabpage_is_valid(tabnr) then
+          vim.api.nvim_set_current_tabpage(tabnr)
+          return tabnr
+        end
+
+        local new_tab = vim.api.nvim_create_tabpage()
+        vim.g.vim_be_good_practice_tab = new_tab
+        vim.api.nvim_set_current_tabpage(new_tab)
+        vim.cmd("enew")
+        return new_tab
+      end
+
       vim.api.nvim_create_user_command("VimBeGoodPractice", function()
-        -- Launch in a fresh tab so the exercise is isolated from any source file
-        -- and never mutates the current work buffer.
-        vim.cmd("tabnew")
+        -- Reuse a dedicated practice tab so repeated launches do not pile up
+        -- tabs or disturb unsaved source buffers elsewhere in the session.
+        local tabnr = ensure_practice_tab()
+        local current = vim.api.nvim_get_current_tabpage()
+        if current ~= tabnr then
+          vim.api.nvim_set_current_tabpage(tabnr)
+        end
         vim.cmd("enew")
         vim.cmd("VimBeGood")
       end, {
-        desc = "Launch VimBeGood in a fresh empty tab without disturbing unsaved edits",
+        desc = "Launch VimBeGood in a dedicated practice tab without disturbing unsaved work",
       })
     end,
   },

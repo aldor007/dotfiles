@@ -35,9 +35,9 @@ This is useful while reading Go code and moving between functions, imports, and 
 
 ## Launching practice exercises
 
-- Run `,uv` to open VimBeGood in a fresh empty tab.
-- The exercise tab is intentionally separate from your working files, so unsaved edits stay untouched.
-- Exit by closing the tab or by following the plugin instructions.
+- Run `,uv` to open VimBeGood in a dedicated practice tab.
+- The practice tab is intentionally separate from your working files, so unsaved edits stay untouched.
+- Re-running `,uv` reuses the same practice tab instead of stacking more tabs; use `:tabclose` or close the tab to exit.
 - Relaunch with `,uv` when you want to restart the same practice loop.
 
 ## Hardtime report
