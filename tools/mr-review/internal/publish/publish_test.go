@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"mr-review/internal/gitlab"
 	"mr-review/internal/store"
 )
 
@@ -25,12 +26,17 @@ func writeGlab(t *testing.T, dir, dispatch string) (string, string) {
 	return bin, log
 }
 
-// dispatchMR answers GET MR + user + discussions, delegates POST to the
-// caller's snippet ("" becomes a no-op).
-func dispatchMR(t *testing.T, dir, mrBody, postBehavior string) (string, string) {
+// dispatchMR answers GET MR + user + discussions + diffs listing, delegates
+// POST to the caller's snippet ("" becomes a no-op). An optional diffsBody
+// overrides the default empty diff listing (used by the P2 #6 rename tests).
+func dispatchMR(t *testing.T, dir, mrBody, postBehavior string, diffsBody ...string) (string, string) {
 	t.Helper()
 	if postBehavior == "" {
 		postBehavior = ":"
+	}
+	diffs := "[]"
+	if len(diffsBody) > 0 {
+		diffs = diffsBody[0]
 	}
 	return writeGlab(t, dir, fmt.Sprintf(`
 is_post=0
@@ -40,6 +46,10 @@ if [ "$is_post" = "1" ]; then
 %[1]s
 elif [[ "$*" == *" user"* ]]; then
   echo '{"username":"me"}'
+elif [[ "$*" == *"/diffs?"* ]]; then
+  cat <<'DIFFSEOF'
+%[3]s
+DIFFSEOF
 elif [[ "$*" == *discussions* ]]; then
   echo '[]'
 else
@@ -47,7 +57,7 @@ else
 %[2]s
 MREOF
 fi
-`, postBehavior, mrBody))
+`, postBehavior, mrBody, diffs))
 }
 
 func reviewDirWithFindings(t *testing.T, findings []store.Finding, head string) string {
@@ -196,6 +206,8 @@ if [[ "$*" == *"-X POST"* ]]; then
   echo '{"id":"new","notes":[{"id":9}]}'
 elif [[ "$*" == *" user"* ]]; then
   echo '{"username":"me"}'
+elif [[ "$*" == *"/diffs?"* ]]; then
+  echo '[]'
 elif [[ "$*" == *"discussions"* ]]; then
   cat <<'EOF'
 [{"id":"d1","notes":[{"id":3,"author":{"username":"me"},"body":"comment-F001","position":{"new_path":"a.go","new_line":1,"old_path":"a.go"}}]}]
@@ -229,22 +241,204 @@ func TestConfirmRequiresExplicitYes(t *testing.T) {
 }
 
 func TestPositionForSides(t *testing.T) {
+	paths := diffPathsOf([]gitlab.MRDiff{
+		{OldPath: "a.go", NewPath: "a.go"},
+		{OldPath: "old_name.go", NewPath: "new_name.go", RenamedFile: true},
+	})
 	fNew := approved("F001", "a.go", 5)
-	p := positionFor(fNew)
+	p := positionFor(fNew, paths)
 	if p.NewLine == nil || *p.NewLine != 5 || p.LineRange != nil {
 		t.Fatalf("new side: %+v", p)
 	}
 	fOld := approved("F002", "a.go", 5)
 	fOld.Side = "old"
-	p = positionFor(fOld)
+	p = positionFor(fOld, paths)
 	if p.OldLine == nil || *p.OldLine != 5 || p.NewLine != nil {
 		t.Fatalf("old side: %+v", p)
 	}
+	// P2 #6: a renamed file's position carries the diff entry's exact pair
+	fRen := approved("F004", "new_name.go", 2)
+	p = positionFor(fRen, paths)
+	if p.NewPath != "new_name.go" || p.OldPath != "old_name.go" {
+		t.Fatalf("rename paths: %+v", p)
+	}
+	// a path absent from the diff falls back to itself on both sides
+	p = positionFor(approved("F005", "other.go", 1), paths)
+	if p.NewPath != "other.go" || p.OldPath != "other.go" {
+		t.Fatalf("unknown-path fallback: %+v", p)
+	}
 	fRange := approved("F003", "a.go", 5)
 	fRange.LineEnd = 9
-	p = positionFor(fRange)
+	p = positionFor(fRange, paths)
 	if p.LineRange == nil || *p.LineRange.Start.Line != 5 || *p.LineRange.End.Line != 9 {
 		t.Fatalf("range: %+v", p)
+	}
+}
+
+// ---- P2 #6: inline positions must carry the diff entry's exact paths ------
+
+// renamedDiffs: one rename (old_name.go → new_name.go) and one deletion.
+const renamedDiffs = `[
+  {"old_path":"old_name.go","new_path":"new_name.go","renamed_file":true,
+   "diff":"@@ -1,3 +1,3 @@\n-a\n+b\n c\n"},
+  {"old_path":"gone.go","new_path":"gone.go","deleted_file":true,
+   "diff":"@@ -1 +0,0 @@\n-x\n"}
+]`
+
+func callsFile(t *testing.T, log string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestPublishRenamedFilePositionUsesExactPaths(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := dispatchMR(t, dir, stubMR, postOK, renamedDiffs)
+	t.Setenv("MR_REVIEW_GLAB", bin)
+
+	rdir := reviewDirWithFindings(t, []store.Finding{approved("F001", "new_name.go", 3)}, "HEAD1")
+	if _, err := Run(Options{Dir: rdir, Yes: true}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	calls, _ := os.ReadFile(log)
+	for _, want := range []string{
+		"position[new_path]=new_name.go",
+		"position[old_path]=old_name.go",
+		"position[new_line]=3",
+	} {
+		if !strings.Contains(string(calls), want) {
+			t.Fatalf("missing %q:\n%s", want, calls)
+		}
+	}
+}
+
+func TestPublishRenamedFileLineRangePosition(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := dispatchMR(t, dir, stubMR, postOK, renamedDiffs)
+	t.Setenv("MR_REVIEW_GLAB", bin)
+
+	f := approved("F001", "new_name.go", 5)
+	f.LineEnd = 9
+	rdir := reviewDirWithFindings(t, []store.Finding{f}, "HEAD1")
+	if _, err := Run(Options{Dir: rdir, Yes: true}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	calls, _ := os.ReadFile(log)
+	for _, want := range []string{
+		"position[new_path]=new_name.go",
+		"position[old_path]=old_name.go",
+		"position[line_range][start][line]=5",
+		"position[line_range][end][line]=9",
+	} {
+		if !strings.Contains(string(calls), want) {
+			t.Fatalf("missing %q:\n%s", want, calls)
+		}
+	}
+}
+
+func TestPublishDeletedLinePosition(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := dispatchMR(t, dir, stubMR, postOK, renamedDiffs)
+	t.Setenv("MR_REVIEW_GLAB", bin)
+
+	f := approved("F001", "gone.go", 1)
+	f.Side = "old"
+	rdir := reviewDirWithFindings(t, []store.Finding{f}, "HEAD1")
+	if _, err := Run(Options{Dir: rdir, Yes: true}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	s := string(callsFile(t, log))
+	if !strings.Contains(s, "position[old_line]=1") || strings.Contains(s, "position[new_line]=") {
+		t.Fatalf("old-side position wrong:\n%s", s)
+	}
+	if !strings.Contains(s, "position[old_path]=gone.go") || !strings.Contains(s, "position[new_path]=gone.go") {
+		t.Fatalf("deleted-file paths wrong:\n%s", s)
+	}
+}
+
+func TestPublishDraftCommentRenamedFilePosition(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := dispatchMR(t, dir, stubMR, postOK, renamedDiffs)
+	t.Setenv("MR_REVIEW_GLAB", bin)
+
+	rdir := reviewDirWithFindings(t, nil, "HEAD1")
+	draft := store.DraftComment{
+		ID: "C001", File: "new_name.go", Side: "new", Line: 3, LineEnd: 3,
+		Text: "draft on a renamed file", Origin: "human", State: store.CommentReady,
+	}
+	if err := store.SaveComments(rdir, []store.DraftComment{draft}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(Options{Dir: rdir, Yes: true}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	calls, _ := os.ReadFile(log)
+	for _, want := range []string{
+		"position[new_path]=new_name.go",
+		"position[old_path]=old_name.go",
+		"position[new_line]=3",
+		"body=draft on a renamed file",
+	} {
+		if !strings.Contains(string(calls), want) {
+			t.Fatalf("missing %q:\n%s", want, calls)
+		}
+	}
+}
+
+// ---- P2 #7: the summary note is published exactly once ---------------------
+
+func TestPublishSummaryIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := dispatchMR(t, dir, stubMR, postOK)
+	t.Setenv("MR_REVIEW_GLAB", bin)
+
+	rdir := t.TempDir()
+	rev := &store.Review{
+		Project: "g/p", IID: 7, Host: "", HeadSHA: "HEAD1", BaseSHA: "b", StartSHA: "s",
+		Title: "T", State: "reviewing", SummaryComment: "REVIEW SUMMARY BODY",
+	}
+	if err := rev.Save(rdir); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveFindings(rdir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Run(Options{Dir: rdir, Yes: true, Summary: true})
+	if err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	if !res.Summary {
+		t.Fatalf("summary must post on the first run: %+v", res)
+	}
+	saved, err := store.LoadReview(rdir)
+	if err != nil || saved.SummaryDiscussionID != "disc1" {
+		t.Fatalf("summary discussion id not persisted: %+v %v", saved, err)
+	}
+
+	// second run of the SAME completed review: no duplicate summary
+	res2, err := Run(Options{Dir: rdir, Yes: true, Summary: true})
+	if err != nil {
+		t.Fatalf("second publish: %v", err)
+	}
+	if res2.Summary {
+		t.Fatalf("summary must not post twice: %+v", res2)
+	}
+	found := false
+	for _, s := range res2.Skipped {
+		if strings.Contains(s, "summary") && strings.Contains(s, "already published") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("second run must report the skip: %+v", res2)
+	}
+	calls, _ := os.ReadFile(log)
+	if n := strings.Count(string(calls), "REVIEW SUMMARY BODY"); n != 1 {
+		t.Fatalf("summary posted %d times, want exactly 1:\n%s", n, calls)
 	}
 }
 

@@ -78,6 +78,16 @@ func Run(opts Options) (*Result, error) {
 	}
 	drefs := mr.DiffRefs
 
+	// ---- exact per-file old/new paths (P2 #6) ------------------------------
+	// Inline positions are validated by GitLab against the diff entry's own
+	// paths; for renames old_path != new_path, so both must come from the
+	// exact MR diff listing, not from the finding's single file field.
+	diffs, err := gl.MRDiffs(rev.Project, rev.IID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch MR diff listing (state NOT advanced): %w", err)
+	}
+	paths := diffPathsOf(diffs)
+
 	// ---- collect approved, unpublished findings + ready manual comments ----
 	var approved []store.Finding
 	for _, f := range findings {
@@ -195,7 +205,7 @@ func Run(opts Options) (*Result, error) {
 			}
 			continue
 		}
-		pos := positionFor(f)
+		pos := positionFor(f, paths)
 		dID, noteID, err := gl.PostDiscussion(rev.Project, rev.IID, body, &drefs, pos)
 		if err != nil {
 			res.Failed = append(res.Failed, f.ID+": "+err.Error())
@@ -223,7 +233,7 @@ func Run(opts Options) (*Result, error) {
 			}
 			continue
 		}
-		pos := draftPositionFor(c)
+		pos := draftPositionFor(c, paths)
 		dID, noteID, err := gl.PostDiscussion(rev.Project, rev.IID, c.Text, &drefs, pos)
 		if err != nil {
 			res.Failed = append(res.Failed, c.ID+": "+err.Error())
@@ -242,14 +252,38 @@ func Run(opts Options) (*Result, error) {
 		})
 	}
 
-	// ---- summary note ------------------------------------------------------
+	// ---- summary note (idempotent, P2 #7) ----------------------------------
+	// The summary is a general note posted once: its discussion id is
+	// persisted in the review state, and the remote scan above is a second
+	// net (an identical general note by us blocks a re-post even if the
+	// local state was lost). Neither path can produce a duplicate.
 	if summaryText != "" {
-		if _, _, err := gl.PostDiscussion(rev.Project, rev.IID, summaryText, nil, nil); err != nil {
-			res.Failed = append(res.Failed, "summary: "+err.Error())
-		} else {
+		switch {
+		case rev.SummaryDiscussionID != "":
+			res.Skipped = append(res.Skipped,
+				"summary: already published → discussion "+rev.SummaryDiscussionID)
+		default:
+			if dID, ok := seen["|0|"+normalize(summaryText)]; ok {
+				res.Skipped = append(res.Skipped,
+					"summary: identical general note already exists ("+dID+")")
+				rev.SummaryDiscussionID = dID // heal local state from the remote scan
+				if serr := rev.Save(opts.Dir); serr != nil {
+					return res, fmt.Errorf("record existing summary discussion: %w", serr)
+				}
+				break
+			}
+			dID, _, err := gl.PostDiscussion(rev.Project, rev.IID, summaryText, nil, nil)
+			if err != nil {
+				res.Failed = append(res.Failed, "summary: "+err.Error())
+				break
+			}
 			res.Summary = true
+			rev.SummaryDiscussionID = dID
+			if serr := rev.Save(opts.Dir); serr != nil {
+				return res, fmt.Errorf("record summary publication: %w (summary IS on GitLab, discussion %s)", serr, dID)
+			}
 			_ = store.AppendPublishLog(opts.Dir, map[string]any{
-				"finding": "summary", "outcome": "published", "head_sha": rev.HeadSHA,
+				"finding": "summary", "outcome": "published", "discussion_id": dID, "head_sha": rev.HeadSHA,
 			})
 		}
 	}
@@ -282,8 +316,45 @@ func Approve(dir string, yes bool) error {
 
 // ---- helpers ---------------------------------------------------------------
 
-func positionFor(f store.Finding) *gitlab.Position {
-	pos := &gitlab.Position{NewPath: f.File, OldPath: f.File}
+// pathPair carries the exact old/new path pair of one file as it appears in
+// the MR diff (P2 #6).
+type pathPair struct{ New, Old string }
+
+// diffPathsOf maps every path the MR diff mentions (old AND new side) to the
+// exact pair GitLab expects in inline positions. For a rename a.go → b.go
+// both keys map to {New: b.go, Old: a.go}, so comments pinned to either side
+// of the rename validate.
+func diffPathsOf(diffs []gitlab.MRDiff) map[string]pathPair {
+	m := make(map[string]pathPair, len(diffs))
+	for _, d := range diffs {
+		newP, oldP := d.NewPath, d.OldPath
+		if newP == "" {
+			newP = oldP
+		}
+		if oldP == "" {
+			oldP = newP
+		}
+		m[newP] = pathPair{New: newP, Old: oldP}
+		if oldP != newP {
+			m[oldP] = pathPair{New: newP, Old: oldP}
+		}
+	}
+	return m
+}
+
+// lookupPaths falls back to treating the path as both its own sides when the
+// MR diff has no entry for it (defensive: such a path cannot carry a valid
+// position anyway, and keeps behaviour identical to the pre-fix code there).
+func lookupPaths(m map[string]pathPair, path string) pathPair {
+	if p, ok := m[path]; ok {
+		return p
+	}
+	return pathPair{New: path, Old: path}
+}
+
+func positionFor(f store.Finding, paths map[string]pathPair) *gitlab.Position {
+	pair := lookupPaths(paths, f.File)
+	pos := &gitlab.Position{NewPath: pair.New, OldPath: pair.Old}
 	if f.Side == "old" {
 		l := f.Line
 		pos.OldLine = &l
@@ -323,11 +394,12 @@ func positionFor(f store.Finding) *gitlab.Position {
 }
 
 // draftPositionFor maps a draft comment to a GitLab diff position.
-func draftPositionFor(c store.DraftComment) *gitlab.Position {
+func draftPositionFor(c store.DraftComment, paths map[string]pathPair) *gitlab.Position {
 	if c.General {
 		return nil
 	}
-	pos := &gitlab.Position{NewPath: c.File, OldPath: c.File}
+	pair := lookupPaths(paths, c.File)
+	pos := &gitlab.Position{NewPath: pair.New, OldPath: pair.Old}
 	if c.Side == "old" {
 		l := c.Line
 		pos.OldLine = &l

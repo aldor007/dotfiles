@@ -164,12 +164,12 @@ func actionCases() map[string]actionCase {
 		}},
 		"findings.details-down": {keys: []string{"3", "J"}, post: func(t *testing.T, m *model) {}},
 		"findings.details-up":   {keys: []string{"3", "J", "K"}, post: func(t *testing.T, m *model) {}},
-		"publish.queue":         {keys: []string{"g", "q"}, post: func(t *testing.T, m *model) {
+		"publish.queue": {keys: []string{"g", "q"}, post: func(t *testing.T, m *model) {
 			if m.topOverlay() != ovQueue {
 				t.Error("Q must open the publish queue")
 			}
 		}},
-		"comments.preview":      {run: func(t *testing.T, m *model) {}, post: func(t *testing.T, m *model) {}},
+		"comments.preview": {run: func(t *testing.T, m *model) {}, post: func(t *testing.T, m *model) {}},
 		"view.findings-overview": {keys: []string{"O"}, post: func(t *testing.T, m *model) {
 			if m.tab != tabOverview {
 				t.Errorf("O must open the Overview tab, got %d", m.tab)

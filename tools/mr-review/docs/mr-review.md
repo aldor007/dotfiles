@@ -38,6 +38,30 @@ indexes (`"39"`) or hex (`"#bd93f9"`).
 | `MR_REVIEW_THEME` | `theme` |
 | `MR_REVIEW_ICONS` | `icons` |
 
+### AI reviewer subprocess environment
+
+The AI reviewer subprocess runs with a filtered environment: only variables
+it demonstrably needs pass through (PATH, HOME, locale/term, TMPDIR, the
+`MR_REVIEW_*` configuration variables, LLM gateway endpoints). Everything
+else is dropped — including `KUBECONFIG`, `DOCKER_HOST`, `AWS_*` and
+`SSH_AUTH_SOCK` — and credential-shaped names (TOKEN, SECRET, PASSWORD,
+...) are always stripped, even from `MR_REVIEW_*` variables. A fail-closed
+startup check refuses to start the agent if a dangerous variable is still
+present without an explicit opt-in.
+
+Cluster/docker inspection from inside a review is therefore off by default.
+To let a review reach your local cluster or docker socket, opt in
+explicitly (the reviewer runs with these set; without them the variables
+are dropped and the agent refuses to start if one is present):
+
+| Variable | Effect |
+|---|---|
+| `MR_REVIEW_AGENT_ALLOW_KUBE_ENV` | pass `KUBECONFIG` to the reviewer subprocess |
+| `MR_REVIEW_AGENT_ALLOW_DOCKER_ENV` | pass `DOCKER_HOST` to the reviewer subprocess |
+
+The reviewer still runs as your user with your filesystem permissions;
+this is environment hygiene, not an OS sandbox.
+
 ### Flags
 
 | Flag | Bound to |

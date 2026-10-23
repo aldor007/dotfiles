@@ -131,6 +131,10 @@ func RunWorkspace(dir string) error {
 	m.rebuild()
 	m.startDiffFirst()
 	p := tea.NewProgram(m)
+	// P1-1 guaranteed teardown: whatever way p.Run() ends (q, esc, ctrl+c,
+	// window close, fatal error), the embedded tuicr pane is closed here —
+	// the child process and its PTY can never outlive the host UI.
+	defer m.closeTuicrPane()
 	_, err = p.Run()
 	return err
 }
@@ -180,6 +184,9 @@ func Run(dir string) error {
 	m.rebuild()
 	m.startDiffFirst()
 	p := tea.NewProgram(m)
+	// P1-1 guaranteed teardown (the pane CAN exist here: the W registry
+	// action is not gated on workspace mode): same contract as RunWorkspace.
+	defer m.closeTuicrPane()
 	_, err = p.Run()
 	return err
 }
@@ -271,8 +278,9 @@ type model struct {
 	viewerTitle          string
 	viewerLines          []string
 	viewerTop            int
-	overlaySavedFocus    int // pane context saved at the first pushOverlay
+	overlaySavedFocus    int  // pane context saved at the first pushOverlay
 	overlaySavedLeftView int
+	overlaySavedValid    bool // direct m.overlay= assignments must not restore stale zeros
 
 	// changed-file tree + comment navigator state
 	tree         *fileTree
@@ -350,7 +358,20 @@ func (m *model) setDecision(d string) tea.Cmd {
 	}
 	id := f.ID // stable ID survives re-sorting/re-filtering
 	f.Decision = d
-	if err := store.SaveFindings(m.dir, m.findings); err != nil {
+	// Persist through a store transaction (read → mutate → save under the
+	// advisory lock), matching the STORED finding by stable ID. A blind
+	// whole-file write of m.findings would clobber whatever the background
+	// AI worker saved since the TUI loaded (review P1: lost decisions),
+	// and could itself be overwritten by the worker's save.
+	if err := store.UpdateFindings(m.dir, func(fs []store.Finding) ([]store.Finding, error) {
+		for i := range fs {
+			if fs[i].ID == id {
+				fs[i].Decision = d
+				break
+			}
+		}
+		return fs, nil
+	}); err != nil {
 		m.msg = "save failed: " + err.Error()
 		return nil
 	}
@@ -449,6 +470,7 @@ func (m *model) pushOverlay(id int) {
 	if len(m.overlayStack) == 0 {
 		m.overlaySavedFocus = m.focus
 		m.overlaySavedLeftView = m.leftView
+		m.overlaySavedValid = true
 	}
 	m.overlayStack = append(m.overlayStack, id)
 	m.overlay = id
@@ -467,10 +489,15 @@ func (m *model) popOverlay() {
 	} else {
 		m.overlay = ovNone
 		// last overlay closed: return to the pane the user was in before the
-		// first overlay opened (Enter's floating view moves focus while open)
-		m.focus = m.overlaySavedFocus
-		m.leftView = m.overlaySavedLeftView
-		m.clampScrolls()
+		// first overlay opened (Enter's floating view moves focus while open).
+		// Only pushOverlay saves context — direct m.overlay= assignments
+		// (registry actions) never had a save, so never restore stale zeros.
+		if m.overlaySavedValid {
+			m.focus = m.overlaySavedFocus
+			m.leftView = m.overlaySavedLeftView
+			m.overlaySavedValid = false
+			m.clampScrolls()
+		}
 	}
 }
 
@@ -627,6 +654,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.askCancel != nil {
 				m.askCancel()
 			}
+			// P1-1: close the embedded tuicr pane BEFORE quitting so the
+			// child process and its PTY die with the UI (the defer in
+			// Run/RunWorkspace backstops this for every other exit path).
+			m.closeTuicrPane()
 			return m, tea.Quit
 		}
 		if m.askingID != "" && msg.String() == "esc" {
@@ -888,6 +919,8 @@ func (m *model) updateNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.setView(viewFindings)
 			return m, nil
 		}
+		// P1-1: Esc-quit closes the tuicr pane before the program exits.
+		m.closeTuicrPane()
 		return m, tea.Quit
 	}
 	return m, m.handleKey(k)
@@ -1024,9 +1057,57 @@ func (m *model) reload() error {
 	}
 	m.rev, m.comments = rev, comments
 	m.remoteLoaded = false // remote notes may have changed too
-	m.ingestFindings(fs)   // ID-stable selection across the findings swap
+	m.ingestFindings(reconcileFindings(m.findings, fs)) // ID-stable selection across the findings swap
 	m.rebuild()
 	return nil
+}
+
+// reconcileFindings merges an incoming findings slice (freshly loaded from
+// disk — possibly rewritten by the background AI worker or the publisher)
+// with the human state the TUI currently holds, keyed by stable finding ID
+// (review P1: a re-ingested AI snapshot must not wipe human decisions).
+//
+// Rules, per finding that exists on BOTH sides:
+//   - AI/content fields always come from the incoming record (it is the
+//     fresher copy),
+//   - a non-default human value on EITHER side survives: a decision,
+//     publication, edited comment, discussion, or stale flag the incoming
+//     record lost (a racing worker's stale snapshot) is restored from the
+//     stored record, while non-default values the incoming record DOES
+//     carry win — they were written deliberately on disk (publisher
+//     marking Publication, a refresh carrying decisions, another save).
+// A finding with an unknown ID is a genuinely new AI finding: taken as-is.
+func reconcileFindings(stored, incoming []store.Finding) []store.Finding {
+	if len(stored) == 0 || len(incoming) == 0 {
+		return incoming
+	}
+	prev := make(map[string]*store.Finding, len(stored))
+	for i := range stored {
+		prev[stored[i].ID] = &stored[i]
+	}
+	out := make([]store.Finding, len(incoming))
+	for i := range incoming {
+		nf := incoming[i]
+		if of, ok := prev[nf.ID]; ok {
+			if nf.Decision == "pending" && of.Decision != "pending" {
+				nf.Decision = of.Decision
+			}
+			if nf.Publication == nil {
+				nf.Publication = of.Publication
+			}
+			if strings.TrimSpace(nf.EditedComment) == "" {
+				nf.EditedComment = of.EditedComment
+			}
+			if len(nf.Discussion) == 0 {
+				nf.Discussion = append([]store.DiscussionTurn(nil), of.Discussion...)
+			}
+			if of.Stale {
+				nf.Stale = true
+			}
+		}
+		out[i] = nf
+	}
+	return out
 }
 
 func (m *model) reloadCmd() tea.Cmd {
@@ -1054,8 +1135,20 @@ func (m *model) updateCommentEditor(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.editingComment = false
 			return m, nil
 		}
+		id := f.ID
 		f.EditedComment = strings.TrimSpace(m.commentTA.Value())
-		if err := store.SaveFindings(m.dir, m.findings); err != nil {
+		// Same transactional save as setDecision: mutate the STORED finding
+		// by stable ID under the advisory lock so a racing AI-worker write
+		// cannot clobber the edit (and vice versa).
+		if err := store.UpdateFindings(m.dir, func(fs []store.Finding) ([]store.Finding, error) {
+			for i := range fs {
+				if fs[i].ID == id {
+					fs[i].EditedComment = f.EditedComment
+					break
+				}
+			}
+			return fs, nil
+		}); err != nil {
 			m.msg = "save failed: " + err.Error()
 			return m, nil
 		}

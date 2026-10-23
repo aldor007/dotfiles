@@ -8,7 +8,12 @@
 //     inside them are never operational commands,
 //   - agent output is only ever ingested through Finding.Validate(); nothing
 //     from it is executed, and the agent has no publishing capability by
-//     construction (publishing lives in a separate human-only binary).
+//     construction (publishing lives in a separate human-only binary),
+//   - the subprocess environment is filtered (allowlist + credential
+//     denylist + a fail-closed startup check, see sandbox.go). This is env
+//     hygiene, NOT an OS sandbox: the agent runs as the invoking user with
+//     the user's filesystem permissions. Containment is best-effort by
+//     convention (prompt contract, worktree cwd, separate publisher).
 package agent
 
 import (
@@ -248,29 +253,43 @@ func ExtractJiraKeys(texts ...string) []string {
 // line-by-line to the optional onLine callback so the UI can show what the
 // agent is doing (tool calls, commands, progress) while it runs.
 //
-// SECURITY/REVIEW (P1 #4): the reviewer runs `pi -p` inside the worktree.
-// Without sandboxing the subprocess inherits the user's full environment
-// (tokens, SSH keys, glab auth) and could publish changes, write to
-// arbitrary paths, or impersonate the user. The cmd.Env below is a strict
-// allowlist — only the variables the agent's runtime needs for code
-// reading, plus the prompt's working directory. GitLab/Google/AWS/GitHub
-// credential env vars (any name containing TOKEN, KEY, SECRET, PASS or
-// hosted in known credential services) are stripped. PATH is preserved
-// (the agent must invoke `go`, `gh`, `glab`, `jq`, etc.) and HOME is kept
-// so `~/.config/glab-cli/` reads work for read-only glab queries — but
-// `.ssh` is excluded from the effective environment by removing
-// SSH_AUTH_SOCK (the agent has no business using ssh agent forwarding
-// during a code review).
+// SECURITY/REVIEW (P1 #4): the reviewer runs `pi -p` with cwd = the review
+// worktree. The subprocess environment is a strict allowlist (sandboxEnv):
+// only variables the agent runtime demonstrably needs pass through —
+// PATH/HOME (required by the runtime, see sandbox.go), locale/term,
+// TMPDIR, mr-review's own MR_REVIEW_* config and LLM gateway endpoints.
+// Everything else is dropped, including KUBECONFIG, DOCKER_HOST, AWS_* and
+// SSH_AUTH_SOCK (no ssh-agent forwarding during a review); credential-
+// shaped names (TOKEN, SECRET, PASSWORD, ...) are stripped even when they
+// would match the allowlist. verifyAgentEnv then fails closed: if a
+// dangerous variable is still present without an explicit opt-in, the
+// agent is never started.
+//
+// This is env hygiene, NOT an OS sandbox: the agent runs as the invoking
+// user with the user's filesystem permissions. It is held in place by the
+// worktree cwd, the prompt contract ("read and analyze only"), inert-data
+// ingestion (Finding.Validate) and the absence of any publishing capability
+// (publication lives in the separate, human-only mr-review-publish binary;
+// the agent's only write target is the findings JSONL under the review
+// state dir).
 func (r *Runner) RunReview(ctx context.Context, wt, prompt, logPath string, timeout time.Duration, onLine ...func(string)) error {
+	if strings.TrimSpace(wt) == "" {
+		return fmt.Errorf("RunReview: empty worktree — refusing to start the agent outside a review worktree")
+	}
 	if timeout <= 0 {
 		timeout = 20 * time.Minute
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	env := sandboxEnv()
+	// fail closed: never hand a poisoned environment to the agent
+	if err := verifyAgentEnv(env); err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(cctx, r.Bin, "-p")
-	cmd.Dir = wt
+	cmd.Dir = wt // the review worktree is the agent's only working context
 	cmd.Stdin = strings.NewReader(prompt)
-	cmd.Env = sandboxEnv()
+	cmd.Env = env
 
 	logFile, lerr := os.Create(logPath)
 	if lerr != nil {
@@ -519,9 +538,20 @@ wrong, say so plainly. Plain text only, no markdown fences.`,
 
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// Same env hygiene as RunReview (sandboxEnv + fail-closed check). A
+	// discuss turn needs NO file writes — the answer comes back on stdout
+	// and mr-review records it — so we additionally request the harness's
+	// read-only permission mode (KIMCHI_PERMISSIONS=plan; agents that do
+	// not know the variable ignore it). RunReview cannot do this: its
+	// output contract requires the agent to write the findings file.
+	env := append(sandboxEnv(), "KIMCHI_PERMISSIONS=plan")
+	if err := verifyAgentEnv(env); err != nil {
+		return "", err
+	}
 	cmd := exec.CommandContext(cctx, r.Bin, "-p")
 	cmd.Dir = rev.Worktree
 	cmd.Stdin = strings.NewReader(prompt)
+	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("agent discuss failed: %w", err)

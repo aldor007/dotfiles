@@ -191,7 +191,7 @@ func TestSaveFindingsConcurrency(t *testing.T) {
 			count := id + 1 // 1..N
 			for k := 0; k < count; k++ {
 				fs = append(fs, Finding{
-					ID: fmt.Sprintf("W%d-F%d", id, k),
+					ID:   fmt.Sprintf("W%d-F%d", id, k),
 					File: fmt.Sprintf("a%d.go", k), Line: 10 + k, Side: "new",
 					Severity: "P1", Title: "t", Explanation: "e", Evidence: "v", Comment: "c",
 					Confidence: "high",

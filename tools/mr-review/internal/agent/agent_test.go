@@ -400,3 +400,54 @@ func TestIngestDedupesParaphrased(t *testing.T) {
 		t.Fatalf("findings must stay deduplicated, got %d", len(fs))
 	}
 }
+
+// TestReconcileRunMarksUnreportedStale — a re-run over existing findings:
+// re-reported issues carry their state; issues the agent no longer reports
+// (addressed) become stale instead of lingering pending; new ones append.
+func TestReconcileRunMarksUnreportedStale(t *testing.T) {
+	dir := t.TempDir()
+	old := []store.Finding{
+		{ID: "F001", File: "a.go", Line: 10, LineEnd: 12, Severity: "P1", Decision: "approved",
+			Title:   "volumeMounts block attaches to the karpenter-monitor container",
+			Comment: "move it", Explanation: "e", Evidence: "a.go:10"},
+		{ID: "F002", File: "a.go", Line: 40, LineEnd: 40, Severity: "P2", Decision: "pending",
+			Title:   "Dedup overflow eviction uses quadratic insertion sort",
+			Comment: "use a map", Explanation: "e", Evidence: "a.go:40"},
+	}
+	if err := store.SaveFindings(dir, old); err != nil {
+		t.Fatal(err)
+	}
+	// fresh pass: agent re-reports F001 (paraphrased, shifted) but NOT F002
+	// (it verified F002 was addressed) + one genuinely new finding
+	raw := `{"file":"a.go","line":11,"line_end":12,"severity":"P1","kind":"bug","title":"volumeMounts (tmp, webhook-cert, user mounts) attach to the karpenter-monitor","explanation":"still wrong","evidence":"a.go:11","comment":"move it","confidence":"high"}` + "\n" +
+		`{"file":"a.go","line":70,"line_end":70,"severity":"P2","kind":"bug","title":"Checkpoint advances past a failed ship","explanation":"new","evidence":"a.go:70","comment":"fix checkpoint","confidence":"medium"}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "findings.raw.jsonl"), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ReconcileRun(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := store.LoadFindings(dir)
+	if len(fs) != 3 {
+		t.Fatalf("merged count = %d, want 3 (2 carried + 1 new)", len(fs))
+	}
+	// lookup by title — Renumber reassigns sequential IDs for non-published
+	// findings, so identities after the merge are positional, not ID-based
+	byTitle := map[string]store.Finding{}
+	for _, f := range fs {
+		byTitle[f.Title] = f
+	}
+	// F001: re-reported (paraphrase) → carried with its approved decision
+	if f, ok := byTitle["volumeMounts (tmp, webhook-cert, user mounts) attach to the karpenter-monitor"]; !ok || f.Decision != "approved" || f.Stale || f.ID != "F001" {
+		t.Fatalf("re-reported finding must carry the approved state: %+v", f)
+	}
+	// F002: not re-reported → stale (addressed signal), kept inspectable
+	if f, ok := byTitle["Dedup overflow eviction uses quadratic insertion sort"]; !ok || !f.Stale {
+		t.Fatalf("un-re-reported finding must be marked stale: %+v", f)
+	}
+	// new finding appended with a fresh ID
+	if res.Added != 1 {
+		t.Fatalf("new findings added = %d, want 1", res.Added)
+	}
+}

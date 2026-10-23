@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -46,6 +47,13 @@ type Session struct {
 	FileCount     int    `json:"file_count"`
 	Anchor        string `json:"anchor"`
 	Active        bool   `json:"active"`
+	// Host and Revision are optional identity fields (review finding P1-2):
+	// parsed when a tuicr version records them in `review list` output,
+	// ignored otherwise. They are verified only when BOTH the session
+	// records them AND the caller supplies an expectation (MRIdentity);
+	// an absent field can never cause a false match.
+	Host     string `json:"host,omitempty"`
+	Revision string `json:"revision,omitempty"` // reviewed revision/SHA
 }
 
 // Comment mirrors one entry of `tuicr review comments`.
@@ -132,33 +140,52 @@ func (c *CLI) ListSessionsAll(ctx context.Context) ([]Session, error) {
 
 // ResolveSessionSmart finds the tuicr session to stage AI findings into.
 //
-// SECURITY (review finding P1 #2): fail closed. The previous implementation
-// fell through to "active local session" and "live pane's session" when no
-// PR session existed for the requested MR, which could land AI comments
-// into an unrelated review (or, in the live-pane case, into whatever the
-// user happens to have open). This routine now REQUIRES an exact match on
-// project + MR IID (a PR session whose slug ends with "/pr/<iid>" and whose
-// repo coordinate contains the project). When no such session exists,
-// return "" with an actionable error — the human must open tuicr on the
-// MR explicitly before AI staging can proceed.
+// SECURITY (review finding P1-2): fail closed, EXACT matching only. The
+// previous implementation fell through to "active local session" and "live
+// pane's session" when no PR session existed for the requested MR, and its
+// slug match combined a "/pr/<iid>" suffix with a per-segment SUBSTRING
+// project search — so project "team/foo" could resolve a session for
+// "team/foobar" with the same IID. This routine requires the canonical
+// slug identity <forge>:<project>/pr/<iid> to match EXACTLY (see
+// ResolveSessionForMR). When no such session exists, return "" with an
+// error that lists every rejected candidate and why — the human must open
+// tuicr on the MR explicitly before AI staging can proceed.
 func (c *CLI) ResolveSessionSmart(ctx context.Context, repo, project string, iid int) (string, error) {
+	return c.ResolveSessionSmartForMR(ctx, repo, MRIdentity{Project: project, IID: iid})
+}
+
+// ResolveSessionSmartForMR is ResolveSessionSmart with full identity
+// expectations: when want.Host / want.Revision are set, a session that
+// RECORDS a differing host or reviewed revision is rejected.
+func (c *CLI) ResolveSessionSmartForMR(ctx context.Context, repo string, want MRIdentity) (string, error) {
 	// 1. `review list --repo <worktree>` — the normal path
+	var repoErr error
 	if sessions, err := c.ListSessions(ctx, repo); err == nil {
-		if s := ResolveSession(sessions, project, iid); s != nil {
+		s, merr := ResolveSessionForMR(sessions, want)
+		if merr == nil {
 			return s.Slug, nil
 		}
+		repoErr = merr
 	}
 	// 2. `review list --all` — worktree path mismatch (monorepo worktrees
 	// can fail the local coordinate lookup). Still requires an exact
-	// (project, IID) PR match — no fallback to active/live local sessions.
+	// identity match — no fallback to active/live local sessions.
 	all, err := c.ListSessionsAll(ctx)
 	if err != nil {
+		if repoErr != nil {
+			return "", fmt.Errorf("%w (review list --all also failed: %v)", repoErr, err)
+		}
 		return "", err
 	}
-	if s := ResolveSession(all, project, iid); s != nil {
+	s, merr := ResolveSessionForMR(all, want)
+	if merr == nil {
 		return s.Slug, nil
 	}
-	return "", fmt.Errorf("no exact-match PR session found for project=%q iid=%d — open tuicr for the MR first (tuicr pr <MR-URL> or tuicr -r <base>..<head> in the worktree) and try again", project, iid)
+	if repoErr != nil {
+		// surface both attempts; the --all listing is the wider net
+		return "", fmt.Errorf("%w (--repo listing was also tried: %v)", merr, repoErr)
+	}
+	return "", merr
 }
 
 func parseSessions(out string) ([]Session, error) {
@@ -357,30 +384,148 @@ func (c *CLI) Clear(ctx context.Context, session, repo string) error {
 	return err
 }
 
+// ---- exact session identity (review finding P1-2) --------------------------
+//
+// The previous matcher combined a "/pr/<iid>" suffix check with
+// slugHasProject's per-segment SUBSTRING search, so project "team/foo"
+// matched the session of "team/foobar" with the same MR IID, and neither
+// host nor reviewed revision were verified. Publication staging could
+// therefore target the WRONG MR's session. Matching is now EXACT: the
+// canonical slug identity is parsed and compared field-by-field — no
+// substring, prefix, suffix or segment fallbacks anywhere.
+
+// gitlabForge is the forge token tuicr prefixes GitLab PR slugs with
+// ("gl:castai/kubecast/pr/56806"). mr-review is GitLab-only: a session
+// with any other (or missing) forge token can never match an MR here —
+// this is the host check available at this layer (the list output does
+// not record a hostname; see Session.Host for the optional recorded one).
+const gitlabForge = "gl"
+
+// MRIdentity is the exact GitLab MR identity a PR session must match for
+// publication-related operations (staging, sync, session resolution).
+// Project and IID are always required; Host and Revision are optional
+// strict checks enforced only when the session also records them.
+type MRIdentity struct {
+	Project  string // full GitLab project path, compared exactly
+	IID      int
+	Host     string // expected GitLab host ("" = do not verify)
+	Revision string // expected reviewed revision/SHA ("" = do not verify)
+}
+
+// parseSessionIdentity parses the canonical tuicr PR slug
+// "<forge>:<project>/pr/<iid>" into its exact identity parts. The project
+// path itself may contain slashes; everything before the final "/pr/<iid>"
+// is the project. Any other shape (no forge token, missing "pr" segment,
+// non-numeric or non-positive IID, empty project) is rejected.
+func parseSessionIdentity(s Session) (forge, project string, iid int, ok bool) {
+	colon := strings.Index(s.Slug, ":")
+	if colon <= 0 {
+		return "", "", 0, false
+	}
+	forge = s.Slug[:colon]
+	segs := strings.Split(s.Slug[colon+1:], "/")
+	if len(segs) < 3 { // need at least <project>/pr/<iid>
+		return "", "", 0, false
+	}
+	if segs[len(segs)-2] != "pr" {
+		return "", "", 0, false
+	}
+	n, err := strconv.Atoi(segs[len(segs)-1])
+	if err != nil || n <= 0 {
+		return "", "", 0, false
+	}
+	project = strings.Join(segs[:len(segs)-2], "/")
+	if project == "" {
+		return "", "", 0, false
+	}
+	return forge, project, n, true
+}
+
+// matchSession explains why s does not satisfy want ("" when it does).
+// Every comparison is exact; a field is only verified when both sides
+// record it (missing identity fields fail closed, never open).
+func matchSession(s Session, want MRIdentity) string {
+	if s.Kind != "pr" {
+		return fmt.Sprintf("kind %q is not a PR session (local sessions are never matched for an MR)", s.Kind)
+	}
+	forge, project, iid, ok := parseSessionIdentity(s)
+	if !ok {
+		return "slug is not a canonical PR session (want <forge>:<project>/pr/<iid>)"
+	}
+	if forge != gitlabForge {
+		return fmt.Sprintf("forge %q is not GitLab (%q)", forge, gitlabForge)
+	}
+	if project != want.Project {
+		return fmt.Sprintf("project %q != %q", project, want.Project)
+	}
+	if iid != want.IID {
+		return fmt.Sprintf("iid %d != %d", iid, want.IID)
+	}
+	if want.Host != "" && s.Host != "" && !sameHost(s.Host, want.Host) {
+		return fmt.Sprintf("host %q != %q", s.Host, want.Host)
+	}
+	if want.Revision != "" && s.Revision != "" && s.Revision != want.Revision {
+		return fmt.Sprintf("reviewed revision %s != %s", s.Revision, want.Revision)
+	}
+	return ""
+}
+
+// sameHost compares two GitLab hosts exactly (whole-string equality after
+// normalizing scheme, trailing slash and case) — host identity, never a
+// substring match.
+func sameHost(a, b string) bool {
+	trim := func(h string) string {
+		h = strings.TrimPrefix(strings.TrimPrefix(h, "https://"), "http://")
+		return strings.ToLower(strings.TrimSuffix(h, "/"))
+	}
+	return trim(a) == trim(b)
+}
+
+// ResolveSessionForMR picks the tuicr PR session that EXACTLY matches the
+// given MR identity, or fails with an error listing every rejected
+// candidate and the exact reason it did not match.
+func ResolveSessionForMR(sessions []Session, want MRIdentity) (*Session, error) {
+	if want.Project == "" || want.IID <= 0 {
+		return nil, fmt.Errorf("incomplete MR identity (project=%q iid=%d) — refusing to match any tuicr session: open tuicr for the MR first (tuicr pr <MR-URL> or tuicr -r <base>..<head> in the worktree) and try again", want.Project, want.IID)
+	}
+	var rejects []string
+	for i := range sessions {
+		if reason := matchSession(sessions[i], want); reason == "" {
+			return &sessions[i], nil
+		} else {
+			rejects = append(rejects, fmt.Sprintf("  %s: %s", sessions[i].Slug, reason))
+		}
+	}
+	err := fmt.Errorf("no exact-match PR session found for project=%q iid=%d — open tuicr for the MR first (tuicr pr <MR-URL> or tuicr -r <base>..<head> in the worktree) and try again",
+		want.Project, want.IID)
+	if len(rejects) > 0 {
+		return nil, fmt.Errorf("%w\nrejected candidate sessions:\n%s", err, strings.Join(rejects, "\n"))
+	}
+	return nil, err
+}
+
 // ResolveSession picks the tuicr session for a GitLab MR review.
 //
-// SECURITY (review finding P1 #2): fail closed. The only session that
-// satisfies the "review this MR" requirement is a PR session whose slug
-// ends with "/pr/<iid>" and whose repo coordinate contains the project
-// path. Local sessions (worktree/branch-bound reviews) NEVER satisfy an
-// MR IID requirement — returning one would risk staging findings into a
-// different review the human has open.
+// SECURITY (review finding P1-2): fail closed, EXACT matching. The only
+// session that satisfies the "review this MR" requirement is a PR session
+// whose canonical slug identity <forge>:<project>/pr/<iid> equals the
+// requested GitLab project + MR IID exactly (forge must be "gl" — a
+// GitLab PR session). Local sessions (worktree/branch-bound reviews)
+// NEVER satisfy an MR IID requirement — returning one would risk staging
+// findings into a different review the human has open. A request with
+// missing identity fields (empty project, IID <= 0) never matches.
 //
-// Returns nil when no such PR session exists.
+// Returns nil when no such PR session exists. Callers that need to know
+// WHY a candidate was rejected use ResolveSessionForMR instead.
 func ResolveSession(sessions []Session, project string, iid int) *Session {
-	wantSuffix := fmt.Sprintf("/pr/%d", iid)
+	if project == "" || iid <= 0 {
+		return nil // missing identity fields: never guess
+	}
+	want := MRIdentity{Project: project, IID: iid}
 	for i := range sessions {
-		s := &sessions[i]
-		if s.Kind != "pr" {
-			continue // local/branch sessions can never match an MR IID
+		if matchSession(sessions[i], want) == "" {
+			return &sessions[i]
 		}
-		if !strings.HasSuffix(s.Slug, wantSuffix) {
-			continue
-		}
-		if !slugHasProject(s.Slug, project) {
-			continue
-		}
-		return s
 	}
 	return nil
 }
@@ -434,17 +579,3 @@ func (c *CLI) PrepareSession(ctx context.Context, repo, project string, iid, exp
 	return s.Slug, SessionStatusReady, nil
 }
 
-// slugHasProject reports whether a forge slug ("gl:group/sub/proj/pr/7")
-// contains the project path segments.
-func slugHasProject(slug, project string) bool {
-	if project == "" {
-		return true
-	}
-	norm := strings.NewReplacer("_", "/", ".", "/").Replace(strings.ToLower(slug))
-	for _, seg := range strings.Split(strings.ToLower(project), "/") {
-		if seg != "" && !strings.Contains(norm, seg) {
-			return false
-		}
-	}
-	return true
-}

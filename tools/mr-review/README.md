@@ -1,7 +1,7 @@
 # mr-review
 
 AI-assisted code review for GitLab merge requests, driven from the terminal.
-A local agent (kimchi/pi) reviews the MR in an isolated worktree; you triage
+A local agent (kimchi/pi) reviews the MR in a separate review worktree; you triage
 its findings in a keyboard-first TUI, write your own comments, and publish
 only what you explicitly approved.
 
@@ -96,6 +96,23 @@ posted twice.
 - The final step always requires typing `PUBLISH` on a real terminal.
 - Formal MR approval is a separate command with its own confirmation.
 - Export never publishes and never mutates review state.
+
+### AI reviewer containment
+
+The reviewer subprocess gets a filtered environment: only variables it
+demonstrably needs pass through (PATH, HOME, locale/term, TMPDIR, the
+`MR_REVIEW_*` configuration variables, LLM gateway endpoints); everything
+else — including `KUBECONFIG`, `DOCKER_HOST`, `AWS_*` and `SSH_AUTH_SOCK`
+— is dropped, and credential-shaped names (TOKEN, SECRET, PASSWORD, ...)
+are always stripped. A fail-closed startup check refuses to start the
+agent if a dangerous variable is still present without an explicit opt-in.
+
+This is environment hygiene, **not an OS sandbox**: the agent runs as your
+user with your filesystem permissions. It is contained by convention — the
+review worktree as its working directory, a prompt that forbids writes,
+network and git write commands, output ingested only as validated data,
+and no publishing capability (publication is the separate, human-only
+`mr-review-publish` binary).
 
 ## State layout
 

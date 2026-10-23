@@ -90,6 +90,14 @@ type StageOptions struct {
 	Project  string // GitLab project path (PR session matching)
 	IID      int
 	Username string // author stamped on staged comments
+	// Host and Revision are optional exact-match expectations (review
+	// finding P1-2): when set, a session that RECORDS a differing host or
+	// reviewed revision is rejected instead of staged into. tuicr's current
+	// `review list` output records neither, so they stay empty today; if a
+	// future tuicr version publishes them, the check is enforced
+	// automatically. Never wired: Project/IID matching is ALWAYS exact.
+	Host     string
+	Revision string
 }
 
 // StageResult reports one staging run honestly.
@@ -108,7 +116,9 @@ func StageApproved(ctx context.Context, opts StageOptions, cli *CLI) (*StageResu
 	if err != nil {
 		return nil, fmt.Errorf("load findings: %w", err)
 	}
-	sessionSlug, err := cli.ResolveSessionSmart(ctx, opts.RepoPath, opts.Project, opts.IID)
+	sessionSlug, err := cli.ResolveSessionSmartForMR(ctx, opts.RepoPath, MRIdentity{
+		Project: opts.Project, IID: opts.IID, Host: opts.Host, Revision: opts.Revision,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +239,9 @@ func SyncState(ctx context.Context, opts StageOptions, cli *CLI) (edited []strin
 	if err != nil {
 		return nil, nil, err
 	}
-	sessionSlug, err := cli.ResolveSessionSmart(ctx, opts.RepoPath, opts.Project, opts.IID)
+	sessionSlug, err := cli.ResolveSessionSmartForMR(ctx, opts.RepoPath, MRIdentity{
+		Project: opts.Project, IID: opts.IID, Host: opts.Host, Revision: opts.Revision,
+	})
 	if err != nil {
 		return nil, nil, err
 	}

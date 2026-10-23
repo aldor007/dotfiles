@@ -238,6 +238,29 @@ type rawMRListItem struct {
 
 // ---- reads -----------------------------------------------------------------
 
+// MRDiff is one file entry of the MR's current diff version
+// (GET /projects/:id/merge_requests/:iid/diffs).
+type MRDiff struct {
+	OldPath     string `json:"old_path"`
+	NewPath     string `json:"new_path"`
+	NewFile     bool   `json:"new_file"`
+	RenamedFile bool   `json:"renamed_file"`
+	DeletedFile bool   `json:"deleted_file"`
+	Diff        string `json:"diff"`
+	// TooLarge marks a diff GitLab collapsed or refused to render. Some
+	// versions send the explicit flag, others just omit the diff body —
+	// both map here (DiffUnavailable). The file still counts as changed;
+	// only its raw diff is unavailable.
+	TooLarge bool `json:"too_large"`
+}
+
+// DiffUnavailable reports whether the raw diff body is unavailable
+// (too-large/collapsed entry). Best effort: an empty body is treated as
+// collapsed.
+func (d MRDiff) DiffUnavailable() bool {
+	return d.TooLarge || strings.TrimSpace(d.Diff) == ""
+}
+
 // GetMR fetches one merge request.
 func (c *Client) GetMR(project string, iid int) (*MR, error) {
 	var mr MR
@@ -248,46 +271,61 @@ func (c *Client) GetMR(project string, iid int) (*MR, error) {
 	return &mr, nil
 }
 
-// ChangedFiles returns the list of files changed by the MR.
+// MRDiffs fetches the MR's per-file diff listing, paginated
+// (GET /merge_requests/:iid/diffs).
 //
-// SECURITY/REVIEW (P2 #5): GitLab returns up to per_page files per call
-// and reports total via the `x-total` header. The OLD implementation
-// made a single un-paginated call — a large MR (>100 files) would
-// silently truncate the list, missing files from the diff. We now
-// loop with per_page=100 and explicit termination, accumulating paths
-// from each page. Cap at 1000 files (≈10 pages) to bound work; an MR
-// that large is rare and the call site can flag it.
-func (c *Client) ChangedFiles(project string, iid int) ([]string, error) {
-	seen := map[string]bool{}
-	var out []string
+// SECURITY/REVIEW (P2 #5): the previous implementation looped the
+// single-MR /changes endpoint, which is deprecated and NOT a paginated
+// collection — the loop silently returned the same first page over and
+// over, and renames were double-counted (old + new path both listed).
+// The /diffs endpoint is the supported per-file listing. We loop with
+// per_page=100 up to maxPages (≈1000 files) and break on empty/short
+// pages, exactly like Discussions. Collapsed/too-large entries are kept
+// (the file counts; MRDiff.DiffUnavailable marks the missing body).
+func (c *Client) MRDiffs(project string, iid int) ([]MRDiff, error) {
+	var out []MRDiff
 	const maxPages = 10
 	const perPage = 100
 	for page := 1; page <= maxPages; page++ {
-		var resp struct {
-			Changes []struct {
-				OldPath string `json:"old_path"`
-				NewPath string `json:"new_path"`
-			} `json:"changes"`
-		}
-		ep := fmt.Sprintf("projects/%s/merge_requests/%d/changes?per_page=%d&page=%d",
+		var pageOut []MRDiff
+		ep := fmt.Sprintf("projects/%s/merge_requests/%d/diffs?per_page=%d&page=%d",
 			EncPath(project), iid, perPage, page)
-		if err := c.apiJSON("", false, ep, &resp); err != nil {
+		if err := c.apiJSON("", false, ep, &pageOut); err != nil {
 			return out, err
 		}
-		if len(resp.Changes) == 0 {
+		if len(pageOut) == 0 {
 			break
 		}
-		for _, ch := range resp.Changes {
-			for _, p := range []string{ch.NewPath, ch.OldPath} {
-				if p != "" && !seen[p] {
-					seen[p] = true
-					out = append(out, p)
-				}
-			}
-		}
-		if len(resp.Changes) < perPage {
+		out = append(out, pageOut...)
+		if len(pageOut) < perPage {
 			break
 		}
+	}
+	return out, nil
+}
+
+// ChangedFiles returns the new-side path of every file changed by the MR,
+// exactly ONE entry per file: a rename contributes its new path only (the
+// old path stays reachable via MRDiffs, which is what inline-position
+// construction must use — P2 #6). Collapsed/too-large diffs still count
+// their file.
+func (c *Client) ChangedFiles(project string, iid int) ([]string, error) {
+	diffs, err := c.MRDiffs(project, iid)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(diffs))
+	for _, d := range diffs {
+		p := d.NewPath
+		if p == "" {
+			p = d.OldPath
+		}
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
 	}
 	return out, nil
 }

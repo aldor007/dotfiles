@@ -55,7 +55,7 @@ func (m *model) layout() layoutResult {
 	switch {
 	case w >= 120:
 		fw := clampInt(w*22/100, 26, 44)
-		gw := clampInt(w*30/100, 34, 48) // 48 max: keeps the diff pane ≥100 cells at 200 cols
+		gw := clampInt(w*30/100, 34, 48)   // 48 max: keeps the diff pane ≥100 cells at 200 cols
 		dw := w - fw - gw - panesChrome(3) // 3 borders pairs + 2 gaps
 		if dw < 40 {
 			dw = 40

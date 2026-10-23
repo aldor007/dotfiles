@@ -103,26 +103,30 @@ func Slug(host, project string) string {
 
 // Review is the metadata record for one review (review.json).
 type Review struct {
-	Project        string   `json:"project"`
-	Host           string   `json:"host"`
-	IID            int      `json:"iid"`
-	Title          string   `json:"title"`
-	Author         string   `json:"author"`
-	SourceBranch   string   `json:"source_branch"`
-	TargetBranch   string   `json:"target_branch"`
-	HeadSHA        string   `json:"head_sha"`
-	BaseSHA        string   `json:"base_sha"`
-	StartSHA       string   `json:"start_sha"`
-	Worktree       string   `json:"worktree"`
-	RepoPath       string   `json:"repo_path"`
-	SourceProject  string   `json:"source_project,omitempty"` // full path; set for fork MRs
-	State          string   `json:"state"`                    // reviewing | published
-	SummaryComment string   `json:"summary_comment,omitempty"`
-	Description    string   `json:"description,omitempty"`    // MR description (background re-run needs it)
-	ReviewedFiles  []string `json:"reviewed_files,omitempty"` // manual review progress (per new path)
-	ReviewedHunks  []string `json:"reviewed_hunks,omitempty"` // "path|newStart" per hunk
-	CreatedAt      string   `json:"created_at"`
-	UpdatedAt      string   `json:"updated_at"`
+	Project        string `json:"project"`
+	Host           string `json:"host"`
+	IID            int    `json:"iid"`
+	Title          string `json:"title"`
+	Author         string `json:"author"`
+	SourceBranch   string `json:"source_branch"`
+	TargetBranch   string `json:"target_branch"`
+	HeadSHA        string `json:"head_sha"`
+	BaseSHA        string `json:"base_sha"`
+	StartSHA       string `json:"start_sha"`
+	Worktree       string `json:"worktree"`
+	RepoPath       string `json:"repo_path"`
+	SourceProject  string `json:"source_project,omitempty"` // full path; set for fork MRs
+	State          string `json:"state"`                    // reviewing | published
+	SummaryComment string `json:"summary_comment,omitempty"`
+	// SummaryDiscussionID is the remote discussion that carries the published
+	// summary note (P2 #7): set once by the publisher, it makes summary
+	// publication idempotent across re-runs. Empty = not yet published.
+	SummaryDiscussionID string   `json:"summary_discussion_id,omitempty"`
+	Description         string   `json:"description,omitempty"`    // MR description (background re-run needs it)
+	ReviewedFiles       []string `json:"reviewed_files,omitempty"` // manual review progress (per new path)
+	ReviewedHunks       []string `json:"reviewed_hunks,omitempty"` // "path|newStart" per hunk
+	CreatedAt           string   `json:"created_at"`
+	UpdatedAt           string   `json:"updated_at"`
 }
 
 // LoadReview reads review.json from a review dir.
@@ -308,18 +312,73 @@ func LoadFindings(dir string) ([]Finding, error) {
 	return out, sc.Err()
 }
 
-// SaveFindings writes findings.jsonl atomically.
-func SaveFindings(dir string, fs []Finding) error {
+// marshalFindings renders the findings set as findings.jsonl bytes.
+func marshalFindings(fs []Finding) ([]byte, error) {
 	var b strings.Builder
 	for _, fd := range fs {
 		j, err := json.Marshal(fd)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		b.Write(j)
 		b.WriteByte('\n')
 	}
-	return atomicWrite(filepath.Join(dir, "findings.jsonl"), []byte(b.String()))
+	return []byte(b.String()), nil
+}
+
+// SaveFindings writes findings.jsonl atomically.
+//
+// NOTE: this is a whole-file write of the fs argument. Callers that read
+// findings, change one, and save the result must use UpdateFindings
+// instead — a read outside the lock followed by SaveFindings can clobber
+// another writer's records (the AI worker vs. the interactive reviewer).
+func SaveFindings(dir string, fs []Finding) error {
+	b, err := marshalFindings(fs)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(FindingsPath(dir), b)
+}
+
+// UpdateFindings runs fn as an atomic read-modify-write transaction on
+// findings.jsonl: the advisory lock is held across the load, the mutator,
+// and the save, so no other writer (the background AI worker, another
+// mr-review process, or another goroutine in this process) can slip a
+// whole-file write between this call's read and its write.
+//
+// fn receives the freshly loaded, validated findings and returns the set
+// to persist (returning nil persists an empty file, matching
+// SaveFindings(dir, nil)). The mutator runs synchronously and must not
+// itself call SaveFindings/UpdateFindings on the same dir — the lock is
+// not re-entrant and the second acquisition would time out.
+//
+// The mutator's output is re-validated fail-closed (same gate as
+// LoadFindings): an invalid record aborts the transaction and nothing is
+// written. An fn error also aborts with no write.
+func UpdateFindings(dir string, fn func(fs []Finding) ([]Finding, error)) error {
+	return withFileLock(FindingsPath(dir), func() error {
+		fs, err := LoadFindings(dir)
+		if err != nil {
+			return fmt.Errorf("update findings: %w", err)
+		}
+		out, err := fn(fs)
+		if err != nil {
+			return err
+		}
+		for i := range out {
+			if err := out[i].Validate(); err != nil {
+				return fmt.Errorf("update findings: record %d (%s): %w", i, out[i].ID, err)
+			}
+			if out[i].ID == "" {
+				return fmt.Errorf("update findings: record %d: missing id", i)
+			}
+		}
+		b, err := marshalFindings(out)
+		if err != nil {
+			return err
+		}
+		return writeAtomicLocked(FindingsPath(dir), b)
+	})
 }
 
 // FindingsPath returns the findings.jsonl path.
@@ -328,9 +387,9 @@ func FindingsPath(dir string) string { return filepath.Join(dir, "findings.jsonl
 // RawFindingsPath is where the agent is told to write its raw output.
 func RawFindingsPath(dir string) string { return filepath.Join(dir, "findings.raw.jsonl") }
 
-// atomicWrite writes data to path atomically with a per-file advisory
-// lock. This is the single funnel for any state-file write in the store,
-// so callers cannot accidentally bypass the locking protocol.
+// withFileLock runs fn while holding the advisory lock for path
+// ("<path>.lock"). This is the single funnel for lock acquisition in the
+// store, so every state-file write shares one locking protocol.
 //
 // Locking (review finding P1 #8): atomic rename alone does NOT prevent
 // two processes from racing to update the same file. In mr-review, the
@@ -341,15 +400,11 @@ func RawFindingsPath(dir string) string { return filepath.Join(dir, "findings.ra
 // than block indefinitely (the lock holder should be quick, and a
 // stuck lock points to a real bug to investigate).
 //
-// Temp filename uniqueness: rename() races are avoided by giving the
-// temp file a per-process, per-call name ("<path>.tmp.<pid>.<nanos>"),
-// so two concurrent writers cannot both rename the same temp into
-// place — whichever wins, the other has nothing to rename.
-//
-// fsync ordering: the file is fsync'd BEFORE the rename so the data is
-// on disk before the directory entry changes; the directory is fsync'd
-// after the rename so the rename itself is durable.
-func atomicWrite(path string, data []byte) error {
+// In-process: flock/OFD locks are held per open file description, and
+// each withFileLock call opens its own fd — so two goroutines in this
+// process contending for the same path serialize through the same poll
+// loop as two processes. The lock is NOT re-entrant.
+func withFileLock(path string, fn func() error) error {
 	lockPath := path + ".lock"
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
@@ -363,7 +418,31 @@ func atomicWrite(path string, data []byte) error {
 		return fmt.Errorf("lock %s: %w", lockPath, err)
 	}
 	defer flockUnlock(lockFile)
+	return fn()
+}
 
+// atomicWrite writes data to path atomically: advisory lock, then the
+// tmp+fsync+rename protocol below. This is the single funnel for any
+// state-file write in the store, so callers cannot accidentally bypass
+// the locking protocol.
+func atomicWrite(path string, data []byte) error {
+	return withFileLock(path, func() error { return writeAtomicLocked(path, data) })
+}
+
+// writeAtomicLocked writes data to path with the temp-file + rename
+// protocol. The caller MUST hold the advisory lock for path (see
+// withFileLock) — alone it protects file integrity only, not read-
+// modify-write transactions.
+//
+// Temp filename uniqueness: rename() races are avoided by giving the
+// temp file a per-process, per-call name ("<path>.tmp.<pid>.<nanos>"),
+// so two concurrent writers cannot both rename the same temp into
+// place — whichever wins, the other has nothing to rename.
+//
+// fsync ordering: the file is fsync'd BEFORE the rename so the data is
+// on disk before the directory entry changes; the directory is fsync'd
+// after the rename so the rename itself is durable.
+func writeAtomicLocked(path string, data []byte) error {
 	tmp := fmt.Sprintf("%s.tmp.%d.%d", path, os.Getpid(), time.Now().UnixNano())
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {

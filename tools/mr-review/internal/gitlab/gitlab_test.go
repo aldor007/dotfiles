@@ -1,8 +1,10 @@
 package gitlab
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -240,5 +242,109 @@ func TestGetMRTolerantFieldShapes(t *testing.T) {
 	_ = os.WriteFile(bin, []byte("#!/bin/bash\ncat <<'EOF'\n"+body3+"\nEOF\n"), 0o755)
 	if mr, err = c.GetMR("g/p", 8); err != nil {
 		t.Fatalf("null shape: %v", err)
+	}
+}
+
+// ---- P2 #5: paginated per-file diff listing ---------------------------------
+
+// diffsStub installs a glab stub serving the MR diffs endpoint. page1 is
+// always served for page=1; page2 (if non-empty) for page=2; other pages
+// return []. Returns (bin, log).
+func diffsStub(t *testing.T, dir, page1, page2 string) (string, string) {
+	t.Helper()
+	log := filepath.Join(dir, "calls.log")
+	bin := filepath.Join(dir, "glab")
+	script := "#!/bin/bash\nprintf '%s\\n' \"$*\" >> " + log + "\ncase \"$*\" in\n"
+	if page2 != "" {
+		script += "  *'page=2') cat <<'EOF'\n" + page2 + "\nEOF\n;;\n"
+	}
+	script += "  *'page=1') cat <<'EOF'\n" + page1 + "\nEOF\n;;\n  *) echo '[]' ;;\nesac\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, log
+}
+
+func TestMRDiffsFollowsPagesUntilShortPage(t *testing.T) {
+	dir := t.TempDir()
+	var entries []string
+	for i := 1; i <= 100; i++ { // a FULL page: the loop must fetch page 2
+		entries = append(entries, fmt.Sprintf(`{"old_path":"f%03d.go","new_path":"f%03d.go","diff":"x"}`, i, i))
+	}
+	page1 := "[" + strings.Join(entries, ",") + "]"
+	page2 := `[{"old_path":"tail.go","new_path":"tail.go","diff":"y"}]`
+	bin, log := diffsStub(t, dir, page1, page2)
+	c := &Client{Bin: bin}
+
+	diffs, err := c.MRDiffs("g/p", 7)
+	if err != nil {
+		t.Fatalf("MRDiffs: %v", err)
+	}
+	if len(diffs) != 101 {
+		t.Fatalf("want 101 diffs across two pages, got %d", len(diffs))
+	}
+	calls, _ := os.ReadFile(log)
+	if !strings.Contains(string(calls), "merge_requests/7/diffs?per_page=100&page=1") ||
+		!strings.Contains(string(calls), "page=2") {
+		t.Fatalf("pagination calls missing:\n%s", calls)
+	}
+	if strings.Contains(string(calls), "page=3") {
+		t.Fatalf("pagination must stop on a short page:\n%s", calls)
+	}
+}
+
+func TestMRDiffsParsesRenamesAndTooLarge(t *testing.T) {
+	dir := t.TempDir()
+	body := `[
+	  {"old_path":"a.go","new_path":"a.go","diff":"@@ -1 +1 @@\\n-a\\n+b\\n"},
+	  {"old_path":"old_name.go","new_path":"new_name.go","renamed_file":true,
+	   "diff":"rename from old_name.go\\nrename to new_name.go\\n"},
+	  {"old_path":"big.bin","new_path":"big.bin","too_large":true,"diff":""},
+	  {"old_path":"gone.go","new_path":"gone.go","deleted_file":true,
+	   "diff":"@@ -1 +0,0 @@\\n-x\\n"}
+	]`
+	bin, _ := diffsStub(t, dir, body, "")
+	c := &Client{Bin: bin}
+
+	diffs, err := c.MRDiffs("g/p", 7)
+	if err != nil {
+		t.Fatalf("MRDiffs: %v", err)
+	}
+	if len(diffs) != 4 {
+		t.Fatalf("want 4 entries (incl. collapsed/too-large), got %d", len(diffs))
+	}
+	ren := diffs[1]
+	if !ren.RenamedFile || ren.OldPath != "old_name.go" || ren.NewPath != "new_name.go" {
+		t.Fatalf("rename not parsed: %+v", ren)
+	}
+	if !diffs[2].TooLarge || !diffs[2].DiffUnavailable() {
+		t.Fatalf("too-large entry must keep the file but mark the diff: %+v", diffs[2])
+	}
+	if !diffs[3].DeletedFile {
+		t.Fatalf("deletion not parsed: %+v", diffs[3])
+	}
+}
+
+func TestChangedFilesOneEntryPerFile(t *testing.T) {
+	dir := t.TempDir()
+	// rename counts the NEW path exactly once (the old path is NOT listed);
+	// too-large and deleted files still count their file
+	body := `[
+	  {"old_path":"a.go","new_path":"a.go","diff":"x"},
+	  {"old_path":"old_name.go","new_path":"new_name.go","renamed_file":true,"diff":"x"},
+	  {"old_path":"big.bin","new_path":"big.bin","too_large":true,"diff":""},
+	  {"old_path":"gone.go","new_path":"gone.go","deleted_file":true,"diff":"x"},
+	  {"old_path":"new_name.go","new_path":"new_name.go","diff":"x"}
+	]`
+	bin, _ := diffsStub(t, dir, body, "")
+	c := &Client{Bin: bin}
+
+	got, err := c.ChangedFiles("g/p", 7)
+	if err != nil {
+		t.Fatalf("ChangedFiles: %v", err)
+	}
+	want := []string{"a.go", "new_name.go", "big.bin", "gone.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("want exactly one entry per file %v, got %v", want, got)
 	}
 }

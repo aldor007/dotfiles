@@ -30,6 +30,15 @@ const (
 // workspace state on the model.
 //
 // wsPane != nil ⇔ the split workspace is open.
+//
+// Lifecycle ownership (review P1-1): the pane is owned by the model —
+// openTuicrPane/closeTuicrPane are the ONLY production mutation points,
+// and closeTuicrPane is reached from every exit path (W, Ctrl+C, Esc-quit,
+// wsPaneExitMsg, plus the guaranteed defer around p.Run() in Run and
+// RunWorkspace). The variables remain package-level purely as an accessor
+// shim: registry.go, nav.go and view.go (and legacy tests) read wsPane
+// directly and are outside this fix's ownership scope — migrating those
+// readers to model fields is the follow-up that deletes this shim.
 var (
 	wsPane        *plex.Pane
 	wsPaneCancel  context.CancelFunc // cancellable context for the pane lifecycle (P1 #9)
@@ -100,7 +109,9 @@ func (m *model) openTuicrPane() tea.Cmd {
 // closeTuicrPane kills the embedded tuicr (W in workspace mode) and
 // releases the model-owned cancellable context. Safe to call multiple
 // times (REVIEW FIX P1 #9). Reached from every exit path so the tuicr
-// subprocess cannot outlive the host UI.
+// subprocess cannot outlive the host UI: the model quit paths (Ctrl+C,
+// Esc-quit), W-close, and the guaranteed defer around p.Run() in Run and
+// RunWorkspace (covers the registry's q action and any abnormal exit).
 func (m *model) closeTuicrPane() {
 	if wsPane == nil {
 		return
