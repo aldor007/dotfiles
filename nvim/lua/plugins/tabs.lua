@@ -87,13 +87,4 @@ return {
     },
   },
 
-  -- Tabpage/window manager popup (:Tabman). Keys inside the popup: q close,
-  -- o toggle-tabpage-expand, x delete-tabpage, <Enter> jump to window.
-  {
-    "wsdjeg/tabman.nvim",
-    cmd = { "Tabman" },
-    keys = {
-      { "<leader>t", "<cmd>Tabman<cr>", desc = "tabs: manager (:Tabman)" },
-    },
-  },
 }
