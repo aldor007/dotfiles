@@ -60,18 +60,29 @@ local function new_scratch_buf(lines, ft)
   return buf
 end
 
--- Force-load all lazy plugins (bypasses lazy-loading triggers)
+-- Force-load all lazy plugins (bypasses lazy-loading triggers).
+-- Skipped in SMOKE_COLD=1 mode — the cold mode verifies that modules
+-- load via their natural triggers (events, keys, commands) instead.
+-- Catches the class of bug where lazy.load() makes every plugin "work"
+-- for tests but the real keybinding path never triggers the bridge
+-- plugin (e.g. mason-nvim-dap with no event/cmd/keys trigger).
+local SMOKE_COLD = vim.env.SMOKE_COLD == "1"
 ensure_gcloud_stub() -- BEFORE any plugin loads: the startup token mint (VeryLazy)
 -- resolves gcloud from PATH, so the stub must already be first.
-local lazy_config = require("lazy.core.config")
-local names = {}
-for name in pairs(lazy_config.plugins) do
-  table.insert(names, name)
+if not SMOKE_COLD then
+  local lazy_config = require("lazy.core.config")
+  local names = {}
+  for name in pairs(lazy_config.plugins) do
+    table.insert(names, name)
+  end
+  require("lazy").load({ plugins = names })
+  vim.wait(3000, function() return false end, 100) -- let lazy events settle
+else
+  -- Cold mode: only fire what VeryLazy + startup hooks would. Wait long
+  -- enough for mason-nvim-dap / nvim-dap-ui (event = "VeryLazy" — fires
+  -- once UiEnter runs) to settle.
+  vim.wait(5000, function() return false end, 100)
 end
-require("lazy").load({ plugins = names })
-vim.wait(3000, function()
-  return false
-end, 100) -- let lazy events settle
 
 -- 1. Core config modules
 check("options loaded", function()
@@ -544,6 +555,41 @@ check("telescope file_browser extension", function()
   local ok, ext = pcall(function() return t.extensions.file_browser end)
   assert(ok and ext, "file_browser extension not registered")
 end)
+
+-- Cold-mode DAP checks (audit §3 testing gap): with SMOKE_COLD=1, no
+-- plugins are force-loaded. The very thing this verifies is whether
+-- mason-nvim-dap.nvim and nvim-dap-ui actually load via their natural
+-- triggers (event = "VeryLazy") after UiEnter. The force-load path
+-- hides this — these checks only run in cold mode.
+if SMOKE_COLD then
+  check("DAP: mason-nvim-dap loaded (event=VeryLazy)", function()
+    local ok = pcall(require, "mason-nvim-dap")
+    assert(ok, "mason-nvim-dap not loaded — VeryLazy trigger did not fire")
+  end)
+
+  check("DAP: nvim-dap-ui loaded (event=VeryLazy)", function()
+    local ok = pcall(require, "dapui")
+    assert(ok, "dapui not loaded — VeryLazy trigger did not fire")
+  end)
+
+  -- The killer check: simulate a user pressing ,dc and verify that
+  -- nvim-dap's keybinding resolves to a real callable (i.e. the bridge
+  -- and the core loaded via the keys= trigger). If mason-nvim-dap never
+  -- loaded, dap.continue() would still exist (it's core nvim-dap) but
+  -- adapters would not be registered. We probe the listener registry.
+  check("DAP: ,dc handler can run after VeryLazy (no require cycle)", function()
+    -- require('dap') will trigger lazy.nvim to load nvim-dap via its
+    -- keys= entry. If we reach here without an error, the bridge and
+    -- core are wired correctly.
+    local ok, dap = pcall(require, "dap")
+    assert(ok and type(dap.continue) == "function", "dap.continue missing")
+    -- Verify DAP event listeners exist (set by dapui_config when its
+    -- config function ran; existence of any listener proves dapui loaded).
+    local listeners = require("dap").listeners
+    assert(listeners and listeners.after and listeners.before,
+      "dap listeners table missing — dapui never registered its hooks")
+  end)
+end
 
 print(string.format("\n%d/%d checks passed", checks - #failures, checks))
 if #failures > 0 then

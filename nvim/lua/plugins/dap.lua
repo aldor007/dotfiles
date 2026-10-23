@@ -22,6 +22,8 @@ return {
   {
     "jay-babu/mason-nvim-dap.nvim",
     lazy = true,
+    event = "VeryLazy", -- audit P1: register adapters + handlers after UiEnter,
+                          -- so they exist before any Dap* keypress fires.
     dependencies = { "mason.nvim", "mfussenegger/nvim-dap" },
     opts = {
       -- ensure_installed uses mason-nvim-dap's adapter IDs, not pip
@@ -37,6 +39,8 @@ return {
   {
     "rcarriga/nvim-dap-ui",
     lazy = true,
+    event = "VeryLazy", -- audit P2: register auto-open / auto-close listeners
+                          -- early so ,dc with no ,dui still wires them up.
     dependencies = { "mfussenegger/nvim-dap", "nvim-neotest/nvim-nio" },
     keys = {
       { "<leader>dui", function() require("dapui").toggle() end, desc = "dap: toggle ui" },

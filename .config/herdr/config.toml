@@ -202,7 +202,9 @@ description = "projects: agent mission board"
 #   prefix+shift+w — re-probe ownership and refresh the SSH aliases
 #   prefix+alt+w   — drop into an interactive `kimchi` REPL inside the
 #                    focused workspace as a split pane
-#   prefix+n       — create a new workspace (popup prompts for desc)
+#   prefix+a       — create a new workspace (popup prompts for desc)
+#                    (audit P3 corrected: prefix+n already navigates to the
+#                    next tab; the workspace-creation binding is prefix+a)
 [[keys.command]]
 key = "prefix+w"
 type = "plugin_action"

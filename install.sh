@@ -364,6 +364,16 @@ function install_herdr {
     # worker/reviewer/coordinator/watcher — settings live locally in
     # ~/.herdr-projects/settings/config.json.
     run herdr plugin install --yes eliasstravik/herdr-projects
+    # kimchi-remote: local-only plugin (not on github — verified via
+    # `curl https://github.com/castai/kimchi-remote` → 404). Lives under
+    # local/herdr-kimchi-remote/ and gets installed by path so the
+    # prefix+w / prefix+shift+w / prefix+alt+w / prefix+a bindings in
+    # config.toml resolve. Audit finding P1 (plugin listed but never
+    # installed). Falls back to a clean no-op if the local source is
+    # absent (e.g. someone removes it from a future branch).
+    if [ -d "$REPO_DIR/local/herdr-kimchi-remote" ]; then
+        run herdr plugin install --yes --path "$REPO_DIR/local/herdr-kimchi-remote"
+    fi
     run mkdir -p "$HOME/.config/herdr"
     link_or_backup "$REPO_DIR/.config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
     # herdr-plus plugin config: projects / quick-actions / worktrees are
