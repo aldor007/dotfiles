@@ -95,6 +95,26 @@ return {
           hide_gitignored = true,  -- respect .gitignore
           hide_ignored = true,
         },
+        window = {
+          mappings = {
+            -- Guard the finder entry points: pressing them before the async
+            -- tree render leaves state.tree nil and upstream crashes
+            -- (renderer.get_expanded_nodes on nil). No-op; press again once
+            -- the tree is visible.
+            ["s"] = function(state)
+              if state.tree == nil then return end
+              require("neo-tree.sources.filesystem.commands").fuzzy_finder(state)
+            end,
+            ["S"] = function(state)
+              if state.tree == nil then return end
+              require("neo-tree.sources.filesystem.commands").fuzzy_finder_directory(state)
+            end,
+            ["/"] = function(state)
+              if state.tree == nil then return end
+              require("neo-tree.sources.filesystem.commands").filter_on_submit(state)
+            end,
+          },
+        },
       },
     },
   },
