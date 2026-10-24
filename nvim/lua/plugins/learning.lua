@@ -34,6 +34,23 @@ return {
       { "<leader>uv", "<cmd>VimBeGoodPractice<cr>", desc = "learning: launch VimBeGood" },
     },
     config = function()
+      -- vim-be-good assumes a UI exists and dereferences
+      -- vim.api.nvim_list_uis()[1]. In headless validation, that list is empty,
+      -- so provide a fallback geometry from the current editor dimensions.
+      local list_uis = vim.api.nvim_list_uis
+      vim.api.nvim_list_uis = function()
+        local uis = list_uis()
+        if #uis > 0 then
+          return uis
+        end
+        return {
+          {
+            width = vim.o.columns or 120,
+            height = vim.o.lines or 40,
+          },
+        }
+      end
+
       local function ensure_practice_tab()
         local tabnr = vim.g.vim_be_good_practice_tab
         if tabnr and vim.api.nvim_tabpage_is_valid(tabnr) then
