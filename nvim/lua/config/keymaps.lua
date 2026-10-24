@@ -39,15 +39,10 @@ map("v", ">", ">gv")
 map("n", "<leader>/", ":nohlsearch<CR>")
 
 -- Learning mode: let the editor teach without disturbing regular review.
-local function learning_mode_state()
-  local precog_ok, precog = pcall(require, "precognition")
-  local hardtime_ok, hardtime = pcall(require, "hardtime")
-  local precog_visible = precog_ok and type(precog.is_visible) == "function" and precog.is_visible() or false
-  local hardtime_enabled = hardtime_ok and type(hardtime.is_plugin_enabled) == "boolean" and hardtime.is_plugin_enabled or false
-  return precog_visible or hardtime_enabled
-end
+local learning_mode_enabled = false
 
 local function set_learning_mode(enabled)
+  learning_mode_enabled = enabled
   if enabled then
     pcall(vim.cmd, "Precognition show")
     pcall(vim.cmd, "Hardtime enable")
@@ -58,7 +53,7 @@ local function set_learning_mode(enabled)
 end
 
 vim.api.nvim_create_user_command("LearningMode", function()
-  set_learning_mode(not learning_mode_state())
+  set_learning_mode(not learning_mode_enabled)
 end, { desc = "Toggle Precognition + Hardtime learning mode" })
 map("n", "<leader>um", ":LearningMode<CR>", { desc = "learning: toggle learning mode" })
 

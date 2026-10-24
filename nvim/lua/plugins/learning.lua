@@ -41,10 +41,9 @@ return {
           return tabnr
         end
 
-        local new_tab = vim.api.nvim_create_tabpage()
+        vim.cmd("tabnew")
+        local new_tab = vim.api.nvim_get_current_tabpage()
         vim.g.vim_be_good_practice_tab = new_tab
-        vim.api.nvim_set_current_tabpage(new_tab)
-        vim.cmd("enew")
         return new_tab
       end
 

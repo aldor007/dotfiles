@@ -51,7 +51,7 @@ This is useful while reading Go code and moving between functions, imports, and 
 1. Open a Go file and read for a minute while using normal navigation.
 2. Toggle learning mode with `,um` and keep Precognition visible while moving between functions and statements.
 3. Practice `hjkl`, word motions, target jumps, search, and accurate cursor placement using VimBeGood.
-4. Close the exercises with `,uv` again or by leaving the practice tab.
+4. Close the exercises by leaving the practice tab (for example, `:tabclose`).
 5. Turn off learning mode with `,um` and return to normal review.
 
 ## Returning to normal mode
