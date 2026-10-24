@@ -279,12 +279,13 @@ func (c *Client) GetMR(project string, iid int) (*MR, error) {
 // collection — the loop silently returned the same first page over and
 // over, and renames were double-counted (old + new path both listed).
 // The /diffs endpoint is the supported per-file listing. We loop with
-// per_page=100 up to maxPages (≈1000 files) and break on empty/short
+// per_page=100 up to maxPages (≈10,000 files) and break on empty/short
 // pages, exactly like Discussions. Collapsed/too-large entries are kept
 // (the file counts; MRDiff.DiffUnavailable marks the missing body).
 func (c *Client) MRDiffs(project string, iid int) ([]MRDiff, error) {
 	var out []MRDiff
-	const maxPages = 10
+	const maxPages = 100 // 10,000 files; beyond that we fail closed instead of
+	// silently treating the review as complete.
 	const perPage = 100
 	for page := 1; page <= maxPages; page++ {
 		var pageOut []MRDiff
@@ -299,6 +300,9 @@ func (c *Client) MRDiffs(project string, iid int) ([]MRDiff, error) {
 		out = append(out, pageOut...)
 		if len(pageOut) < perPage {
 			break
+		}
+		if page == maxPages {
+			return nil, fmt.Errorf("glab api projects/%s/merge_requests/%d/diffs: page %d was full (100 files); diff list exceeds the operational cap and is incomplete", EncPath(project), iid, page)
 		}
 	}
 	return out, nil
@@ -433,17 +437,26 @@ func (c *Client) listMRs(endpoint string, maxPages int) ([]MRListItem, error) {
 			var out []MRListItem
 			if json.Unmarshal(b, &out) == nil {
 				return out, nil
-			} // corrupt entry: treat as miss
-		}
+			}
+		} // corrupt entry: treat as miss
+	}
+	if maxPages <= 0 {
+		maxPages = 1
 	}
 	var raw []rawMRListItem
-	// single page (per_page=100, NO --paginate): the paginate loop was
-	// observed to hang for 60s+ per call on large monorepos
-	if err := c.apiJSON("", false, endpoint, &raw); err != nil {
-		return nil, err
-	}
-	if maxPages > 0 && len(raw) > maxPages*100 {
-		raw = raw[:maxPages*100]
+	for page := 1; page <= maxPages; page++ {
+		ep := fmt.Sprintf("%s&page=%d", endpoint, page)
+		var pageOut []rawMRListItem
+		if err := c.apiJSON("", false, ep, &pageOut); err != nil {
+			return nil, err
+		}
+		if len(pageOut) == 0 {
+			break
+		}
+		raw = append(raw, pageOut...)
+		if len(pageOut) < 100 {
+			break
+		}
 	}
 	out := make([]MRListItem, 0, len(raw))
 	for _, r := range raw {
