@@ -5,7 +5,6 @@ package store
 import (
 	"errors"
 	"os"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -22,19 +21,16 @@ func doFlockTry(f *os.File, d time.Duration) error {
 	// are the modern Linux fcntl() command and the only variant that
 	// gives us clean semantics without per-process flock(2) weirdness.
 	for {
-		// F_OFD_SETLK = 37 on Linux. Use unix constants.
-		err := unix.FcntlSetLk(f, unix.F_OFD_SETLK, &unix.Flock_t{
+		lk := &unix.Flock_t{
 			Type:   unix.F_WRLCK,
-			Whence: 1, // SEEK_SET
+			Whence: int16(unix.SEEK_SET),
 			Start:  0,
-			Len:    0, // whole file
-		})
+			Len:    0,
+		}
+		err := unix.FcntlFlock(f.Fd(), unix.F_OFD_SETLK, lk)
 		if err == nil {
 			return nil
 		}
-		// EAGAIN/EWOULDBLOCK: lock held by another process; back off + retry.
-		// EACCES on some systems when the lock is held by another process
-		// (BSD-style flock semantics through OFD). Treat both as contention.
 		if !errors.Is(err, unix.EAGAIN) && !errors.Is(err, unix.EACCES) {
 			return err
 		}
@@ -46,11 +42,11 @@ func doFlockTry(f *os.File, d time.Duration) error {
 }
 
 func doFlockUnlock(f *os.File) error {
-	// F_OFD_SETLKW (37) with F_UNLCK — release the OFD lock.
-	return unix.FcntlSetLk(f, unix.F_OFD_SETLK, &unix.Flock_t{
+	lk := &unix.Flock_t{
 		Type:   unix.F_UNLCK,
-		Whence: 1,
+		Whence: int16(unix.SEEK_SET),
 		Start:  0,
 		Len:    0,
-	})
+	}
+	return unix.FcntlFlock(f.Fd(), unix.F_OFD_SETLK, lk)
 }
