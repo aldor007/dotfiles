@@ -408,9 +408,10 @@ auto_tunnel_stop() { # only for tunnels this run started
 # verification (require) is sufficient here.
 token=$(gcloud auth print-access-token)
 user_enc=$(printf '%s' "$USER" | sed 's/@/%40/g')
-dsn="postgres://$user_enc:$token@127.0.0.1:$PORT/$DB?sslmode=require"
+# Machine interface: emit the real DSN on stdout; human output remains masked.
+dsn="postgres://$user_enc@127.0.0.1:$PORT/$DB?sslmode=require"
 # display form — the token is replaced, never printed
-redacted="postgres://$user_enc:***@127.0.0.1:$PORT/$DB?sslmode=require"
+redacted="postgres://$user_enc@127.0.0.1:$PORT/$DB?sslmode=require"
 
 if [ "$mode" = dsn ]; then
   # stdout stays machine-clean (DSN only); the note goes to stderr. The tunnel
