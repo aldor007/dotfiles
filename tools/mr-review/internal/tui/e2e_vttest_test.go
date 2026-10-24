@@ -33,8 +33,16 @@ import (
 func vtBin(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "mr-review")
+	moduleRoot := filepath.Join("..", "..") // module root (tools/mr-review)
+	cmdPkg := filepath.Join(moduleRoot, "cmd", "mr-review")
+	if _, err := os.Stat(cmdPkg); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("requires %s", cmdPkg)
+		}
+		t.Fatalf("stat %s: %v", cmdPkg, err)
+	}
 	cmd := exec.Command("go", "build", "-o", bin, "./cmd/mr-review")
-	cmd.Dir = filepath.Join("..", "..") // module root (tools/mr-review)
+	cmd.Dir = moduleRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build binary: %v\n%s", err, out)
 	}

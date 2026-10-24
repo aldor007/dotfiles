@@ -14,7 +14,7 @@ import (
 func wsFakeTuicr(t *testing.T) {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "fake-tuicr-tui")
-	script := `#!/bin/sh
+	script := `#!/usr/bin/env bash
 printf '\033[2J\033[H TUIRCR-STUB READY\n'
 stty raw -echo 2>/dev/null
 while IFS= read -r -n 1 -s c; do
