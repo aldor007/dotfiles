@@ -445,12 +445,7 @@ func (c *Client) listMRs(endpoint string, maxPages int) ([]MRListItem, error) {
 	}
 	var raw []rawMRListItem
 	for page := 1; page <= maxPages; page++ {
-		ep := endpoint
-		if strings.Contains(ep, "page=") {
-			ep = strings.Replace(ep, "page=1", fmt.Sprintf("page=%d", page), 1)
-		} else {
-			ep = fmt.Sprintf("%s&page=%d", ep, page)
-		}
+		ep := fmt.Sprintf("%s&page=%d", endpoint, page)
 		var pageOut []rawMRListItem
 		if err := c.apiJSON("", false, ep, &pageOut); err != nil {
 			return nil, err
@@ -476,6 +471,7 @@ func (c *Client) listMRs(endpoint string, maxPages int) ([]MRListItem, error) {
 	}
 	return out, nil
 }
+
 // ---- writes (used ONLY by cmd/mr-review-publish) ---------------------------
 
 // positionFields builds the GitLab position parameters for an inline comment.

@@ -366,16 +366,6 @@ function install_herdr {
     run herdr plugin install --yes eliasstravik/herdr-projects
     # kimchi-remote: local-only plugin (not on github — verified via
     # `curl https://github.com/castai/kimchi-remote` → 404). Lives under
-    # local/herdr-kimchi-remote/ and gets installed by path so the
-    # prefix+w / prefix+shift+w / prefix+alt+w / prefix+a bindings in
-    # config.toml resolve. Audit finding P1 (plugin listed but never
-    # installed). Falls back to a CLEAR WARNING (not a silent skip) when
-    # the local source is absent — the previous silent skip left a clean
-    # install reporting success while four keybindings pointed at a
-    # missing plugin. The validate step below proves the install actually
-    # took effect.
-    # kimchi-remote: local-only plugin (not on github — verified via
-    # `curl https://github.com/castai/kimchi-remote` → 404). Lives under
     # local/herdr-kimchi-remote/ and must be linked in from the repo so the
     # prefix+w / prefix+shift+w / prefix+alt+w / prefix+a bindings in
     # config.toml resolve. Prefer `herdr plugin link`, which is the current

@@ -52,9 +52,11 @@ ENV_SETUP=()
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nvim-validate.XXXXXX")
 trap 'rm -rf -- "$TMP_DIR"' EXIT
 ISO_ROOT=""
+XDG_STATE_ROOT=""
 if [ "$ISOLATED" = 1 ]; then
   ISO_ROOT="$TMP_DIR/isolated"
   mkdir -p "$ISO_ROOT/config" "$ISO_ROOT/data" "$ISO_ROOT/cache" "$ISO_ROOT/state/nvim"
+  XDG_STATE_ROOT="$ISO_ROOT/state"
   # NOTE: link the resolved nvim dir — $PWD is intentionally NOT used
   ln -s "$NVIM_DIR" "$ISO_ROOT/config/nvim"
   ENV_SETUP=(env XDG_CONFIG_HOME="$ISO_ROOT/config" XDG_DATA_HOME="$ISO_ROOT/data" XDG_STATE_HOME="$ISO_ROOT/state" XDG_CACHE_HOME="$ISO_ROOT/cache")
@@ -62,6 +64,7 @@ if [ "$ISOLATED" = 1 ]; then
 elif [ "$SYNC" = 1 ]; then
   XDG_ROOT="$TMP_DIR/xdg"
   mkdir -p "$XDG_ROOT/config" "$XDG_ROOT/data" "$XDG_ROOT/cache" "$XDG_ROOT/state/nvim"
+  XDG_STATE_ROOT="$XDG_ROOT/state"
   ENV_SETUP=(env XDG_CONFIG_HOME="$XDG_ROOT/config" XDG_DATA_HOME="$XDG_ROOT/data" XDG_STATE_HOME="$XDG_ROOT/state" XDG_CACHE_HOME="$XDG_ROOT/cache")
   echo "(sync mode — disposable XDG state under $XDG_ROOT)"
 fi
@@ -144,8 +147,9 @@ if [ "$SYNC" = 1 ]; then
     export NVIM_TS_INSTALL_SKIP=1
     # pre-create the hardtime state log (hardtime opens it at load; a
     # missing file makes it abort with "Unable to open")
-    mkdir -p "$TMP_DIR/state/nvim"
-    : > "$TMP_DIR/state/nvim/hardtime.nvim.log"
+    hardtime_state_root="${XDG_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}}"
+    mkdir -p "$hardtime_state_root/nvim"
+    : > "$hardtime_state_root/nvim/hardtime.nvim.log"
   else
     echo "FAIL  Lazy sync"; fail=1
   fi
