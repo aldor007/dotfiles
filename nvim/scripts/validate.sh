@@ -64,6 +64,7 @@ if [ "$ISOLATED" = 1 ]; then
 elif [ "$SYNC" = 1 ]; then
   XDG_ROOT="$TMP_DIR/xdg"
   mkdir -p "$XDG_ROOT/config" "$XDG_ROOT/data" "$XDG_ROOT/cache" "$XDG_ROOT/state/nvim"
+  ln -s "$NVIM_DIR" "$XDG_ROOT/config/nvim"
   XDG_STATE_ROOT="$XDG_ROOT/state"
   ENV_SETUP=(env XDG_CONFIG_HOME="$XDG_ROOT/config" XDG_DATA_HOME="$XDG_ROOT/data" XDG_STATE_HOME="$XDG_ROOT/state" XDG_CACHE_HOME="$XDG_ROOT/cache")
   echo "(sync mode — disposable XDG state under $XDG_ROOT)"
