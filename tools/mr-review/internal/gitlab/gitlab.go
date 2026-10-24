@@ -279,7 +279,7 @@ func (c *Client) GetMR(project string, iid int) (*MR, error) {
 // collection — the loop silently returned the same first page over and
 // over, and renames were double-counted (old + new path both listed).
 // The /diffs endpoint is the supported per-file listing. We loop with
-// per_page=100 up to maxPages (≈1000 files) and break on empty/short
+// per_page=100 up to maxPages (≈10,000 files) and break on empty/short
 // pages, exactly like Discussions. Collapsed/too-large entries are kept
 // (the file counts; MRDiff.DiffUnavailable marks the missing body).
 func (c *Client) MRDiffs(project string, iid int) ([]MRDiff, error) {
