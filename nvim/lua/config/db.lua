@@ -43,13 +43,11 @@ local ROOT = find_repo_root()
 local SCRIPT = ROOT and (ROOT .. "/scripts/sql-db.sh") or nil
 local ENV_FILE = ROOT and (ROOT .. "/local/projects.env") or nil
 local EXAMPLE_ENV_FILE = ROOT and (ROOT .. "/scripts/projects.env.example") or nil
+if ENV_FILE and vim.fn.filereadable(ENV_FILE) ~= 1 then
+  ENV_FILE = nil
+end
 if not ENV_FILE and EXAMPLE_ENV_FILE and vim.fn.filereadable(EXAMPLE_ENV_FILE) == 1 then
   ENV_FILE = EXAMPLE_ENV_FILE
-elseif ENV_FILE and vim.fn.filereadable(ENV_FILE) ~= 1 then
-  ENV_FILE = nil
-  if EXAMPLE_ENV_FILE and vim.fn.filereadable(EXAMPLE_ENV_FILE) == 1 then
-    ENV_FILE = EXAMPLE_ENV_FILE
-  end
 end
 
 if not ROOT then
@@ -149,8 +147,8 @@ function M.seed()
       -- postgres:// scheme so vim-dadbod recognizes it as a valid connection.
       local user_enc = DB_USER:gsub("@", "%%40")
       dbs[envname] = string.format(
-        "******127.0.0.1:%d/%s?sslmode=require",
-        user_enc, token, port_by_env[envname], DB_NAME
+        "postgres://%s@127.0.0.1:%d/%s?sslmode=require",
+        user_enc, port_by_env[envname], DB_NAME
       )
     end
     vim.g.dbs = dbs
