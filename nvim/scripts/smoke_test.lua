@@ -372,6 +372,43 @@ check("fugitive :Git available", function()
   assert(vim.fn.exists(":Git") == 2, ":Git command not defined")
 end)
 
+
+check("learning mode and practice lifecycle remain consistent", function()
+  local ok, precog = pcall(require, "precognition")
+  assert(ok, "precognition not loaded")
+  local hardtime_ok, hardtime = pcall(require, "hardtime")
+  assert(hardtime_ok, "hardtime not loaded")
+
+  pcall(vim.cmd, "Precognition hide")
+  pcall(vim.cmd, "Hardtime disable")
+  vim.cmd("LearningMode")
+  assert(precog.is_visible() == true, "learning mode did not enable Precognition")
+  assert(hardtime.is_plugin_enabled == true, "learning mode did not enable Hardtime")
+
+  pcall(vim.cmd, "Precognition hide")
+  assert(precog.is_visible() == false, "manual Precognition toggle should not leave learning mode stale")
+  assert(hardtime.is_plugin_enabled == true, "Hardtime must remain enabled while learning mode is active")
+
+  pcall(vim.cmd, "Hardtime disable")
+  vim.cmd("LearningMode")
+  assert(precog.is_visible() == false, "learning mode reset should hide hints")
+  assert(hardtime.is_plugin_enabled == false, "learning mode reset should disable Hardtime")
+
+  local tabs_before = #vim.api.nvim_list_tabpages()
+  vim.cmd("VimBeGoodPractice")
+  local tabs_after = #vim.api.nvim_list_tabpages()
+  assert(tabs_after <= tabs_before + 1, "VimBeGoodPractice created more than one new practice tab")
+
+  local current = vim.api.nvim_get_current_tabpage()
+  assert(vim.g.vim_be_good_practice_tab == current, "practice tab was not reused")
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "keep me" })
+  vim.api.nvim_set_current_buf(buf)
+  vim.cmd("VimBeGoodPractice")
+  local still_here = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  assert(still_here[1] == "keep me", "practice launcher disturbed an existing unsaved buffer")
+end)
 -- 11. Plugins added in the 2026-10 batch
 check("conform loads + :ConformInfo", function()
   require("conform")

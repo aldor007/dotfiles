@@ -38,6 +38,8 @@ return {
       spec = {
         { "<leader>f", group = "fold level" },
         { "<leader>c", group = "code (LSP)" },
+        { "<leader>u", group = "learning" },
+        { "<leader>g", group = "git" },
       },
     },
   },

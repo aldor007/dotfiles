@@ -38,6 +38,25 @@ map("v", ">", ">gv")
 -- Clear search highlight: ,/
 map("n", "<leader>/", ":nohlsearch<CR>")
 
+-- Learning mode: let the editor teach without disturbing regular review.
+local learning_mode_enabled = false
+
+local function set_learning_mode(enabled)
+  learning_mode_enabled = enabled
+  if enabled then
+    pcall(vim.cmd, "Precognition show")
+    pcall(vim.cmd, "Hardtime enable")
+  else
+    pcall(vim.cmd, "Precognition hide")
+    pcall(vim.cmd, "Hardtime disable")
+  end
+end
+
+vim.api.nvim_create_user_command("LearningMode", function()
+  set_learning_mode(not learning_mode_enabled)
+end, { desc = "Toggle Precognition + Hardtime learning mode" })
+map("n", "<leader>um", ":LearningMode<CR>", { desc = "learning: toggle learning mode" })
+
 -- lcd to current file dir: :cwd / :cd.
 map("c", "cwd", "lcd %:p:h")
 map("c", "cd.", "lcd %:p:h")
