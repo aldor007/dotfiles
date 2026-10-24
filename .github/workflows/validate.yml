@@ -5,6 +5,9 @@ name: validate
 # or live clusters are ever used.
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   shell:
     runs-on: ubuntu-latest
@@ -33,6 +36,20 @@ jobs:
               print("\n".join(bad)); sys.exit(1)
           print(f"TOML OK ({len(files)} files)")
           EOF
+
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/mr-review
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/mr-review/go.mod
+          cache-dependency-path: tools/mr-review/go.sum
+      - name: Go test
+        run: go test ./...
 
   nvim:
     runs-on: ubuntu-latest
