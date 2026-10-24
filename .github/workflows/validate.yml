@@ -5,6 +5,9 @@ name: validate
 # or live clusters are ever used.
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   shell:
     runs-on: ubuntu-latest
