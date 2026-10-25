@@ -69,7 +69,27 @@ elif [ "$SYNC" = 1 ]; then
   ENV_SETUP=(env XDG_CONFIG_HOME="$XDG_ROOT/config" XDG_DATA_HOME="$XDG_ROOT/data" XDG_STATE_HOME="$XDG_ROOT/state" XDG_CACHE_HOME="$XDG_ROOT/cache")
   echo "(sync mode — disposable XDG state under $XDG_ROOT)"
 fi
-NV=("${ENV_SETUP[@]}" nvim)
+
+# Resolve a usable nvim binary explicitly. CI installs it under
+# /tmp/nvim-linux-x86_64/bin on ubuntu runners; local machines may have a
+# globally installed binary or a different PATH layout.
+NVIM_BIN="${NVIM_BIN:-$(command -v nvim 2>/dev/null || true)}"
+if [ -z "$NVIM_BIN" ]; then
+  for candidate in \
+    /tmp/nvim-linux-x86_64/bin/nvim \
+    /usr/local/bin/nvim \
+    /usr/bin/nvim; do
+    if [ -x "$candidate" ]; then
+      NVIM_BIN="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "$NVIM_BIN" ] || [ ! -x "$NVIM_BIN" ]; then
+  echo "validate: no nvim binary found on PATH or in the CI fallback locations" >&2
+  exit 1
+fi
+NV=("${ENV_SETUP[@]}" "$NVIM_BIN")
 
 # gcloud stub: config/db.lua seeds an IAM token at startup (VeryLazy) and
 # smoke_test also calls seed(); every nvim invocation below must hit this
@@ -90,7 +110,7 @@ export PATH="$STUB_DIR:$PATH"
 
 step "1/6 Lua syntax check"
 for f in init.lua lua/config/*.lua lua/plugins/*.lua scripts/smoke_test.lua; do
-  if "${ENV_SETUP[@]}" nvim -l /dev/stdin <<< "assert(loadfile('$NVIM_DIR/$f'))" >/dev/null 2>&1; then
+  if "${NV[@]}" -l /dev/stdin <<< "assert(loadfile('$NVIM_DIR/$f'))" >/dev/null 2>&1; then
     echo "OK    $f"
   else
     echo "FAIL  $f"; fail=1
