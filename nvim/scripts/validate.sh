@@ -110,7 +110,7 @@ export PATH="$STUB_DIR:$PATH"
 
 step "1/6 Lua syntax check"
 for f in init.lua lua/config/*.lua lua/plugins/*.lua scripts/smoke_test.lua; do
-  if "${ENV_SETUP[@]}" nvim -l /dev/stdin <<< "assert(loadfile('$NVIM_DIR/$f'))" >/dev/null 2>&1; then
+  if "${NV[@]}" -l /dev/stdin <<< "assert(loadfile('$NVIM_DIR/$f'))" >/dev/null 2>&1; then
     echo "OK    $f"
   else
     echo "FAIL  $f"; fail=1
