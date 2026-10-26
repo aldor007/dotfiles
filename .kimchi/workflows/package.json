@@ -1,0 +1,12 @@
+{
+	"name": "dotfiles-workflows",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"devDependencies": {
+		"@kimchi-dev/kimchi-workflows": "^0.0.9",
+		"@types/node": "^26.6.5",
+		"typebox": "^1.4.2",
+		"typescript": "^7.0.2"
+	}
+}
