@@ -201,6 +201,26 @@ func (p *Pane) ScreenText() []string {
 	return lines
 }
 
+// InAltScreen reports whether the child switched to the alternate screen
+// buffer (full-screen TUIs do; tests assert the TUI took over).
+func (p *Pane) InAltScreen() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.emu.IsAltScreen()
+}
+
+// CellContent returns the character content of one emulated screen cell
+// (empty outside the grid) — for cell-level golden tests.
+func (p *Pane) CellContent(x, y int) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	c := p.emu.CellAt(x, y)
+	if c == nil {
+		return ""
+	}
+	return c.Content
+}
+
 // syscallKillGroup is defined per-platform (kill.go / kill_windows.go).
 
 // Size returns the current pane size in cells (for tests and diagnostics).

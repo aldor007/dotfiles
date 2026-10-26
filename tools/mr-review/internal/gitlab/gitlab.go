@@ -530,6 +530,36 @@ func (c *Client) PostDiscussion(project string, iid int, body string, drefs *Dif
 	return resp.ID, resp.Notes[0].ID, nil
 }
 
+// PostDiscussionVerified posts a discussion and reports whether the requested
+// diff position actually survived: GitLab accepts the POST even when it
+// silently drops the position (creating a general note instead), so the
+// caller must check the returned note for a position object. anchored is
+// true when pos was nil (general post) or the note carries a position.
+func (c *Client) PostDiscussionVerified(project string, iid int, body string, drefs *DiffRefs, pos *Position) (string, int64, bool, error) {
+	ep := fmt.Sprintf("projects/%s/merge_requests/%d/discussions", EncPath(project), iid)
+	fields := []string{"-f", "body=" + body}
+	if drefs != nil && pos != nil {
+		fields = append(fields, positionFields(*drefs, pos)...)
+	}
+	var resp Discussion
+	if err := c.apiJSON("POST", false, ep, &resp, fields...); err != nil {
+		return "", 0, false, err
+	}
+	if resp.ID == "" || len(resp.Notes) == 0 {
+		return "", 0, false, fmt.Errorf("glab post discussion: unexpected response (no id/notes)")
+	}
+	return resp.ID, resp.Notes[0].ID, pos == nil || resp.Notes[0].Position != nil, nil
+}
+
+// UpdateNote edits the body of one note inside a discussion. The response
+// (updated note) is not parsed — success is the command's exit status.
+func (c *Client) UpdateNote(project string, iid int, discussionID string, noteID int64, body string) error {
+	ep := fmt.Sprintf("projects/%s/merge_requests/%d/discussions/%s/notes/%d",
+		EncPath(project), iid, EncPath(discussionID), noteID)
+	_, err := c.api("PUT", false, ep, "-f", "body="+body)
+	return err
+}
+
 // Approve approves the MR (separate, explicit action only).
 func (c *Client) Approve(project string, iid int) error {
 	ep := fmt.Sprintf("projects/%s/merge_requests/%d/approve", EncPath(project), iid)

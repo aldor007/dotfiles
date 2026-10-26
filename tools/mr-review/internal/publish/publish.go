@@ -14,6 +14,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,10 +34,11 @@ type Options struct {
 
 // Result reports what happened, honestly separating outcomes.
 type Result struct {
-	Published []string // finding ids
-	Skipped   []string // "id: reason"
-	Failed    []string // "id: reason"
-	Summary   bool     // summary note posted
+	Published  []string // finding ids
+	Skipped    []string // "id: reason"
+	Failed     []string // "id: reason"
+	Unanchored []string // "id: file:line" — posted, but GitLab dropped the diff position
+	Summary    bool     // summary note posted
 }
 
 // ExitCode maps a Result to a process exit code (0 ok, 3 partial, 1 fatal is
@@ -87,6 +90,7 @@ func Run(opts Options) (*Result, error) {
 		return nil, fmt.Errorf("fetch MR diff listing (state NOT advanced): %w", err)
 	}
 	paths := diffPathsOf(diffs)
+	newToOld := newToOldLineMap(diffs)
 
 	// ---- collect approved, unpublished findings + ready manual comments ----
 	var approved []store.Finding
@@ -205,8 +209,8 @@ func Run(opts Options) (*Result, error) {
 			}
 			continue
 		}
-		pos := positionFor(f, paths)
-		dID, noteID, err := gl.PostDiscussion(rev.Project, rev.IID, body, &drefs, pos)
+		pos := positionFor(f, paths, newToOld)
+		dID, noteID, anchored, err := gl.PostDiscussionVerified(rev.Project, rev.IID, body, &drefs, pos)
 		if err != nil {
 			res.Failed = append(res.Failed, f.ID+": "+err.Error())
 			_ = store.AppendPublishLog(opts.Dir, map[string]any{
@@ -214,14 +218,34 @@ func Run(opts Options) (*Result, error) {
 			})
 			continue // partial failure: keep posting the rest
 		}
+		logEntry := map[string]any{
+			"finding": f.ID, "outcome": "published",
+			"discussion_id": dID, "note_id": noteID, "head_sha": rev.HeadSHA,
+			"anchored": anchored,
+		}
+		if !anchored {
+			// GitLab accepted the POST but silently dropped the diff position
+			// (general note instead of inline). Prepend the file:line location
+			// so the comment still carries its context on the MR.
+			loc := fmt.Sprintf("**`%s:%d`**", f.File, f.Line)
+			if uerr := gl.UpdateNote(rev.Project, rev.IID, dID, noteID, loc+"\n\n"+body); uerr != nil {
+				res.Failed = append(res.Failed, f.ID+": position dropped by GitLab; location-header edit failed: "+uerr.Error())
+				_ = store.AppendPublishLog(opts.Dir, map[string]any{
+					"finding": f.ID, "outcome": "failed",
+					"error":         "position dropped and edit failed: " + uerr.Error(),
+					"discussion_id": dID, "note_id": noteID,
+				})
+				continue
+			}
+			res.Unanchored = append(res.Unanchored, fmt.Sprintf("%s: %s:%d", f.ID, f.File, f.Line))
+			logEntry["unanchored_file"] = f.File
+			logEntry["unanchored_line"] = f.Line
+		}
 		if err := markPublished(opts.Dir, findings, f.ID, dID, noteID); err != nil {
 			return res, fmt.Errorf("record publication of %s: %w (comment IS on GitLab)", f.ID, err)
 		}
 		res.Published = append(res.Published, f.ID)
-		_ = store.AppendPublishLog(opts.Dir, map[string]any{
-			"finding": f.ID, "outcome": "published",
-			"discussion_id": dID, "note_id": noteID, "head_sha": rev.HeadSHA,
-		})
+		_ = store.AppendPublishLog(opts.Dir, logEntry)
 	}
 
 	// ---- post manual comments (ready drafts) -----------------------------
@@ -233,14 +257,22 @@ func Run(opts Options) (*Result, error) {
 			}
 			continue
 		}
-		pos := draftPositionFor(c, paths)
-		dID, noteID, err := gl.PostDiscussion(rev.Project, rev.IID, c.Text, &drefs, pos)
+		pos := draftPositionFor(c, paths, newToOld)
+		dID, noteID, anchored, err := gl.PostDiscussionVerified(rev.Project, rev.IID, c.Text, &drefs, pos)
 		if err != nil {
 			res.Failed = append(res.Failed, c.ID+": "+err.Error())
 			_ = store.AppendPublishLog(opts.Dir, map[string]any{
 				"comment": c.ID, "outcome": "failed", "error": err.Error(),
 			})
 			continue // partial failure: keep posting the rest
+		}
+		if !anchored {
+			loc := fmt.Sprintf("**`%s:%d`**", c.File, c.Line)
+			if uerr := gl.UpdateNote(rev.Project, rev.IID, dID, noteID, loc+"\n\n"+c.Text); uerr == nil {
+				res.Unanchored = append(res.Unanchored, fmt.Sprintf("%s: %s:%d", c.ID, c.File, c.Line))
+			} else {
+				res.Failed = append(res.Failed, c.ID+": position dropped by GitLab; location-header edit failed: "+uerr.Error())
+			}
 		}
 		if err := markDraftPublished(opts.Dir, c.ID, dID, noteID); err != nil {
 			return res, fmt.Errorf("record publication of %s: %w (comment IS on GitLab)", c.ID, err)
@@ -352,17 +384,27 @@ func lookupPaths(m map[string]pathPair, path string) pathPair {
 	return pathPair{New: path, Old: path}
 }
 
-func positionFor(f store.Finding, paths map[string]pathPair) *gitlab.Position {
+// positionFor builds the GitLab diff position for a finding. For lines that
+// are UNCHANGED (context) in the diff, GitLab requires old_line alongside
+// new_line — sending new_line alone makes GitLab silently drop the position
+// and create a general note instead (verified on gitlab.com: an accepted
+// POST whose note comes back without a position object). The new->old map
+// from the review's diff supplies the old-side number; added lines send
+// new_line only.
+func positionFor(f store.Finding, paths map[string]pathPair, newToOld map[string]map[int]int) *gitlab.Position {
 	pair := lookupPaths(paths, f.File)
 	pos := &gitlab.Position{NewPath: pair.New, OldPath: pair.Old}
+	oldLineOf := func(line int) (int, bool) {
+		return newToOld[f.File][line], true
+	}
 	if f.Side == "old" {
 		l := f.Line
 		pos.OldLine = &l
 		return pos
 	}
 	if f.LineEnd > f.Line {
-		le := f.LineEnd
 		ls := f.Line
+		le := f.LineEnd
 		pos.LineRange = &struct {
 			Start *struct {
 				Line    *int   `json:"line,omitempty"`
@@ -386,15 +428,77 @@ func positionFor(f store.Finding, paths map[string]pathPair) *gitlab.Position {
 				Type    string `json:"type,omitempty"`
 			}{Line: &le, Type: "new"},
 		}
+		// context lines carry their old-side counterpart
+		if ol, ok := oldLineOf(ls); ok {
+			pos.LineRange.Start.OldLine = &ol
+		}
+		if ol, ok := oldLineOf(le); ok {
+			pos.LineRange.End.OldLine = &ol
+		}
 		return pos
 	}
 	l := f.Line
 	pos.NewLine = &l
+	if ol, ok := oldLineOf(l); ok {
+		pos.OldLine = &ol
+	}
 	return pos
 }
 
+// newToOldLineMap parses the per-file unified diffs and returns, per file,
+// a map of NEW-side line numbers to their OLD-side counterparts for
+// unchanged (context) lines. Added lines have no old counterpart and are
+// absent from the map. This supplies the old_line GitLab requires for
+// positions anchored on context lines — without it GitLab silently drops
+// the position and creates a general note instead.
+func newToOldLineMap(diffs []gitlab.MRDiff) map[string]map[int]int {
+	out := map[string]map[int]int{}
+	for _, d := range diffs {
+		if d.DeletedFile || d.Diff == "" {
+			continue
+		}
+		path := d.NewPath
+		if out[path] == nil {
+			out[path] = map[int]int{}
+		}
+		oldNo, newNo := 0, 0
+		inHunk := false
+		for _, line := range strings.Split(d.Diff, "\n") {
+			if strings.HasPrefix(line, "@@ ") {
+				mm := hunkLineRe.FindStringSubmatch(line)
+				if mm == nil {
+					inHunk = false
+					continue
+				}
+				oldNo, _ = strconv.Atoi(mm[1])
+				newNo, _ = strconv.Atoi(mm[2])
+				inHunk = true
+				continue
+			}
+			if !inHunk {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(line, "+"):
+				newNo++
+			case strings.HasPrefix(line, "-"):
+				oldNo++
+			default:
+				if newNo > 0 && oldNo > 0 {
+					out[path][newNo] = oldNo
+				}
+				oldNo++
+				newNo++
+			}
+		}
+	}
+	return out
+}
+
+var hunkLineRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)`)
+
 // draftPositionFor maps a draft comment to a GitLab diff position.
-func draftPositionFor(c store.DraftComment, paths map[string]pathPair) *gitlab.Position {
+func draftPositionFor(c store.DraftComment, paths map[string]pathPair, newToOld map[string]map[int]int) *gitlab.Position {
 	if c.General {
 		return nil
 	}

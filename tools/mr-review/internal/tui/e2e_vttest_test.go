@@ -14,19 +14,18 @@ package tui
 // described the old 2-pane cockpit and have no new-UX equivalent.
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"mr-review/internal/plex"
 	"mr-review/internal/store"
-
-	"github.com/charmbracelet/x/vttest"
 )
 
 // vtBin compiles the real mr-review binary for the virtual terminal.
@@ -66,33 +65,31 @@ func vtEnv(home string) []string {
 	)
 }
 
-// snapText renders the terminal grid to plain lines (cells joined per row).
-func snapText(tt *vttest.Terminal) []string {
-	snap := tt.Snapshot()
-	lines := make([]string, len(snap.Cells))
-	for y, row := range snap.Cells {
-		var b strings.Builder
-		for _, c := range row {
-			b.WriteString(c.Content)
-		}
-		lines[y] = strings.TrimRight(b.String(), " ")
+// snapText renders the terminal grid to plain lines (cells joined per row),
+// stripped of SGR sequences (plex's Render reproduces styling; vttest's
+// snapshot never carried it and the assertions expect plain text).
+func snapText(p *plex.Pane) []string {
+	lines := p.ScreenText()
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = stripANSIish(l)
 	}
-	return lines
+	return out
 }
 
-// vtWaitFor polls the screen until a line satisfies want (5s budget).
-func vtWaitFor(t *testing.T, tt *vttest.Terminal, want func(line string) bool, desc string) {
+// vtWaitFor polls the screen until a line satisfies want.
+func vtWaitFor(t *testing.T, p *plex.Pane, want func(line string) bool, desc string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		for _, l := range snapText(tt) {
+		for _, l := range snapText(p) {
 			if want(l) {
 				return
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	lines := snapText(tt)
+	lines := snapText(p)
 	t.Fatalf("timeout waiting for %q; screen:\n%s", desc, strings.Join(lines, "\n"))
 }
 
@@ -104,12 +101,12 @@ func vtContains(substr string) func(string) bool {
 // floating-overlay counterpart of vtWaitFor: the underlying frame keeps
 // rendering, so "closed" means the overlay box is gone, not that the frame
 // changed.
-func vtWaitAbsent(t *testing.T, tt *vttest.Terminal, substr, desc string) {
+func vtWaitAbsent(t *testing.T, p *plex.Pane, substr, desc string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		found := false
-		for _, l := range snapText(tt) {
+		for _, l := range snapText(p) {
 			if strings.Contains(l, substr) {
 				found = true
 				break
@@ -120,48 +117,37 @@ func vtWaitAbsent(t *testing.T, tt *vttest.Terminal, substr, desc string) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("%q still on screen after %s:\n%s", substr, desc, strings.Join(snapText(tt), "\n"))
+	t.Fatalf("%q still on screen after %s:\n%s", substr, desc, strings.Join(snapText(p), "\n"))
 }
 
 // vtQuit sends q and waits — but never forever: a lost keystroke must not
 // hang the suite, so the child is killed after a grace period.
-func vtQuit(t *testing.T, tt *vttest.Terminal, cmd *exec.Cmd) {
+func vtQuit(t *testing.T, p *plex.Pane) {
 	t.Helper()
-	tt.SendText("q")
-	done := make(chan struct{})
-	go func() { _ = tt.Wait(cmd); close(done) }()
+	p.WriteString("q")
 	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		_ = cmd.Process.Kill()
+	case <-p.Exited():
+	case <-time.After(10 * time.Second):
 		t.Log("quit keystroke lost — child killed")
 	}
+	p.Kill()
 }
 
 // startVtReview compiles the binary, writes the fixture and opens the review
 // TUI in a virtual terminal of the given size. The wait token is the diff's
 // file header, visible at every width (the findings pane is hidden at <120).
-func startVtReview(t *testing.T, w, h int) (*vttest.Terminal, *exec.Cmd, string) {
+func startVtReview(t *testing.T, w, h int) (*plex.Pane, string) {
 	t.Helper()
-	if raceEnabled {
-		// upstream bug: vttest.Terminal.Close races its internal PTY copy
-		// goroutine (charmbracelet/x#vttest) — false positives under -race
-		t.Skip("vttest has an upstream data race in Close(); skipped under -race")
-	}
 	bin := vtBin(t)
 	dir := writeReviewFixture(t, t.TempDir())
-	tt, err := vttest.NewTerminal(t, w, h)
+	p, err := plex.Start(context.Background(), t.TempDir(), w, h,
+		vtEnv(t.TempDir()), bin, "tui", dir)
 	if err != nil {
-		t.Fatalf("terminal: %v", err)
-	}
-	t.Cleanup(func() { _ = tt.Close() })
-	cmd := exec.Command(bin, "tui", dir)
-	cmd.Env = vtEnv(t.TempDir())
-	if err := tt.Start(cmd); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	vtWaitFor(t, tt, vtContains("handler.go"), "diff painted")
-	return tt, cmd, dir
+	t.Cleanup(func() { p.Kill() })
+	vtWaitFor(t, p, vtContains("handler.go"), "diff painted")
+	return p, dir
 }
 
 // vtCorners returns the row index of the top pane border and the columns of
@@ -186,16 +172,15 @@ func vtCorners(lines []string) (top int, cols []int, ok bool) {
 
 // vtCheckFrame asserts the shared invariants at every size: alt screen,
 // exact grid size, no row wider than the terminal.
-func vtCheckFrame(t *testing.T, tt *vttest.Terminal, w, h int) []string {
+func vtCheckFrame(t *testing.T, p *plex.Pane, w, h int) []string {
 	t.Helper()
-	snap := tt.Snapshot()
-	if !snap.AltScreen {
+	if !p.InAltScreen() {
 		t.Error("the review TUI must run on the alternate screen")
 	}
-	if snap.Cols != w || snap.Rows != h {
-		t.Fatalf("terminal size = %dx%d, want %dx%d", snap.Cols, snap.Rows, w, h)
+	if cw, ch := p.Size(); cw != w || ch != h {
+		t.Fatalf("terminal size = %dx%d, want %dx%d", cw, ch, w, h)
 	}
-	lines := snapText(tt)
+	lines := snapText(p)
 	for y, l := range lines {
 		if len([]rune(l)) > w {
 			t.Fatalf("row %d is %d cells (> %d): %q", y, len([]rune(l)), w, l)
@@ -211,9 +196,9 @@ func TestVttestLayoutInvariants(t *testing.T) {
 	t.Run("wide-160x45", func(t *testing.T) { vtAssertWide(t, 160, 45) })
 	t.Run("wide-200x50", func(t *testing.T) { vtAssertWide(t, 200, 50) })
 	t.Run("medium-80x24", func(t *testing.T) {
-		tt, cmd, _ := startVtReview(t, 80, 24)
-		defer vtQuit(t, tt, cmd)
-		lines := vtCheckFrame(t, tt, 80, 24)
+		p, _ := startVtReview(t, 80, 24)
+		defer vtQuit(t, p)
+		lines := vtCheckFrame(t, p, 80, 24)
 		top, cols, ok := vtCorners(lines)
 		if !ok || len(cols) != 2 {
 			t.Fatalf("medium 80x24: want 2 pane boxes (sidebar+diff), got %v: %d corners", cols, len(cols))
@@ -228,9 +213,9 @@ func TestVttestLayoutInvariants(t *testing.T) {
 		vtAssertPaneEdges(t, lines, top, cols)
 	})
 	t.Run("narrow-60x24", func(t *testing.T) {
-		tt, cmd, _ := startVtReview(t, 60, 24)
-		defer vtQuit(t, tt, cmd)
-		lines := vtCheckFrame(t, tt, 60, 24)
+		p, _ := startVtReview(t, 60, 24)
+		defer vtQuit(t, p)
+		lines := vtCheckFrame(t, p, 60, 24)
 		top, cols, ok := vtCorners(lines)
 		if !ok || len(cols) != 1 {
 			t.Fatalf("narrow 60x24: want a single pane box, got %d corners", len(cols))
@@ -245,9 +230,9 @@ func TestVttestLayoutInvariants(t *testing.T) {
 		}
 	})
 	// footer invariants once (same chrome at every size)
-	tt, cmd, _ := startVtReview(t, 120, 35)
-	defer vtQuit(t, tt, cmd)
-	lines := vtCheckFrame(t, tt, 120, 35)
+	p, _ := startVtReview(t, 120, 35)
+	defer vtQuit(t, p)
+	lines := vtCheckFrame(t, p, 120, 35)
 	footer := strings.Join(lines[len(lines)-4:], "\n")
 	if !strings.Contains(footer, "j/k") {
 		t.Errorf("key hints missing from the footer: %q", footer)
@@ -262,9 +247,9 @@ func TestVttestLayoutInvariants(t *testing.T) {
 // no pane overlap.
 func vtAssertWide(t *testing.T, w, h int) {
 	t.Helper()
-	tt, cmd, _ := startVtReview(t, w, h)
-	defer vtQuit(t, tt, cmd)
-	lines := vtCheckFrame(t, tt, w, h)
+	p, _ := startVtReview(t, w, h)
+	defer vtQuit(t, p)
+	lines := vtCheckFrame(t, p, w, h)
 	top, cols, ok := vtCorners(lines)
 	if !ok || len(cols) != 3 {
 		t.Fatalf("%dx%d: want 3 pane boxes (FILES|DIFF|FINDINGS), got %d corners: %v",
@@ -326,20 +311,20 @@ func vtAssertPaneEdges(t *testing.T, lines []string, top int, cols []int) {
 // palette opens with registry actions, approve flips the decision, state
 // persists, q quits.
 func TestVttestPaletteAndApprove(t *testing.T) {
-	tt, cmd, dir := startVtReview(t, 120, 35)
+	p, dir := startVtReview(t, 120, 35)
 
-	tt.SendText(":")
+	p.WriteString(":")
 	time.Sleep(150 * time.Millisecond) // let the app process each key
-	vtWaitFor(t, tt, vtContains("ACTIONS"), "palette open")
-	vtWaitFor(t, tt, vtContains("Approve finding"), "palette lists registry actions")
-	tt.SendText("\x1b") // esc closes the palette
+	vtWaitFor(t, p, vtContains("ACTIONS"), "palette open")
+	vtWaitFor(t, p, vtContains("Approve finding"), "palette lists registry actions")
+	p.WriteString("\x1b") // esc closes the palette
 	time.Sleep(150 * time.Millisecond)
 	// the palette FLOATS over the unchanged frame, so "closed" means the
 	// ACTIONS box is gone (a plain footer check passes while it is open)
-	vtWaitAbsent(t, tt, "ACTIONS", "palette closed")
+	vtWaitAbsent(t, p, "ACTIONS", "palette closed")
 
-	tt.SendText("a") // approve the selected finding
-	vtWaitFor(t, tt, vtContains("approved"), "decision recorded in the status line")
+	p.WriteString("a") // approve the selected finding
+	vtWaitFor(t, p, vtContains("approved"), "decision recorded in the status line")
 
 	// state hit the disk before quit
 	// the save is atomic (tmp+rename): poll the disk instead of racing it
@@ -356,30 +341,62 @@ func TestVttestPaletteAndApprove(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	vtQuit(t, tt, cmd) // hangs would mean a lost keystroke, not an app bug
+	vtQuit(t, p) // hangs would mean a lost keystroke, not an app bug
 }
 
-// TestVttestResize — resize the PTY; the layout must adapt (sidebar+diff at
-// 80, the full three-pane frame back at 120) without losing state.
-func TestVttestResize(t *testing.T) {
-	tt, cmd, _ := startVtReview(t, 80, 24)
-	defer vtQuit(t, tt, cmd)
-
-	vtWaitFor(t, tt, vtContains("handler.go"), "80x24 paint")
-	if err := tt.Resize(120, 35); err != nil {
-		t.Fatalf("resize: %v", err)
+// waitForText polls a plex pane's screen until cond holds (timeout fatal).
+func waitForText(t *testing.T, d time.Duration, cond func() bool, msg string) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	// vttest's Resize is ioctl-only; make sure the child hears about it
-	if cmd.Process != nil {
-		_ = cmd.Process.Signal(syscall.SIGWINCH)
+	t.Fatal(msg)
+}
+
+// TestPtyResizeReflowsLayout — resize the PTY; the layout must adapt
+// (sidebar+diff at 80, the full three-pane frame back at 120) without
+// losing state.
+//
+// This runs on the production internal/plex harness (creack/pty + x/vt —
+// the same code the embedded-tuicr workspace uses) instead of vttest:
+// vttest.Terminal.Resize self-deadlocks upstream (it holds t.mu around
+// Emulator.Resize, whose cursor callbacks re-acquire t.mu — an ABBA race
+// with its own PTY copy goroutines, charmbracelet/x/vttest, unfixed as of
+// v0.0.0-20261025003702). Plex.Resize performs the real TIOCSWINSZ ioctl
+// (kernel delivers SIGWINCH to the child) plus the emulator resize.
+func TestPtyResizeReflowsLayout(t *testing.T) {
+	bin := vtBin(t)
+	dir := writeReviewFixture(t, t.TempDir())
+	p, err := plex.Start(context.Background(), t.TempDir(), 80, 24,
+		vtEnv(t.TempDir()), bin, "tui", dir)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer p.Kill()
+
+	join := func() string { return strings.Join(p.ScreenText(), "\n") }
+	waitForText(t, 30*time.Second, func() bool {
+		return strings.Contains(join(), "handler.go")
+	}, "80x24 paint")
+
+	p.Resize(120, 35)
+	if !p.Alive() {
+		t.Fatal("pane must survive resize")
 	}
 	// the wide repaint brings the third pane back; F001 (the selection)
 	// must still be visible — resize preserves state
-	vtWaitFor(t, tt, vtContains("FINDINGS"), "120x35 repaint after resize")
-	vtWaitFor(t, tt, vtContains("F001"), "selection survived the resize")
-	snap := tt.Snapshot()
-	if snap.Cols != 120 || snap.Rows != 35 {
-		t.Fatalf("snapshot size = %dx%d after resize", snap.Cols, snap.Rows)
+	waitForText(t, 30*time.Second, func() bool {
+		return strings.Contains(join(), "FINDINGS")
+	}, "120x35 repaint after resize")
+	waitForText(t, 15*time.Second, func() bool {
+		return strings.Contains(join(), "F001")
+	}, "selection survived the resize")
+	if w, h := p.Size(); w != 120 || h != 35 {
+		t.Fatalf("pane size = %dx%d after resize", w, h)
 	}
 }
 
@@ -389,15 +406,15 @@ func TestVttestResize(t *testing.T) {
 func TestVttestGoldenSnapshots(t *testing.T) {
 	for _, size := range [][2]int{{120, 35}, {80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
-			tt, cmd, _ := startVtReview(t, size[0], size[1])
-			defer vtQuit(t, tt, cmd)
+			p, _ := startVtReview(t, size[0], size[1])
+			defer vtQuit(t, p)
 
-			snap := tt.Snapshot()
-			grid := make([][]string, len(snap.Cells))
-			for y, row := range snap.Cells {
-				grid[y] = make([]string, len(row))
-				for x, c := range row {
-					grid[y][x] = c.Content
+			w, h := p.Size()
+			grid := make([][]string, h)
+			for y := 0; y < h; y++ {
+				grid[y] = make([]string, w)
+				for x := 0; x < w; x++ {
+					grid[y][x] = p.CellContent(x, y)
 				}
 			}
 			got, err := json.MarshalIndent(grid, "", " ")

@@ -163,7 +163,7 @@ func TestPublishPartialFailureAndSafeRetry(t *testing.T) {
 	flag := filepath.Join(dir, "failed_once")
 	post := fmt.Sprintf(`
 if [ -f %[1]s ]; then
-  echo '{"id":"disc2","notes":[{"id":22}]}'
+  echo '{"id":"disc2","notes":[{"id":22,"position":{"new_line":1}}]}'
 else
   touch %[1]s
   echo "400 invalid position" >&2
@@ -196,6 +196,49 @@ fi
 	calls, _ := os.ReadFile(log)
 	if strings.Count(string(calls), "comment-F002") != 1 {
 		t.Fatalf("already-published finding must never POST again:\n%s", calls)
+	}
+}
+
+// TestPublishDroppedPositionFallsBack pins the GitLab behavior observed on
+// real MRs: the POST is accepted (201) but the note comes back WITHOUT a
+// position — GitLab silently converted the inline comment into a general
+// note. The publisher must detect that from the POST response, PUT-edit the
+// note to prepend the file:line location, and report the finding as
+// published-but-unanchored (never silently claim inline anchoring).
+func TestPublishDroppedPositionFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	post := `
+if [[ "$*" == *"-X POST"* ]]; then
+  echo '{"id":"discG","notes":[{"id":33}]}'
+elif [[ "$*" == *" user"* ]]; then
+  echo '{"username":"me"}'
+elif [[ "$*" == *"/diffs?"* ]]; then
+  echo '[]'
+else
+  echo '[]'
+fi
+`
+	bin, log := dispatchMR(t, dir, stubMR, post)
+	t.Setenv("MR_REVIEW_GLAB", bin)
+
+	rdir := reviewDirWithFindings(t, []store.Finding{approved("F009", "a.go", 7)}, "HEAD1")
+	res, err := Run(Options{Dir: rdir, Yes: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(res.Published) != 1 || len(res.Unanchored) != 1 || len(res.Failed) != 0 {
+		t.Fatalf("expected published+unanchored, got: %+v", res)
+	}
+	if !strings.Contains(res.Unanchored[0], "F009: a.go:7") {
+		t.Fatalf("unanchored entry must carry file:line: %q", res.Unanchored[0])
+	}
+	calls, _ := os.ReadFile(log)
+	if !strings.Contains(string(calls), "-X PUT") || !strings.Contains(string(calls), "**`a.go:7`**") {
+		t.Fatalf("expected PUT location-header edit, calls:\n%s", calls)
+	}
+	// the publication is still recorded so retries skip, never re-POST
+	if strings.Count(string(calls), "-X POST") != 1 {
+		t.Fatalf("exactly one POST expected:\n%s", calls)
 	}
 }
 
@@ -246,30 +289,30 @@ func TestPositionForSides(t *testing.T) {
 		{OldPath: "old_name.go", NewPath: "new_name.go", RenamedFile: true},
 	})
 	fNew := approved("F001", "a.go", 5)
-	p := positionFor(fNew, paths)
+	p := positionFor(fNew, paths, nil)
 	if p.NewLine == nil || *p.NewLine != 5 || p.LineRange != nil {
 		t.Fatalf("new side: %+v", p)
 	}
 	fOld := approved("F002", "a.go", 5)
 	fOld.Side = "old"
-	p = positionFor(fOld, paths)
+	p = positionFor(fOld, paths, nil)
 	if p.OldLine == nil || *p.OldLine != 5 || p.NewLine != nil {
 		t.Fatalf("old side: %+v", p)
 	}
 	// P2 #6: a renamed file's position carries the diff entry's exact pair
 	fRen := approved("F004", "new_name.go", 2)
-	p = positionFor(fRen, paths)
+	p = positionFor(fRen, paths, nil)
 	if p.NewPath != "new_name.go" || p.OldPath != "old_name.go" {
 		t.Fatalf("rename paths: %+v", p)
 	}
 	// a path absent from the diff falls back to itself on both sides
-	p = positionFor(approved("F005", "other.go", 1), paths)
+	p = positionFor(approved("F005", "other.go", 1), paths, nil)
 	if p.NewPath != "other.go" || p.OldPath != "other.go" {
 		t.Fatalf("unknown-path fallback: %+v", p)
 	}
 	fRange := approved("F003", "a.go", 5)
 	fRange.LineEnd = 9
-	p = positionFor(fRange, paths)
+	p = positionFor(fRange, paths, nil)
 	if p.LineRange == nil || *p.LineRange.Start.Line != 5 || *p.LineRange.End.Line != 9 {
 		t.Fatalf("range: %+v", p)
 	}
