@@ -29,13 +29,19 @@
  *     embedded in the shell command (no quotes/space/metacharacters).
  */
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import path from "node:path"
 import { Type, type Static } from "typebox"
 import { createQuestionnaireStep, createStep, createWorkflow } from "@kimchi-dev/kimchi-workflows"
 
-const SCRIPT_PATH = fileURLToPath(new URL("../../scripts/pam-approve.sh", import.meta.url))
-const DOTFILES_ROOT = fileURLToPath(new URL("../..", import.meta.url))
+// Resolve from the REAL file location: when this file is symlinked into another
+// project's .kimchi/workflows/, import.meta.url points at the symlink path and
+// relative ../../ paths would land in that project. realpathSync walks to the
+// dotfiles original, so scripts/pam-approve.sh is always found.
+const REAL_FILE = realpathSync(fileURLToPath(import.meta.url))
+const DOTFILES_ROOT = path.resolve(path.dirname(REAL_FILE), "../..")
+const SCRIPT_PATH = path.join(DOTFILES_ROOT, "scripts", "pam-approve.sh")
 const LOG_DIR = `${process.env.HOME ?? ""}/.local/state/pam-approve`
 const BANNER = "AUTO-APPROVAL watch mode"
 const REQUESTER_RE = /^[A-Za-z0-9._%+\-@]+(,[A-Za-z0-9._%+\-@]+)*$/
@@ -47,11 +53,10 @@ const ConfigSchema = Type.Object({
 		description:
 			"Only PAM grants requested by this user are auto-approved. Comma-separate for a list, e.g. alice@cast.ai,bob@cast.ai",
 	}),
-	intervalSeconds: Type.Integer({
+	interval: Type.String({
 		title: "Poll interval (seconds)",
-		description: "How often the watcher re-scans for pending grants.",
-		minimum: 5,
-		default: 30,
+		description: "How often the watcher re-scans for pending grants. Empty = 30. Whole number, minimum 5.",
+		default: "30",
 	}),
 	host: Type.Union([Type.Literal("herdr"), Type.Literal("tmux")], {
 		title: "Host",
@@ -60,7 +65,7 @@ const ConfigSchema = Type.Object({
 	}),
 	name: Type.String({
 		title: "Watcher name",
-		description: "herdr pane label / tmux session name for the watcher.",
+		description: "herdr pane label / tmux session name for the watcher. Empty = pam-approve-auto.",
 		default: "pam-approve-auto",
 	}),
 })
@@ -90,8 +95,18 @@ const launch = createStep({
 	output: ResultSchema,
 	maxDurationMs: 180_000,
 	run: ({ input }): Static<typeof ResultSchema> => {
-		const { requester, intervalSeconds, host, name } = input
+		const { requester, host } = input
+		const name = input.name.trim() || "pam-approve-auto"
 		const logPath = `${LOG_DIR}/${name}.log`
+		let intervalSeconds = 30
+		const rawInterval = input.interval.trim()
+		if (rawInterval !== "") {
+			const parsed = Number(rawInterval)
+			if (!Number.isInteger(parsed) || parsed < 5) {
+				return fail(host, name, logPath, `invalid poll interval '${input.interval}' — use a whole number of seconds ≥ 5 (empty = 30)`)
+			}
+			intervalSeconds = parsed
+		}
 
 		if (!existsSync(SCRIPT_PATH)) {
 			return fail(host, "", logPath, `script not found: ${SCRIPT_PATH}`)
