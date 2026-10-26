@@ -5,6 +5,13 @@ return {
     "m4xshen/hardtime.nvim",
     lazy = false,
     dependencies = { "MunifTanjim/nui.nvim" },
+    config = function(_, opts)
+      -- hardtime appends its log to XDG_STATE_HOME/nvim/ at load time. On a
+      -- fresh machine/CI that directory doesn't exist, the open fails, and
+      -- hardtime silently disables itself — so create it before setup.
+      vim.fn.mkdir(vim.fn.stdpath("state") .. "/nvim", "p")
+      require("hardtime").setup(opts)
+    end,
     keys = {
       { "<leader>uh", "<cmd>Hardtime toggle<cr>", desc = "learning: toggle Hardtime" },
       { "<leader>ur", "<cmd>Hardtime report<cr>", desc = "learning: open Hardtime report" },
