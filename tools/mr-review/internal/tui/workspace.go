@@ -40,11 +40,11 @@ const (
 // directly and are outside this fix's ownership scope — migrating those
 // readers to model fields is the follow-up that deletes this shim.
 var (
-	wsPane        *plex.Pane
-	wsPaneCancel  context.CancelFunc // cancellable context for the pane lifecycle (P1 #9)
-	wsFocus       int
-	wsExited      bool
-	wsErr         error
+	wsPane       *plex.Pane
+	wsPaneCancel context.CancelFunc // cancellable context for the pane lifecycle (P1 #9)
+	wsFocus      int
+	wsExited     bool
+	wsErr        error
 	// wsDetail shows the selected finding's details inside the cockpit
 	// strip (instead of the list) — opening details must not take over
 	// the whole screen.

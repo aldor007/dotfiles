@@ -654,9 +654,11 @@ func (m *model) activeOverlayBox() ([]string, overlayOpts) {
 }
 
 // bodyView renders the bordered body:
-//   narrow: single focused pane (files / diff / findings via Tab · 1 · 2 · 3)
-//   medium: compact files sidebar + diff (findings = floating drawer)
-//   wide:   FILES | DIFF | FINDINGS side by side, 1-cell dividers
+//
+//	narrow: single focused pane (files / diff / findings via Tab · 1 · 2 · 3)
+//	medium: compact files sidebar + diff (findings = floating drawer)
+//	wide:   FILES | DIFF | FINDINGS side by side, 1-cell dividers
+//
 // zoom (z) maximizes the focused pane.
 func (m *model) bodyView() string {
 	h := m.bodyHeight()

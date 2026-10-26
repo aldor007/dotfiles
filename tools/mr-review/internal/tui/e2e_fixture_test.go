@@ -19,10 +19,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-const fixtureDiff = `diff --git a/services/kent/handler.go b/services/kent/handler.go
+const fixtureDiff = `diff --git a/services/orders/handler.go b/services/orders/handler.go
 index 1111111..2222222 100644
---- a/services/kent/handler.go
-+++ b/services/kent/handler.go
+--- a/services/orders/handler.go
++++ b/services/orders/handler.go
 @@ -10,6 +10,7 @@ func handle(ctx context.Context) error {
  	req := parse(r)
 -	call(ctx, req)
@@ -30,10 +30,10 @@ index 1111111..2222222 100644
 +	call(context.WithoutCancel(ctx), req)
  	return nil
  }
-diff --git a/services/kent/worker.go b/services/kent/worker.go
+diff --git a/services/orders/worker.go b/services/orders/worker.go
 index 3333333..4444444 100644
---- a/services/kent/worker.go
-+++ b/services/kent/worker.go
+--- a/services/orders/worker.go
++++ b/services/orders/worker.go
 @@ -28,5 +28,6 @@ func (w *Worker) run() {
  	for {
  		select {
@@ -68,20 +68,20 @@ func writeReviewFixture(t *testing.T, parent string) string {
 	}
 	findings := []store.Finding{
 		{
-			ID: "F001", File: "services/kent/handler.go", Side: "new",
+			ID: "F001", File: "services/orders/handler.go", Side: "new",
 			Line: 12, LineEnd: 13, Severity: "P1", Kind: "bug",
 			Title:       "ctx propagation dropped",
 			Explanation: "The handler rebuilds the context without propagating\nthe deadline. Callers with a timeout get an unbounded call.",
-			Evidence:    "services/kent/handler.go:12 — context.WithoutCancel discards the deadline set by the caller.",
+			Evidence:    "services/orders/handler.go:12 — context.WithoutCancel discards the deadline set by the caller.",
 			Comment:     "**Bug:** the deadline is dropped here — propagate `ctx` instead of `context.WithoutCancel(ctx)`.",
 			Confidence:  "high", Decision: "pending",
 		},
 		{
-			ID: "F002", File: "services/kent/worker.go", Side: "new",
+			ID: "F002", File: "services/orders/worker.go", Side: "new",
 			Line: 31, Severity: "P2", Kind: "likely",
 			Title:       "cleanup runs after done close",
 			Explanation: "cleanup is invoked on the done path; verify it is idempotent\nsince done may be closed twice.",
-			Evidence:    "services/kent/worker.go:31 — w.cleanup(ctx) on the done branch.",
+			Evidence:    "services/orders/worker.go:31 — w.cleanup(ctx) on the done branch.",
 			Comment:     "Is `cleanup` idempotent? `done` can be closed more than once.",
 			Confidence:  "medium", Decision: "pending",
 		},

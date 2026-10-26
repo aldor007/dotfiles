@@ -1,4 +1,4 @@
-# herdr-jira configuration for castai.atlassian.net.
+# herdr-jira configuration — copy to config.toml and fill in your org.
 #
 # The API token is NOT in this file — it is read from the macOS Keychain via
 # api_token_cmd below. Add it once (token from
@@ -9,7 +9,7 @@
 # The running pane reloads this file on `R` (capital R).
 
 [jira]
-base_url = "https://castai.atlassian.net"
+base_url = "https://your-org.atlassian.net"
 auth = "basic"                      # Jira Cloud: email + API token
 email = "marcin@cast.ai"
 api_token_cmd = "security find-generic-password -s jira-api-token -w"

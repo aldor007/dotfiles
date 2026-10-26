@@ -170,7 +170,7 @@ type = "plugin_action"
 command = "dave.token-dashboard.open-dashboard"
 description = "token dashboard"
 
-# herdr-jira plugin: browse Jira (castai.atlassian.net) in a split / tab
+# herdr-jira plugin: browse Jira in a split / tab
 # (prefix+j / prefix+shift+j are taken by tmux-style focus/resize bindings)
 [[keys.command]]
 key = "prefix+i"

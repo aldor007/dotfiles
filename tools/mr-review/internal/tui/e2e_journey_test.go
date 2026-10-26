@@ -32,7 +32,7 @@ func TestReviewJourney(t *testing.T) {
 	if m.layout().mode != layoutWide {
 		t.Fatalf("startup layout mode = %d at 120 cols, want wide (3 panes)", m.layout().mode)
 	}
-	if m.browseFile != "services/kent/handler.go" {
+	if m.browseFile != "services/orders/handler.go" {
 		t.Fatalf("startup browseFile = %q, want the first changed file", m.browseFile)
 	}
 	if id := m.currentID(); id != "F001" {
@@ -46,18 +46,18 @@ func TestReviewJourney(t *testing.T) {
 	// flows handler.go → worker.go inside one document, k walks back.
 	n := m.browseDocLen()
 	steps := 0
-	for m.browseFile != "services/kent/worker.go" && steps <= n+1 {
+	for m.browseFile != "services/orders/worker.go" && steps <= n+1 {
 		m = press(m, "j")
 		steps++
 	}
-	if m.browseFile != "services/kent/worker.go" {
+	if m.browseFile != "services/orders/worker.go" {
 		t.Fatalf("j never crossed the file boundary after %d steps (doc len %d)", steps, n)
 	}
-	for m.browseFile != "services/kent/handler.go" && steps > 0 {
+	for m.browseFile != "services/orders/handler.go" && steps > 0 {
 		m = press(m, "k")
 		steps--
 	}
-	if m.browseFile != "services/kent/handler.go" {
+	if m.browseFile != "services/orders/handler.go" {
 		t.Fatalf("k never walked back: browseFile = %q", m.browseFile)
 	}
 
@@ -82,7 +82,7 @@ func TestReviewJourney(t *testing.T) {
 	// 4. back to F002, then gd jumps the continuous diff to its line.
 	m = press(m, "j") // F001 → F002
 	m = press(m, "g", "d")
-	if m.browseFile != "services/kent/worker.go" {
+	if m.browseFile != "services/orders/worker.go" {
 		t.Fatalf("gd: browseFile = %q, want worker.go", m.browseFile)
 	}
 	if m.focus != focusDiff {
@@ -117,17 +117,17 @@ func TestReviewJourney(t *testing.T) {
 	if cs[0].State != store.CommentDraft {
 		t.Errorf("draft state = %v, want held (CommentDraft)", cs[0].State)
 	}
-	if cs[0].File != "services/kent/worker.go" || cs[0].Side != "new" || cs[0].Line != 31 {
+	if cs[0].File != "services/orders/worker.go" || cs[0].Side != "new" || cs[0].Line != 31 {
 		t.Errorf("draft anchored at %s:%d %s, want worker.go:31 new", cs[0].File, cs[0].Line, cs[0].Side)
 	}
 
 	// 6. m toggles the browsed file's reviewed mark (both directions).
 	m = press(m, "m")
-	if !m.reviewedSet()["services/kent/worker.go"] {
+	if !m.reviewedSet()["services/orders/worker.go"] {
 		t.Fatal("m must mark the browsed file reviewed")
 	}
 	m = press(m, "m")
-	if m.reviewedSet()["services/kent/worker.go"] {
+	if m.reviewedSet()["services/orders/worker.go"] {
 		t.Fatal("m must toggle the reviewed mark back off")
 	}
 

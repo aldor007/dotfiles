@@ -66,7 +66,7 @@ type ReviewInput struct {
 	// agent's own reviewer subagents (empty = single-agent review).
 	FileGroups       [][]string
 	MaxSubagents     int
-	PreviousFindings string // rendered summary of a prior review pass ("" if none)
+	PreviousFindings string   // rendered summary of a prior review pass ("" if none)
 	ContextFiles     []string // absolute paths of per-project background notes ("book of <service>") — empty = no section
 }
 

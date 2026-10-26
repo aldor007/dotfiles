@@ -86,24 +86,39 @@ func TestResolveReviewDir(t *testing.T) {
 	}
 }
 
-func TestResolveReviewDirRealStateHome(t *testing.T) {
-	// the user's actual state home must resolve !54231 to a kubecast review.
-	// The real state may legitimately hold the same MR under several host
-	// slugs (e.g. castai_kubecast and gitlab_2ecom_castai_2fkubecast); both
-	// resolve outcomes are correct — unique dir, or an ambiguity error that
-	// lists the candidates.
-	t.Setenv("MR_REVIEW_HOME", "/Users/mkaciuba/.local/share/mr-review")
-	if _, err := os.Stat(filepath.Join("/Users/mkaciuba/.local/share/mr-review", "castai_kubecast", "mr54231", "review.json")); err != nil {
-		t.Skip("local state home not present")
+func TestResolveReviewDirAmbiguousHostSlugs(t *testing.T) {
+	// The same MR may legitimately exist under several host slugs in one
+	// state home (legacy single-arg slug vs the current host-escaped one);
+	// resolution must yield a unique dir, or an ambiguity error that lists
+	// the candidates. Fixture-based so it runs on any machine.
+	home := t.TempDir()
+	t.Setenv("MR_REVIEW_HOME", home)
+
+	rev := &store.Review{Project: "acme/widgets", IID: 54231, Host: "gitlab.com", HeadSHA: "abc"}
+	legacy := filepath.Join(home, "acme_widgets", "mr54231")
+	modern := filepath.Join(home, "gitlab_2ecom_acme_2fwidgets", "mr54231")
+	for _, d := range []string{legacy, modern} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := rev.Save(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := resolveReviewDir("54231")
+	if err == nil || !strings.Contains(err.Error(), "2 projects") || !strings.Contains(err.Error(), "mr54231") {
+		t.Fatalf("two host slugs must produce an ambiguity error listing candidates, got %v", err)
+	}
+
+	// a single slug resolves cleanly
+	if err := os.RemoveAll(legacy); err != nil {
+		t.Fatal(err)
 	}
 	got, err := resolveReviewDir("54231")
 	if err != nil {
-		if !strings.Contains(err.Error(), "2 projects") || !strings.Contains(err.Error(), "mr54231") {
-			t.Fatalf("live !54231 must resolve or list 2 candidate projects: %v", err)
-		}
-		return // ambiguous real state: both host aliases host the same MR
+		t.Fatalf("single slug must resolve: %v", err)
 	}
-	if !strings.HasSuffix(got, filepath.Join("kubecast", "mr54231")) {
-		t.Errorf("live resolution = %q", got)
+	if !strings.HasSuffix(got, filepath.Join("gitlab_2ecom_acme_2fwidgets", "mr54231")) {
+		t.Errorf("resolution = %q", got)
 	}
 }

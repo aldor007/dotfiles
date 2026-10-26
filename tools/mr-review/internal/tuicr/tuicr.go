@@ -395,7 +395,7 @@ func (c *CLI) Clear(ctx context.Context, session, repo string) error {
 // substring, prefix, suffix or segment fallbacks anywhere.
 
 // gitlabForge is the forge token tuicr prefixes GitLab PR slugs with
-// ("gl:castai/kubecast/pr/56806"). mr-review is GitLab-only: a session
+// ("gl:acme/widgets/pr/56806"). mr-review is GitLab-only: a session
 // with any other (or missing) forge token can never match an MR here —
 // this is the host check available at this layer (the list output does
 // not record a hostname; see Session.Host for the optional recorded one).
@@ -578,4 +578,3 @@ func (c *CLI) PrepareSession(ctx context.Context, repo, project string, iid, exp
 	}
 	return s.Slug, SessionStatusReady, nil
 }
-

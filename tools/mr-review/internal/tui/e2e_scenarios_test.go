@@ -32,8 +32,8 @@ func scenarioModel(t *testing.T) *model {
 // TestScenarioCHunkFileAndSearchWrap — Scenario C.
 func TestScenarioCHunkFileAndSearchWrap(t *testing.T) {
 	m := scenarioModel(t)
-	const handler = "services/kent/handler.go"
-	const worker = "services/kent/worker.go"
+	const handler = "services/orders/handler.go"
+	const worker = "services/orders/worker.go"
 
 	// { at the very first file stays put (no wrap in file space)
 	m = press(m, "{")
@@ -99,8 +99,8 @@ func TestScenarioCHunkFileAndSearchWrap(t *testing.T) {
 // TestScenarioDCommentSurvivesFileNav — Scenario D.
 func TestScenarioDCommentSurvivesFileNav(t *testing.T) {
 	m := scenarioModel(t)
-	const handler = "services/kent/handler.go"
-	const worker = "services/kent/worker.go"
+	const handler = "services/orders/handler.go"
+	const worker = "services/orders/worker.go"
 
 	// comment on the row under the startup cursor (handler.go, new side)
 	anchor := m.browseRowAt(m.diffCursor)
@@ -168,7 +168,11 @@ func TestScenarioEFindingDrivesDiffNoFocusSteal(t *testing.T) {
 		t.Fatalf("focus = %d, want findings", m.focus)
 	}
 	before := stripANSIish(strings.Join(m.detailPaneView(), "\n"))
-	if !strings.Contains(before, "handler.go") {
+	// assert on the directory-scoped path, not the bare file name: the DIFF
+	// header truncates with a leading ellipsis at pane width, which can cut
+	// into "handler.go" itself (…andler.go); the EVIDENCE block keeps the
+	// directory prefix visible at any width.
+	if !strings.Contains(before, "services/orders") {
 		t.Fatal("center pane must show the selected finding's diff (F001 → handler.go)")
 	}
 

@@ -65,7 +65,7 @@ func actionCases() map[string]actionCase {
 			}
 		}},
 		"findings.open-diff": {keys: []string{"g", "d"}, post: func(t *testing.T, m *model) {
-			if m.browseFile != "services/kent/handler.go" {
+			if m.browseFile != "services/orders/handler.go" {
 				t.Errorf("gd must browse the finding's file, got %q", m.browseFile)
 			}
 		}},
@@ -143,8 +143,8 @@ func actionCases() map[string]actionCase {
 			if m.leftView != viewFileFindings {
 				t.Error("view.file-findings must switch to the IN FILE tab")
 			}
-			if m.fileFindingsFile != "services/kent/handler.go" {
-				t.Errorf("fileFindingsFile = %q, want services/kent/handler.go", m.fileFindingsFile)
+			if m.fileFindingsFile != "services/orders/handler.go" {
+				t.Errorf("fileFindingsFile = %q, want services/orders/handler.go", m.fileFindingsFile)
 			}
 			if m.fileFindingsCount() < 1 {
 				t.Errorf("expected at least one finding for handler.go, got %d", m.fileFindingsCount())
@@ -211,7 +211,7 @@ func actionCases() map[string]actionCase {
 		}},
 		"comments.edit": {run: func(t *testing.T, m *model) {
 			_ = store.SaveComments(m.dir, []store.DraftComment{
-				store.NewDraftComment("C001", "services/kent/handler.go", "new", 12, 0, false, "draft text"),
+				store.NewDraftComment("C001", "services/orders/handler.go", "new", 12, 0, false, "draft text"),
 			})
 			if err := m.reload(); err != nil {
 				t.Errorf("reload: %v", err)
@@ -225,7 +225,7 @@ func actionCases() map[string]actionCase {
 		}},
 		"comments.delete": {run: func(t *testing.T, m *model) {
 			_ = store.SaveComments(m.dir, []store.DraftComment{
-				store.NewDraftComment("C001", "services/kent/handler.go", "new", 12, 0, false, "draft text"),
+				store.NewDraftComment("C001", "services/orders/handler.go", "new", 12, 0, false, "draft text"),
 			})
 			_ = m.reload()
 			m.setView(viewComments)
@@ -237,7 +237,7 @@ func actionCases() map[string]actionCase {
 		}},
 		"comments.external-edit": {run: func(t *testing.T, m *model) {
 			_ = store.SaveComments(m.dir, []store.DraftComment{
-				store.NewDraftComment("C001", "services/kent/handler.go", "new", 12, 0, false, "draft text"),
+				store.NewDraftComment("C001", "services/orders/handler.go", "new", 12, 0, false, "draft text"),
 			})
 			_ = m.reload()
 			m.setView(viewComments)
@@ -248,7 +248,7 @@ func actionCases() map[string]actionCase {
 		}, post: func(t *testing.T, m *model) {}},
 		"comments.toggle-ready": {run: func(t *testing.T, m *model) {
 			_ = store.SaveComments(m.dir, []store.DraftComment{
-				store.NewDraftComment("C001", "services/kent/handler.go", "new", 12, 0, false, "draft text"),
+				store.NewDraftComment("C001", "services/orders/handler.go", "new", 12, 0, false, "draft text"),
 			})
 			_ = m.reload()
 			m.setView(viewComments)

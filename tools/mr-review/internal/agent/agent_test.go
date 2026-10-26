@@ -189,18 +189,18 @@ func TestBuildPromptProjectContext(t *testing.T) {
 	}
 
 	in := base
-	in.ContextFiles = []string{"/state/g/p/context/book-of-kent.md", "/state/g/p/context/kentroller.md"}
+	in.ContextFiles = []string{"/state/g/p/context/book-of-orders.md", "/state/g/p/context/orders-agent.md"}
 	got := BuildPrompt(in)
 	if !strings.Contains(got, "PROJECT CONTEXT") {
 		t.Fatalf("context pack must render the section:\n%s", got)
 	}
-	for _, want := range []string{"book-of-kent.md", "kentroller.md", "trust the code"} {
+	for _, want := range []string{"book-of-orders.md", "orders-agent.md", "trust the code"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("context section missing %q:\n%s", want, got)
 		}
 	}
 	// the freshness caveat must precede the file list
-	if strings.Index(got, "trust the code") > strings.Index(got, "book-of-kent.md") {
+	if strings.Index(got, "trust the code") > strings.Index(got, "book-of-orders.md") {
 		t.Fatalf("caveat must come before the file list:\n%s", got)
 	}
 }
@@ -379,7 +379,7 @@ func TestRefreshDedupesParaphrasedFindings(t *testing.T) {
 			Comment: "move it"},
 		// same issue as F002, reworded
 		{ID: "", File: "b.go", Line: 5, LineEnd: 5, Severity: "P2",
-			Title:   ".gitignore unanchored patterns also ignore the new cmd/kentroller dir",
+			Title:   ".gitignore unanchored patterns also ignore the new cmd/orders-agent dir",
 			Comment: "anchor"},
 	}
 	merged := Refresh(old, fresh)

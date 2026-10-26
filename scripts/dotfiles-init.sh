@@ -88,28 +88,28 @@ need() {
 }
 need DB_USER
 need DB_NAME
-need KUBECAST_REPO
-need KUBECAST_GROUP
-need KUBECAST_PROJECTS
+need WORK_REPO
+need WORK_GROUP
+need WORK_PROJECTS
 for e in dev-master prod-master prod-eu prod-india; do
   k=$(printf '%s' "$e" | tr '-' '_')
   need "env_${k}_project"
   need "env_${k}_port"
 done
 
-REPO_BASENAME=$(basename "$KUBECAST_REPO")
+REPO_BASENAME=$(basename "$WORK_REPO")
 
 render() { # render <template> <out> [service] [env]
   local t="$1" o="$2" svc="${3:-}" envname="${4:-}"
   local d
-  d="s|@@REPO@@|${KUBECAST_REPO}|g; s|@@REPO_BASENAME@@|${REPO_BASENAME}|g; s|@@GROUP@@|${KUBECAST_GROUP}|g; s|@@DB_NAME@@|${DB_NAME}|g; s|@@SERVICE@@|${svc}|g; s|@@USER@@|${DB_USER}|g; s|@@ENV@@|${envname}|g"
+  d="s|@@REPO@@|${WORK_REPO}|g; s|@@REPO_BASENAME@@|${REPO_BASENAME}|g; s|@@GROUP@@|${WORK_GROUP}|g; s|@@DB_NAME@@|${DB_NAME}|g; s|@@SERVICE@@|${svc}|g; s|@@USER@@|${DB_USER}|g; s|@@ENV@@|${envname}|g"
   mkdir -p "$(dirname "$o")"
   sed -e "$d" "$t" >"$o"
 }
 
 # --- herdr projects / quick-actions / worktrees ---
 herdr_out="$LOCALS/herdr"
-for svc in $KUBECAST_PROJECTS; do
+for svc in $WORK_PROJECTS; do
   render "$TEMPLATES/herdr-project.toml"        "$herdr_out/projects/$svc.toml" "$svc"
   render "$TEMPLATES/herdr-project-action.toml" "$herdr_out/quick-actions/$svc-project.toml" "$svc"
   render "$TEMPLATES/herdr-worktree-action.toml" "$herdr_out/quick-actions/$svc-worktree.toml" "$svc"

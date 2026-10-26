@@ -186,7 +186,7 @@ func TestSlugCollisions(t *testing.T) {
 		}
 		seen[dir] = c.host + "|" + c.project
 	}
-	if ReviewDir("", "kent", 1) != ReviewDir(DefaultHost, "kent", 1) {
+	if ReviewDir("", "orders", 1) != ReviewDir(DefaultHost, "orders", 1) {
 		t.Fatal("empty host must default to DefaultHost (by design)")
 	}
 }

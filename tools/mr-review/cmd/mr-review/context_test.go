@@ -13,8 +13,8 @@ func TestResolveProjectArg(t *testing.T) {
 	t.Setenv(store.EnvHome, t.TempDir())
 
 	// bare group/project → default host
-	host, project, err := resolveProjectArg("castai/kubecast")
-	if err != nil || host != "gitlab.com" || project != "castai/kubecast" {
+	host, project, err := resolveProjectArg("acme/widgets")
+	if err != nil || host != "gitlab.com" || project != "acme/widgets" {
 		t.Fatalf("group/project: host=%q project=%q err=%v", host, project, err)
 	}
 
@@ -92,7 +92,7 @@ func TestAddContextNote(t *testing.T) {
 	}
 
 	// add to a non-existent note scaffolds first
-	path2, err := addContextNote("gitlab.com", "g/p", "book-of-kent", "invariants", "plans are resumable")
+	path2, err := addContextNote("gitlab.com", "g/p", "book-of-orders", "invariants", "plans are resumable")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,19 +111,19 @@ func TestAddContextNote(t *testing.T) {
 func TestScaffoldContext(t *testing.T) {
 	t.Setenv(store.EnvHome, t.TempDir())
 
-	path, created, err := scaffoldContext("gitlab.com", "castai/kubecast", "book-of-kent")
+	path, created, err := scaffoldContext("gitlab.com", "acme/widgets", "book-of-orders")
 	if err != nil || !created {
 		t.Fatalf("first scaffold: created=%v err=%v", created, err)
 	}
-	if !strings.HasPrefix(path, store.ContextDir("gitlab.com", "castai/kubecast")+string(filepath.Separator)) ||
-		filepath.Base(path) != "book-of-kent.md" {
+	if !strings.HasPrefix(path, store.ContextDir("gitlab.com", "acme/widgets")+string(filepath.Separator)) ||
+		filepath.Base(path) != "book-of-orders.md" {
 		t.Fatalf("unexpected path %q", path)
 	}
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Book of kent", "Invariants", "Sensitive areas", "castai/kubecast"} {
+	for _, want := range []string{"Book of orders", "Invariants", "Sensitive areas", "acme/widgets"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("skeleton missing %q:\n%s", want, body)
 		}
@@ -133,7 +133,7 @@ func TestScaffoldContext(t *testing.T) {
 	if err := os.WriteFile(path, []byte("my notes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	path2, created2, err := scaffoldContext("gitlab.com", "castai/kubecast", "book-of-kent")
+	path2, created2, err := scaffoldContext("gitlab.com", "acme/widgets", "book-of-orders")
 	if err != nil || created2 || path2 != path {
 		t.Fatalf("second scaffold must be a no-op: created=%v path=%s err=%v", created2, path2, err)
 	}
@@ -142,11 +142,11 @@ func TestScaffoldContext(t *testing.T) {
 	}
 
 	// name is sanitized: no traversal, no double suffix
-	path3, _, err := scaffoldContext("gitlab.com", "castai/kubecast", "../evil.md")
+	path3, _, err := scaffoldContext("gitlab.com", "acme/widgets", "../evil.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(path3, store.ContextDir("gitlab.com", "castai/kubecast")+string(filepath.Separator)) ||
+	if !strings.HasPrefix(path3, store.ContextDir("gitlab.com", "acme/widgets")+string(filepath.Separator)) ||
 		filepath.Base(path3) != "evil.md" {
 		t.Fatalf("name must be sanitized into the context dir, got %q", path3)
 	}

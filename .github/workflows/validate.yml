@@ -18,7 +18,7 @@ jobs:
       - name: ShellCheck
         run: shellcheck -S warning install.sh scripts/*.sh scripts/pi
       - name: Bash syntax
-        run: bash -n install.sh scripts/*.sh && sh -n scripts/pi scripts/kubecast-project
+        run: bash -n install.sh scripts/*.sh && sh -n scripts/pi scripts/project-init
       - name: TOML parse (herdr configs + templates + rainfrog)
         run: |
           python3 - <<'EOF'

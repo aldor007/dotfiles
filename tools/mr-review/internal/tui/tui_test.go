@@ -10,13 +10,13 @@
 package tui
 
 import (
-	"strings"
 	"regexp"
+	"strings"
 	"testing"
 
-	"mr-review/internal/store"
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
+	"mr-review/internal/store"
 )
 
 // TestEmptyStateWhenAIRunning: when bgReview is AgentRunning and zero
@@ -99,11 +99,11 @@ func TestMasterDetailOnWideTerminal(t *testing.T) {
 	if joined == 0 {
 		t.Fatalf("wide terminal did not use 2-column horizontal composition: 0 rows contain %q divider.\nFirst 6 rows:\n%s",
 			wideSplit, strings.Join(content[:func(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}(6, len(content))], "\n"))
+				if a < b {
+					return a
+				}
+				return b
+			}(6, len(content))], "\n"))
 	}
 	if joined < 3 {
 		t.Fatalf("expected at least 3 horizontally-joined rows in master-detail view, got %d", joined)

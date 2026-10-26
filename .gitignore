@@ -10,3 +10,7 @@
 # Local dotfiles config (real project names / GCP IDs / DB names are generated
 # here by scripts/dotfiles-init.sh and never tracked).
 local/
+# personal plugin configs (org URLs, per-repo automation) — keep local
+defaults, never publish
+.config/herdr/plugins/config/herdr-jira/config.toml
+.config/herdr/plugins/config/cloudmanic.herdr-plus/quick-actions/worktree-clean.toml

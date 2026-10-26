@@ -278,7 +278,7 @@ type model struct {
 	viewerTitle          string
 	viewerLines          []string
 	viewerTop            int
-	overlaySavedFocus    int  // pane context saved at the first pushOverlay
+	overlaySavedFocus    int // pane context saved at the first pushOverlay
 	overlaySavedLeftView int
 	overlaySavedValid    bool // direct m.overlay= assignments must not restore stale zeros
 
@@ -1056,7 +1056,7 @@ func (m *model) reload() error {
 		return err
 	}
 	m.rev, m.comments = rev, comments
-	m.remoteLoaded = false // remote notes may have changed too
+	m.remoteLoaded = false                              // remote notes may have changed too
 	m.ingestFindings(reconcileFindings(m.findings, fs)) // ID-stable selection across the findings swap
 	m.rebuild()
 	return nil
@@ -1076,6 +1076,7 @@ func (m *model) reload() error {
 //     stored record, while non-default values the incoming record DOES
 //     carry win — they were written deliberately on disk (publisher
 //     marking Publication, a refresh carrying decisions, another save).
+//
 // A finding with an unknown ID is a genuinely new AI finding: taken as-is.
 func reconcileFindings(stored, incoming []store.Finding) []store.Finding {
 	if len(stored) == 0 || len(incoming) == 0 {

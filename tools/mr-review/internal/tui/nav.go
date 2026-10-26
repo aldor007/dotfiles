@@ -508,7 +508,7 @@ func (m *model) nearestDocRow(file, side string, line int) int {
 		if r.header || r.file != file {
 			continue
 		}
-		no := r.dl.NewNo // number on the requested side only — numberFor's
+		no := r.dl.NewNo   // number on the requested side only — numberFor's
 		if side == "old" { // OldNo fallback would let a del row steal the
 			no = r.dl.OldNo // anchor of a new-side line (wrong comment side)
 		}

@@ -47,10 +47,10 @@ func TestResolveSessionExactProjectMatch(t *testing.T) {
 // resolve for a GitLab MR. Also covers the optional RECORDED host field.
 func TestResolveSessionRejectsWrongHost(t *testing.T) {
 	for _, slug := range []string{
-		"gh:team/foo/pr/42",     // GitHub-style forge
-		"bb:team/foo/pr/42",     // other forge token
-		"team/foo/pr/42",        // missing forge token
-		"gitea:team/foo/pr/42",  // prefix-collides with "g..." but is not "gl"
+		"gh:team/foo/pr/42",    // GitHub-style forge
+		"bb:team/foo/pr/42",    // other forge token
+		"team/foo/pr/42",       // missing forge token
+		"gitea:team/foo/pr/42", // prefix-collides with "g..." but is not "gl"
 	} {
 		ss := []Session{{Slug: slug, Kind: "pr"}}
 		if s := ResolveSession(ss, "team/foo", 42); s != nil {

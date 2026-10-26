@@ -30,12 +30,12 @@ project's context directory as PROJECT CONTEXT: architecture, invariants,
 cost/availability-sensitive areas, review gotchas. The pack lives outside
 the reviewed repository (per host+project) and is reviewer-maintained.
 
-  mr-review context new castai/kubecast                  # scaffold context.md
-  mr-review context new castai/kubecast book-of-kent     # named note
-  mr-review context add castai/kubecast -s gotchas "text" # append user info
+  mr-review context new acme/widgets                  # scaffold context.md
+  mr-review context new acme/widgets book-of-orders     # named note
+  mr-review context add acme/widgets -s gotchas "text" # append user info
   mr-review context edit ~/.local/share/mr-review/<slug> # existing review dir
-  mr-review context show castai/kubecast                 # list notes
-  mr-review context path castai/kubecast                 # print the directory`,
+  mr-review context show acme/widgets                 # list notes
+  mr-review context path acme/widgets                 # print the directory`,
 		SilenceUsage: true,
 	}
 	addCmd := &cobra.Command{
@@ -46,8 +46,8 @@ With -s the text lands as a bullet under the matching "## " heading
 (case-insensitive contains-match; a missing section is created at the
 end). Without text, the note text is read from stdin — handy from herdr:
 
-  echo "kent restarts lose streaming state" | mr-review context add castai/kubecast -s gotchas
-  mr-review context add castai/kubecast -f book-of-kent -s invariants "plans are resumable"`,
+  echo "orders restarts lose queue state" | mr-review context add acme/widgets -s gotchas
+  mr-review context add acme/widgets -f book-of-orders -s invariants "plans are resumable"`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			host, project, err := resolveProjectArg(args[0])

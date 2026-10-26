@@ -393,7 +393,7 @@ func TestStageApprovedRepoListEmptyFallsBackToAll(t *testing.T) {
 		{ID: "F001", File: "a.go", Side: "new", Line: 1, Severity: "P1", Kind: "bug",
 			Title: "t", Explanation: "The call drops the deadline.",
 			Evidence: "a.go:1 — offending call",
-			Comment: "Please fix finding 1.", Confidence: "high", Decision: "approved"},
+			Comment:  "Please fix finding 1.", Confidence: "high", Decision: "approved"},
 	}
 	if err := store.SaveFindings(dir, findings); err != nil {
 		t.Fatal(err)
@@ -451,11 +451,11 @@ func TestAddCommentNoDoubleInsert(t *testing.T) {
 	ctx := context.Background()
 
 	in := CommentInput{
-		Content: "double-insert probe",
-		Type:    "issue",
-		File:    "a.go",
-		Line:    10,
-		Side:    "new",
+		Content:  "double-insert probe",
+		Type:     "issue",
+		File:     "a.go",
+		Line:     10,
+		Side:     "new",
 		Username: "test",
 	}
 

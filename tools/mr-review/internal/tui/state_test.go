@@ -202,7 +202,7 @@ func TestTabSwitchPreservesDecisions(t *testing.T) {
 	fs[0].Decision = "rejected"
 	m := newTestModel(t, 120, 35, fs)
 	acted := m.currentID()
-	m2 := pressKey(m, "a") // approve the first finding
+	m2 := pressKey(m, "a")                                      // approve the first finding
 	r, _ := m2.Update(tea.WindowSizeMsg{Width: 79, Height: 24}) // h/l are narrow-mode tab bindings
 	mn := r.(*model)
 	mm := pressKey(mn, "tab") // tab cycles focus (diff → findings): decisions persist

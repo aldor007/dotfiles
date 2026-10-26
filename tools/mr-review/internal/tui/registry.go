@@ -174,7 +174,7 @@ func buildActions(m *model) []Action {
 		{ID: "view.findings-overview", Cat: CatManual, Name: "Findings overview tab",
 			Desc: "open the Overview tab (all sections in one panel)", Keys: []string{"O"},
 			When: func(m *model) bool { return hasFinding(m) },
-			Run: func(m *model) tea.Cmd { m.tab = tabOverview; return nil }},
+			Run:  func(m *model) tea.Cmd { m.tab = tabOverview; return nil }},
 		{ID: "view.findings", Cat: CatManual, Name: "Show findings pane",
 			Desc: "focus the findings pane (3)", Keys: []string{"3"},
 			Run: func(m *model) tea.Cmd { m.setView(viewFindings); return nil }},
@@ -232,10 +232,10 @@ func buildActions(m *model) []Action {
 			Run:  func(m *model) tea.Cmd { m.filesCycleFilter(); return nil }},
 		{ID: "files.expand-all", Cat: CatManual, Name: "Expand all directories",
 			Desc: "reveal the whole changed-file tree", Keys: nil,
-			Run:  func(m *model) tea.Cmd { m.filesSetExpansion(true); return nil }},
+			Run: func(m *model) tea.Cmd { m.filesSetExpansion(true); return nil }},
 		{ID: "files.collapse-all", Cat: CatManual, Name: "Collapse all directories",
 			Desc: "collapse the changed-file tree", Keys: nil,
-			Run:  func(m *model) tea.Cmd { m.filesSetExpansion(false); return nil }},
+			Run: func(m *model) tea.Cmd { m.filesSetExpansion(false); return nil }},
 
 		// ---- comments ----
 		{ID: "comments.add", Cat: CatComments, Name: "Add line comment",

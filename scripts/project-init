@@ -14,9 +14,9 @@
 #     --sparse   sparse-checkout (cone mode): materialize ONLY these top-level
 #                dirs (+ root files) — a 12G monorepo becomes ~tens of MB and
 #                creation drops to <1s. Value: space/comma-separated dirs.
-#                Default when omitted: $KUBECAST_SPARSE from projects.env
+#                Default when omitted: $WORK_SPARSE from projects.env
 #                (unset = full checkout).
-#     --full     force full checkout (overrides KUBECAST_SPARSE)
+#     --full     force full checkout (overrides WORK_SPARSE)
 #     branch     optional branch to check out in the worktree:
 #                  - existing local branch  -> checked out
 #                  - branch only on origin  -> tracking branch created off it
@@ -35,11 +35,11 @@ if [ ! -f "$LOCAL_ENV" ]; then
 fi
 . "$LOCAL_ENV"
 
-repo="${KUBECAST_REPO:-$HOME/work/service-repo}"
+repo="${WORK_REPO:-$HOME/work/service-repo}"
 
 ensure_only=0
 force_full=0
-sparse_dirs="${KUBECAST_SPARSE:-}"
+sparse_dirs="${WORK_SPARSE:-}"
 name=""
 branch=""
 while [ $# -gt 0 ]; do
@@ -53,9 +53,9 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-case " $KUBECAST_PROJECTS " in
+case " $WORK_PROJECTS " in
     *" $name "*) ;;
-    *) echo "usage: service-repo-project [--ensure] [--sparse \"dir1 dir2\"] [--full] <one of: $KUBECAST_PROJECTS> [branch]" >&2; exit 2 ;;
+    *) echo "usage: service-repo-project [--ensure] [--sparse \"dir1 dir2\"] [--full] <one of: $WORK_PROJECTS> [branch]" >&2; exit 2 ;;
 esac
 
 # commas -> spaces so both "a,b" and "a b" work

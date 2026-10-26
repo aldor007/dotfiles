@@ -180,19 +180,19 @@ export PATH="$HOME/.opencode/bin:$PATH"
 
 # -- Go module proxy -----------------------------------------------------------
 # The internal mirror URL embeds a GCP project ID, so it is NOT tracked here:
-# set CASTAI_GOPROXY in ~/.secrets.zsh (gitignored); public proxy is the
+# set WORK_GOPROXY in ~/.secrets.zsh (gitignored); public proxy is the
 # portable fallback. Commas are normalized so a missing/extra trailing comma
-# in CASTAI_GOPROXY cannot produce an invalid GOPROXY.
-# export GOPRIVATE=gitlab.com/castai,github.com/castai  (optional, uncomment)
-if [ -n "${CASTAI_GOPROXY:-}" ]; then
-  case "$CASTAI_GOPROXY" in
-    *,) export GOPROXY="${CASTAI_GOPROXY}https://proxy.golang.org,direct" ;;
-    *)  export GOPROXY="${CASTAI_GOPROXY},https://proxy.golang.org,direct" ;;
+# in WORK_GOPROXY cannot produce an invalid GOPROXY.
+# export GOPRIVATE=gitlab.com/<your-org>,github.com/<your-org>  (optional, uncomment)
+if [ -n "${WORK_GOPROXY:-}" ]; then
+  case "$WORK_GOPROXY" in
+    *,) export GOPROXY="${WORK_GOPROXY}https://proxy.golang.org,direct" ;;
+    *)  export GOPROXY="${WORK_GOPROXY},https://proxy.golang.org,direct" ;;
   esac
 else
   export GOPROXY="https://proxy.golang.org,direct"
 fi
-export GONOSUMDB=github.com/castai/*,gitlab.com/castai/*
+export GONOSUMDB=github.com/<your-org>/*,gitlab.com/<your-org>/*
 
 # herdr-projects board reads pi transcripts from $PI_CODING_AGENT_DIR/sessions
 # (scripts/pi adapter writes kimchi sessions there)
