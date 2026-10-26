@@ -8,6 +8,7 @@
 		"skipLibCheck": true,
 		"esModuleInterop": true,
 		"forceConsistentCasingInFileNames": true,
+		"noUncheckedIndexedAccess": true,
 		"types": ["node"]
 	},
 	"include": ["**/*.ts"],

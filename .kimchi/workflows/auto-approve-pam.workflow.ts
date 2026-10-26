@@ -150,11 +150,12 @@ function launchHerdr(
 			`a pane labeled '${name}' already exists (${existing.pane_id}) — stop it first: herdr pane close ${existing.pane_id}`,
 		)
 	}
-	if (panes.length === 0) {
+	const anchorPane = panes[0]
+	if (!anchorPane) {
 		return fail("herdr", name, logPath, "no herdr panes found to split from — open herdr and create a pane, or choose the tmux host")
 	}
 
-	const anchor = String(panes[0].pane_id)
+	const anchor = String(anchorPane.pane_id)
 	const split = run("herdr", [
 		"pane", "split", anchor,
 		"--direction", "down", "--ratio", "0.2", "--no-focus",
