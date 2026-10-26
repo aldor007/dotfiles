@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mr-review/internal/store"
 )
@@ -38,6 +40,151 @@ func TestResolveProjectArg(t *testing.T) {
 	// garbage is an error, not a guess
 	if _, _, err := resolveProjectArg("not-a-project"); err == nil {
 		t.Fatal("expected error for unresolvable arg")
+	}
+}
+
+func TestDefaultBookName(t *testing.T) {
+	cases := map[string]string{
+		"acme/widgets":      "book-of-widgets",
+		"castai/kubecast":   "book-of-kubecast",
+		"g/some-repo.name":  "book-of-some-repo-name",
+		"g/Trailing/Slash/": "book-of-slash",
+	}
+	for in, want := range cases {
+		if got := defaultBookName(in); got != want {
+			t.Errorf("defaultBookName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRunContextGen(t *testing.T) {
+	t.Setenv(store.EnvHome, t.TempDir())
+
+	// stub agent: "explores" the repo by writing the pack the prompt names
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "fakepi")
+	script := `#!/bin/bash
+out=$(grep -oE "/[^ ]+\.md" | head -1)
+mkdir -p "$(dirname "$out")"
+printf "# generated pack\n\nfacts here\n" > "$out"
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MR_REVIEW_AGENT", bin)
+
+	if err := runContextGen(context.Background(), "gitlab.com", "acme/widgets", repo, "", "", time.Minute); err != nil {
+		t.Fatalf("gen: %v", err)
+	}
+	pack := filepath.Join(store.ContextDir("gitlab.com", "acme/widgets"), "book-of-widgets.md")
+	b, err := os.ReadFile(pack)
+	if err != nil || !strings.Contains(string(b), "generated pack") {
+		t.Fatalf("agent-written pack missing (%v): %s", err, b)
+	}
+
+	// gen never overwrites an existing note
+	err = runContextGen(context.Background(), "gitlab.com", "acme/widgets", repo, "", "", time.Minute)
+	if err == nil || !strings.Contains(err.Error(), "never overwrites") {
+		t.Fatalf("second gen must refuse, got %v", err)
+	}
+
+	// agent that writes nothing → honest failure pointing at the log
+	bad := filepath.Join(t.TempDir(), "badpi")
+	if err := os.WriteFile(bad, []byte("#!/bin/bash\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MR_REVIEW_AGENT", bad)
+	err = runContextGen(context.Background(), "gitlab.com", "acme/other", repo, "", "", time.Minute)
+	if err == nil || !strings.Contains(err.Error(), "was not written") {
+		t.Fatalf("silent agent must fail honestly, got %v", err)
+	}
+}
+
+func TestLoadGenPrompt(t *testing.T) {
+	t.Setenv(store.EnvHome, t.TempDir())
+	cdir := store.ContextDir("gitlab.com", "g/p")
+	target := filepath.Join(cdir, "book-of-x.md")
+
+	// first load seeds the editable file from the built-in
+	prompt, source, err := loadGenPrompt(cdir, "", "g/p", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source != filepath.Join(cdir, GenPromptFile) {
+		t.Fatalf("prompt source = %q, want the seeded file", source)
+	}
+	if !strings.Contains(prompt, "g/p") || !strings.Contains(prompt, target) {
+		t.Fatalf("tokens not substituted:\n%s", prompt)
+	}
+	seeded, _ := os.ReadFile(source)
+	if !strings.Contains(string(seeded), "{{PROJECT}}") {
+		t.Fatal("the seeded FILE must keep raw tokens for editing")
+	}
+
+	// user edits are honored verbatim (plus OUTPUT re-appended when lost)
+	if err := os.WriteFile(source, []byte("my custom prompt, be terse"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prompt, _, err = loadGenPrompt(cdir, "", "g/p", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(prompt, "be terse") || !strings.Contains(prompt, target) {
+		t.Fatalf("custom prompt lost or OUTPUT not appended:\n%s", prompt)
+	}
+
+	// empty custom prompt fails loudly
+	if err := os.WriteFile(source, []byte("   "), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadGenPrompt(cdir, "", "g/p", target); err == nil {
+		t.Fatal("empty prompt must error")
+	}
+
+	// --prompt one-off file wins over the seeded one
+	oneoff := filepath.Join(t.TempDir(), "p.md")
+	if err := os.WriteFile(oneoff, []byte("one-off {{PROJECT}} {{OUTPUT}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prompt, source, err = loadGenPrompt(cdir, oneoff, "g/p", target)
+	if err != nil || source != oneoff || !strings.Contains(prompt, target) {
+		t.Fatalf("--prompt: source=%q err=%v prompt=%q", source, err, prompt)
+	}
+}
+
+func TestResolveGenRepo(t *testing.T) {
+	t.Setenv(store.EnvHome, t.TempDir())
+	home, _ := os.UserHomeDir()
+
+	// --repo wins and must be a git checkout
+	if _, err := resolveGenRepo("g/p", t.TempDir()); err == nil {
+		t.Fatal("non-git --repo must be rejected")
+	}
+	gitdir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(gitdir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveGenRepo("g/p", gitdir)
+	if err != nil || got != gitdir {
+		t.Fatalf("--repo: got %q err %v", got, err)
+	}
+
+	// no --repo: ~/work/<base> heuristic
+	heuristic := filepath.Join(home, "work", "widgets")
+	if err := os.MkdirAll(filepath.Join(heuristic, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err = resolveGenRepo("acme/widgets", "")
+	if err != nil || got != heuristic {
+		t.Fatalf("heuristic: got %q err %v", got, err)
+	}
+
+	// nothing found → actionable error
+	if _, err := resolveGenRepo("acme/missing", ""); err == nil || !strings.Contains(err.Error(), "--repo") {
+		t.Fatalf("missing checkout must suggest --repo, got %v", err)
 	}
 }
 
