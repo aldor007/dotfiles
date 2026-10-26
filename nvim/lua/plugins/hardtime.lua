@@ -20,7 +20,7 @@ return {
       enabled = true,
       restriction_mode = "block", -- actually restrict (hint = true still tells you what to press)
       hint = true,
-      notification = false,
+      notification = true,
       disable_mouse = false,
       max_count = 3,
       max_time = 1000,
