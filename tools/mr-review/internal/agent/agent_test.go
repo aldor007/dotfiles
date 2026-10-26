@@ -175,6 +175,36 @@ func TestBuildPromptContainsContract(t *testing.T) {
 	}
 }
 
+func TestBuildPromptProjectContext(t *testing.T) {
+	base := ReviewInput{
+		Project: "g/p", IID: 9, Title: "T", Author: "alice",
+		SourceBranch: "f", TargetBranch: "m", HeadSHA: "abc",
+		Worktree: "/wt", DiffPath: "/d.diff", DiscussionsFmt: "none",
+		FindingsOut: "/out.jsonl",
+	}
+
+	// no context files: no section at all
+	if got := BuildPrompt(base); strings.Contains(got, "PROJECT CONTEXT") {
+		t.Fatalf("empty context pack must not render a section:\n%s", got)
+	}
+
+	in := base
+	in.ContextFiles = []string{"/state/g/p/context/book-of-kent.md", "/state/g/p/context/kentroller.md"}
+	got := BuildPrompt(in)
+	if !strings.Contains(got, "PROJECT CONTEXT") {
+		t.Fatalf("context pack must render the section:\n%s", got)
+	}
+	for _, want := range []string{"book-of-kent.md", "kentroller.md", "trust the code"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("context section missing %q:\n%s", want, got)
+		}
+	}
+	// the freshness caveat must precede the file list
+	if strings.Index(got, "trust the code") > strings.Index(got, "book-of-kent.md") {
+		t.Fatalf("caveat must come before the file list:\n%s", got)
+	}
+}
+
 func TestRunReviewStubAndDiscuss(t *testing.T) {
 	dir := t.TempDir()
 	// stub agent: writes one finding, prints an answer

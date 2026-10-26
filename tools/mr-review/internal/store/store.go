@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"regexp"
 	"strconv"
 	"strings"
@@ -54,6 +55,38 @@ func WorktreeRoot() string { return filepath.Join(Home(), "worktrees") }
 // it must pass it explicitly).
 func ReviewDir(host, project string, iid int) string {
 	return filepath.Join(Home(), Slug(host, project), "mr"+strconv.Itoa(iid))
+}
+
+// ProjectDir is the per-project directory holding every review of one
+// (host, project) pair.
+func ProjectDir(host, project string) string {
+	return filepath.Join(Home(), Slug(host, project))
+}
+
+// ContextDir is the per-project context pack: *.md notes the AI reviewer
+// reads as project background (architecture, invariants, service "books").
+// Maintained by the human, outside the reviewed repository.
+func ContextDir(host, project string) string {
+	return filepath.Join(ProjectDir(host, project), "context")
+}
+
+// ContextFiles lists the project's context pack (top-level *.md, sorted).
+// A missing context dir yields nil — no section in the prompt.
+func ContextFiles(host, project string) []string {
+	cdir := ContextDir(host, project)
+	ents, err := os.ReadDir(cdir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		out = append(out, filepath.Join(cdir, e.Name()))
+	}
+	sort.Strings(out)
+	return out
 }
 
 // DefaultHost is the GitLab host used when the caller doesn't supply one

@@ -19,6 +19,36 @@ func validFinding() Finding {
 	}
 }
 
+func TestContextFilesGlob(t *testing.T) {
+	t.Setenv(EnvHome, t.TempDir())
+
+	// missing dir: nil, no error
+	if got := ContextFiles("gitlab.com", "g/p"); got != nil {
+		t.Fatalf("missing context dir must yield nil, got %v", got)
+	}
+	cdir := ContextDir("gitlab.com", "g/p")
+	if err := os.MkdirAll(cdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"b-second.md", "a-first.md", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(cdir, name), []byte("# note"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(cdir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := ContextFiles("gitlab.com", "g/p")
+	want := []string{filepath.Join(cdir, "a-first.md"), filepath.Join(cdir, "b-second.md")}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("context glob: want only sorted top-level .md files, got %v", got)
+	}
+	// per-project isolation: another project sees nothing
+	if other := ContextFiles("gitlab.com", "g/other"); other != nil {
+		t.Fatalf("other project must see no context, got %v", other)
+	}
+}
+
 func TestValidateOK(t *testing.T) {
 	f := validFinding()
 	if err := f.Validate(); err != nil {

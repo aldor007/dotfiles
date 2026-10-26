@@ -1,4 +1,8 @@
 # Compiled binaries — build via install.sh: it places outputs in
 # ~/.local/bin/mr-review and ~/.local/bin/mr-review-publish.
-mr-review
-mr-review-publish
+# Root-anchored: the old unanchored patterns ("mr-review") also matched the
+# cmd/mr-review/ and cmd/mr-review-publish/ source directories, silently
+# excluding the entire CLI from git (review finding, 2026-10-26).
+/mr-review
+/mr-review-publish
+*.test
