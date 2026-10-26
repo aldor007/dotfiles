@@ -18,7 +18,7 @@ return {
     },
     opts = {
       enabled = true,
-      restriction_mode = "hint",
+      restriction_mode = "block", -- actually restrict (hint = true still tells you what to press)
       hint = true,
       notification = false,
       disable_mouse = false,
